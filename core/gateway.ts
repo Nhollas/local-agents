@@ -120,6 +120,13 @@ export function createGateway(config: GatewayConfig) {
     return c.json({ ...run, events });
   });
 
+  app.post("/runs/:id/kill", (c) => {
+    const id = c.req.param("id");
+    const killed = runner.kill(id);
+    if (!killed) return c.json({ error: "Run not found or not running" }, 404);
+    return c.json({ killed: true });
+  });
+
   app.get("/health", (c) => c.text("OK"));
 
   return { app, runner };

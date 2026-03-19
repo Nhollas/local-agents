@@ -12,6 +12,7 @@ export type RunnerConfig = {
 
 export type Runner = {
   enqueue(agent: AgentDefinition, ctx: AgentContext): string;
+  kill(runId: string): boolean;
   readonly queue: JobQueue;
 };
 
@@ -21,14 +22,25 @@ export type Runner = {
  * Each agent execution becomes a "run" that is:
  * - Tracked in SQLite (runs + run_events tables)
  * - Emitted via the event bus for SSE streaming
+ * - Killable via AbortController
  */
 export function createRunner(config: RunnerConfig = {}): Runner {
   const queue = createJobQueue({ maxConcurrency: config.maxConcurrency });
+  const activeRuns = new Map<string, AbortController>();
+
+  function kill(runId: string): boolean {
+    const controller = activeRuns.get(runId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
 
   function enqueue(agent: AgentDefinition, ctx: AgentContext): string {
     const runId = randomUUID().slice(0, 8);
     const startedAt = new Date().toISOString();
     const db = getDb();
+    const controller = new AbortController();
+    activeRuns.set(runId, controller);
 
     queue.enqueue(async () => {
       // Persist run as started
@@ -54,7 +66,15 @@ export function createRunner(config: RunnerConfig = {}): Runner {
       const startTime = Date.now();
 
       try {
-        await agent.handler(ctx);
+        // Create a promise that rejects on abort
+        const abortPromise = new Promise<never>((_, reject) => {
+          controller.signal.addEventListener("abort", () => {
+            reject(new Error("Run killed by user"));
+          });
+        });
+
+        // Race the handler against the abort signal
+        await Promise.race([agent.handler(ctx), abortPromise]);
 
         const completedAt = new Date().toISOString();
         const durationMs = Date.now() - startTime;
@@ -94,13 +114,15 @@ export function createRunner(config: RunnerConfig = {}): Runner {
         eventBus.emit(failEvent);
 
         ctx.logger.error({ agent: agent.name, err: error, runId }, "runner.handler_failed");
+      } finally {
+        activeRuns.delete(runId);
       }
     });
 
     return runId;
   }
 
-  return { enqueue, queue };
+  return { enqueue, kill, queue };
 }
 
 function persistEvent(runId: string, event: RunEvent): void {

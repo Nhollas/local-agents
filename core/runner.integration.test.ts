@@ -153,4 +153,53 @@ describe("runner", () => {
     expect(allEvents).toHaveLength(2);
     expect(allEvents.map((e) => e.type)).toEqual(["run:started", "run:completed"]);
   });
+
+  it("kill aborts a running job and emits run:failed", async () => {
+    const runner = createRunner({ maxConcurrency: 5 });
+    let resolveHandler!: () => void;
+    const agent = createAgent({
+      handler: vi.fn(
+        () => new Promise<void>((resolve) => {
+          resolveHandler = resolve;
+        }),
+      ),
+    });
+    const ctx = createTestContext();
+    const events: RunEvent[] = [];
+
+    const handler = (e: RunEvent) => events.push(e);
+    eventBus.on(handler);
+
+    const runId = runner.enqueue(agent, ctx);
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Run should be started but not completed
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("run:started");
+
+    // Kill the run
+    const killed = runner.kill(runId);
+    expect(killed).toBe(true);
+    await new Promise((r) => setTimeout(r, 10));
+
+    eventBus.off(handler);
+
+    // Should have emitted run:failed
+    expect(events).toHaveLength(2);
+    expect(events[1].type).toBe("run:failed");
+    expect(events[1].data.error).toBe("Run killed by user");
+
+    // DB should reflect failed status
+    const allRuns = testDb.select().from(runs).all();
+    expect(allRuns[0].status).toBe("failed");
+    expect(allRuns[0].error).toBe("Run killed by user");
+
+    // Clean up the dangling handler promise
+    resolveHandler();
+  });
+
+  it("kill returns false for unknown run id", () => {
+    const runner = createRunner({ maxConcurrency: 5 });
+    expect(runner.kill("nonexistent")).toBe(false);
+  });
 });

@@ -32,6 +32,10 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString();
 }
 
+async function killRun(runId: string) {
+  await fetch(`/runs/${runId}/kill`, { method: "POST" });
+}
+
 export function AgentFeed({ name, runs, onSelectRun }: Props) {
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900">
@@ -41,21 +45,35 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
       </div>
       <div className="divide-y divide-gray-800">
         {runs.map((run) => (
-          <button
+          <div
             key={run.id}
-            type="button"
-            onClick={() => onSelectRun(run.id)}
-            className="w-full px-4 py-3 flex items-center justify-between gap-4 hover:bg-gray-800/50 transition-colors text-left"
+            className="px-4 py-3 flex items-center justify-between gap-4"
           >
-            <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => onSelectRun(run.id)}
+              className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
+            >
               <StatusBadge status={run.status} />
               <span className="text-xs text-gray-500 font-mono">{run.id}</span>
-            </div>
+            </button>
             <div className="flex items-center gap-4 text-xs text-gray-400 shrink-0">
               <span>{formatDuration(run.durationMs)}</span>
               <span>{formatTime(run.startedAt)}</span>
+              {run.status === "running" && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    killRun(run.id);
+                  }}
+                  className="px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                >
+                  Kill
+                </button>
+              )}
             </div>
-          </button>
+          </div>
         ))}
       </div>
     </div>
