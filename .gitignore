@@ -1,4 +1,34 @@
+# Dependencies
 node_modules/
+
+# Build
 dist/
+
+# Environment
 .env
+.env.*
+!.env.example
+
+# Agent data
 .data/
+
+# Logs
+logs
+*.log
+
+# Coverage
+coverage
+*.lcov
+.nyc_output
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+
+# IDE
+.vscode-test
+
+# pnpm
+.pnpm-store

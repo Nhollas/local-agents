@@ -1,6 +1,6 @@
 # Local Autonomous Agents
 
-AI agents that run on your machine, triggered by external events, powered by your Claude subscription. No API billing, no cloud infrastructure.
+AI agents that run on your machine, triggered by external events, powered by your Claude subscription.
 
 See [docs/pattern.md](docs/pattern.md) for the full pattern documentation.
 
