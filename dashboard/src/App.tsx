@@ -1,27 +1,47 @@
+import { useMemo, useState } from "react";
 import { useEventStream } from "./use-event-stream.ts";
+import { useRunHistory } from "./use-run-history.ts";
 import { AgentFeed } from "./AgentFeed.tsx";
+import { RunDetails } from "./RunDetails.tsx";
 import type { Run } from "./types.ts";
 
 export function App() {
-  const { runs, connected } = useEventStream("/events");
+  const { runs: liveRuns, connected } = useEventStream("/events");
+  const { history } = useRunHistory();
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  // Merge live runs with history — live takes precedence
+  const allRuns = useMemo(() => {
+    const merged = new Map<string, Run>();
+    for (const run of history) {
+      merged.set(run.id, run);
+    }
+    for (const run of liveRuns.values()) {
+      merged.set(run.id, run);
+    }
+    return merged;
+  }, [liveRuns, history]);
 
   // Group runs by agent name
-  const agentRuns = new Map<string, Run[]>();
-  for (const run of runs.values()) {
-    const existing = agentRuns.get(run.agentName) ?? [];
-    existing.push(run);
-    agentRuns.set(run.agentName, existing);
-  }
+  const sortedAgents = useMemo(() => {
+    const agentRuns = new Map<string, Run[]>();
+    for (const run of allRuns.values()) {
+      const existing = agentRuns.get(run.agentName) ?? [];
+      existing.push(run);
+      agentRuns.set(run.agentName, existing);
+    }
 
-  // Sort agents alphabetically, sort runs within each agent by startedAt desc
-  const sortedAgents = Array.from(agentRuns.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, agentRunList]) => ({
-      name,
-      runs: agentRunList.sort(
-        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
-      ),
-    }));
+    return Array.from(agentRuns.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, runs]) => ({
+        name,
+        runs: runs.sort(
+          (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+        ),
+      }));
+  }, [allRuns]);
+
+  const selectedRun = selectedRunId ? allRuns.get(selectedRunId) : null;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -38,14 +58,24 @@ export function App() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8">
-        {sortedAgents.length === 0 ? (
+        {selectedRun ? (
+          <RunDetails
+            run={selectedRun}
+            onBack={() => setSelectedRunId(null)}
+          />
+        ) : sortedAgents.length === 0 ? (
           <p className="text-gray-500 text-center py-12">
             No agent activity yet. Waiting for events...
           </p>
         ) : (
           <div className="space-y-6">
             {sortedAgents.map((agent) => (
-              <AgentFeed key={agent.name} name={agent.name} runs={agent.runs} />
+              <AgentFeed
+                key={agent.name}
+                name={agent.name}
+                runs={agent.runs}
+                onSelectRun={setSelectedRunId}
+              />
             ))}
           </div>
         )}

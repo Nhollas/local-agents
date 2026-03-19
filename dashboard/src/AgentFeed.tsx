@@ -3,6 +3,7 @@ import type { Run } from "./types.ts";
 type Props = {
   name: string;
   runs: Run[];
+  onSelectRun: (runId: string) => void;
 };
 
 function StatusBadge({ status }: { status: Run["status"] }) {
@@ -31,7 +32,7 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString();
 }
 
-export function AgentFeed({ name, runs }: Props) {
+export function AgentFeed({ name, runs, onSelectRun }: Props) {
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900">
       <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
@@ -40,9 +41,11 @@ export function AgentFeed({ name, runs }: Props) {
       </div>
       <div className="divide-y divide-gray-800">
         {runs.map((run) => (
-          <div
+          <button
             key={run.id}
-            className="px-4 py-3 flex items-center justify-between gap-4"
+            type="button"
+            onClick={() => onSelectRun(run.id)}
+            className="w-full px-4 py-3 flex items-center justify-between gap-4 hover:bg-gray-800/50 transition-colors text-left"
           >
             <div className="flex items-center gap-3 min-w-0">
               <StatusBadge status={run.status} />
@@ -52,7 +55,7 @@ export function AgentFeed({ name, runs }: Props) {
               <span>{formatDuration(run.durationMs)}</span>
               <span>{formatTime(run.startedAt)}</span>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
