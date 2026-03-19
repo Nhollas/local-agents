@@ -13,6 +13,7 @@ import {
 } from "../../lib/verify-github.ts";
 import { loadConventionsEnv } from "../../lib/env.ts";
 import {
+  deleteComment,
   findReviewComment,
   parseCheckedItems,
   postReply,
@@ -26,7 +27,7 @@ import { implementFindings } from "./implement.ts";
 
 const issueCommentPayload = z.object({
   action: z.string(),
-  comment: z.object({ body: z.string() }),
+  comment: z.object({ id: z.number(), body: z.string() }),
   issue: z.object({
     number: z.number(),
     pull_request: z.unknown().refine((v) => v != null, "Must be a PR comment"),
@@ -53,9 +54,11 @@ app.post("/webhook", verifyGitHubWebhook(config.GITHUB_WEBHOOK_SECRET), async (c
   const repo = repository.full_name;
   const prNumber = issue.number;
 
+  const triggerCommentId = comment.id;
+
   if (command === "/check") {
     logger.info({ repo, prNumber, command }, "webhook.command");
-    handleCheck(repo, prNumber).catch((err) => {
+    handleCheck(repo, prNumber, triggerCommentId).catch((err) => {
       logger.error({ repo, prNumber, err }, "webhook.handler_failed");
     });
     return c.text("Processing", 202);
@@ -63,7 +66,7 @@ app.post("/webhook", verifyGitHubWebhook(config.GITHUB_WEBHOOK_SECRET), async (c
 
   if (command === "/go") {
     logger.info({ repo, prNumber, command }, "webhook.command");
-    handleGo(repo, prNumber).catch((err) => {
+    handleGo(repo, prNumber, triggerCommentId).catch((err) => {
       logger.error({ repo, prNumber, err }, "webhook.handler_failed");
     });
     return c.text("Processing", 202);
@@ -72,7 +75,9 @@ app.post("/webhook", verifyGitHubWebhook(config.GITHUB_WEBHOOK_SECRET), async (c
   return c.text("Ignored", 200);
 });
 
-async function handleCheck(repo: string, prNumber: number) {
+async function handleCheck(repo: string, prNumber: number, triggerCommentId: number) {
+  await deleteComment(repo, triggerCommentId).catch(() => {});
+
   if (!(await isPrOpen(repo, prNumber))) return;
 
   const existingJob = await loadJob(config.DATA_DIR, repo, prNumber);
@@ -90,7 +95,9 @@ async function handleCheck(repo: string, prNumber: number) {
   });
 }
 
-async function handleGo(repo: string, prNumber: number) {
+async function handleGo(repo: string, prNumber: number, triggerCommentId: number) {
+  await deleteComment(repo, triggerCommentId).catch(() => {});
+
   if (!(await isPrOpen(repo, prNumber))) return;
 
   const review = await findReviewComment(repo, prNumber);

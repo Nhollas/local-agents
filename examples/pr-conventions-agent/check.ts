@@ -16,7 +16,6 @@ import {
   updateComment,
   findReviewComment,
   cloneAndCheckout,
-  postReply,
 } from "../../lib/gh.ts";
 import { logger } from "../../lib/logger.ts";
 import { logAgentMessage } from "../../lib/agent-logging.ts";
@@ -48,6 +47,28 @@ function formatComment(reviewId: string, findings: Finding[]): string {
     "",
     "---",
     "*Fix these manually or tick the checkboxes and reply `/go` to apply fixes automatically.*",
+    `<!-- agent:review-id:${reviewId} -->`,
+  ].join("\n");
+}
+
+function formatRunningComment(reviewId: string): string {
+  return [
+    "## Conventions Check",
+    "",
+    "Running conventions check...",
+    "",
+    `<!-- agent:review-id:${reviewId} -->`,
+  ].join("\n");
+}
+
+function formatErrorComment(reviewId: string, error: string): string {
+  return [
+    "## Conventions Check Failed",
+    "",
+    "```",
+    error,
+    "```",
+    "",
     `<!-- agent:review-id:${reviewId} -->`,
   ].join("\n");
 }
@@ -136,14 +157,23 @@ export async function runCheck(
     `check-${repo.replace("/", "-")}-${prNumber}-${Date.now()}`
   );
   const log = logger.child({ event: "check", repo, prNumber, headBranch });
+  const reviewId = randomUUID().slice(0, 8);
+
+  // Post or update the review comment with a "running" state immediately.
+  let commentId: number;
+  const existing = await findReviewComment(repo, prNumber);
+  if (existing) {
+    await updateComment(repo, existing.commentId, formatRunningComment(reviewId));
+    commentId = existing.commentId;
+  } else {
+    commentId = await postComment(repo, prNumber, formatRunningComment(reviewId));
+  }
 
   try {
-
-    await postReply(repo, prNumber, "Running conventions check...");
-
     const diff = await getPrDiff(repo, prNumber);
     if (!diff) {
-      await postReply(repo, prNumber, "Empty diff — nothing to check.");
+      const emptyBody = formatComment(reviewId, []);
+      await updateComment(repo, commentId, emptyBody);
       return;
     }
 
@@ -194,17 +224,8 @@ export async function runCheck(
       implemented: false,
     }));
 
-    const reviewId = randomUUID().slice(0, 8);
     const commentBody = formatComment(reviewId, findings);
-
-    let commentId: number;
-    const existing = await findReviewComment(repo, prNumber);
-    if (existing) {
-      await updateComment(repo, existing.commentId, commentBody);
-      commentId = existing.commentId;
-    } else {
-      commentId = await postComment(repo, prNumber, commentBody);
-    }
+    await updateComment(repo, commentId, commentBody);
 
     const job: ReviewJob = {
       id: reviewId,
@@ -227,11 +248,7 @@ export async function runCheck(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ err: message }, "check.failed");
-    await postReply(
-      repo,
-      prNumber,
-      `## Conventions check failed\n\n\`\`\`\n${message}\n\`\`\``
-    ).catch(() => {});
+    await updateComment(repo, commentId, formatErrorComment(reviewId, message)).catch(() => {});
     throw err;
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});

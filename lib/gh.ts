@@ -62,6 +62,11 @@ export async function postReply(repo: string, prNumber: number, body: string): P
   await gh("pr", "comment", String(prNumber), "--repo", repo, "--body", body);
 }
 
+/** Delete a comment. */
+export async function deleteComment(repo: string, commentId: number): Promise<void> {
+  await gh("api", `repos/${repo}/issues/comments/${commentId}`, "--method", "DELETE");
+}
+
 /** Clone a repo to a target directory and checkout a branch. */
 export async function cloneAndCheckout(repo: string, branch: string, targetDir: string): Promise<void> {
   await exec("gh", ["repo", "clone", repo, targetDir, "--", "--branch", branch]);
