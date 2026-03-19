@@ -47,15 +47,20 @@ export async function loadRegistry(agentsDir: string): Promise<AgentDefinition[]
 
     try {
       const mod = await import(fileUrl);
-      const definition = mod.default;
+      const exported = mod.default;
 
-      if (!isValidDefinition(definition)) {
-        logger.warn({ agent: entry.name, path: agentFile }, "registry.invalid_definition");
-        continue;
+      // Support both a single definition and an array of definitions
+      const definitions = Array.isArray(exported) ? exported : [exported];
+
+      for (const definition of definitions) {
+        if (!isValidDefinition(definition)) {
+          logger.warn({ agent: entry.name, path: agentFile }, "registry.invalid_definition");
+          continue;
+        }
+
+        agents.push(definition);
+        logger.info({ agent: definition.name, triggers: definition.triggers }, "registry.loaded");
       }
-
-      agents.push(definition);
-      logger.info({ agent: definition.name, triggers: definition.triggers }, "registry.loaded");
     } catch (err) {
       logger.warn({ agent: entry.name, err }, "registry.load_failed");
     }

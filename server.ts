@@ -2,9 +2,14 @@ import { serve } from "@hono/node-server";
 import { loadGatewayEnv } from "./core/env.ts";
 import { loadRegistry } from "./core/registry.ts";
 import { createGateway } from "./core/gateway.ts";
+import { getDb } from "./core/db.ts";
+import { migrate } from "./core/migrate.ts";
 import { logger } from "./core/logger.ts";
 
 const config = loadGatewayEnv();
+
+// Initialize database
+migrate(getDb());
 const agents = await loadRegistry("./agents");
 
 if (agents.length === 0) {

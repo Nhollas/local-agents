@@ -33,7 +33,7 @@ export function createGateway(config: GatewayConfig) {
     const action = typeof payload.action === "string" ? payload.action : "";
 
     const log = logger.child({ event, action, deliveryId });
-    const matched = route(event, action, config.agents);
+    const matched = route(event, action, config.agents, payload);
 
     if (matched.length === 0) {
       log.debug("gateway.no_match");

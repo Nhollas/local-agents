@@ -4,6 +4,8 @@ import type { Logger } from "pino";
 export type Trigger = {
   event: string;
   action?: string;
+  /** If set, this trigger only matches when the comment body starts with this command. */
+  command?: string;
 };
 
 /** Dependencies injected into the context factory. Tests can override these. */
