@@ -29,7 +29,7 @@ function createAgent(
 
 describe("createGateway", () => {
   it("returns 401 for an invalid signature", async () => {
-    const app = createGateway({ secret: SECRET, agents: [] });
+    const app = createGateway({ secret: SECRET, model: "test-model", agents: [] });
 
     const req = new Request("http://localhost/webhook", {
       method: "POST",
@@ -47,7 +47,7 @@ describe("createGateway", () => {
 
   it("returns 202 and calls handler for a matching agent", async () => {
     const agent = createAgent();
-    const app = createGateway({ secret: SECRET, agents: [agent] });
+    const app = createGateway({ secret: SECRET, model: "test-model", agents: [agent] });
 
     const req = createWebhookRequest(SECRET, "pull_request", { action: "opened" });
     const res = await app.request(req);
@@ -60,7 +60,7 @@ describe("createGateway", () => {
 
   it("returns 200 when no agents match", async () => {
     const agent = createAgent();
-    const app = createGateway({ secret: SECRET, agents: [agent] });
+    const app = createGateway({ secret: SECRET, model: "test-model", agents: [agent] });
 
     const req = createWebhookRequest(SECRET, "issues", { action: "opened" });
     const res = await app.request(req);
@@ -75,7 +75,7 @@ describe("createGateway", () => {
         throw new Error("handler failed");
       }),
     });
-    const app = createGateway({ secret: SECRET, agents: [agent] });
+    const app = createGateway({ secret: SECRET, model: "test-model", agents: [agent] });
 
     const req = createWebhookRequest(SECRET, "pull_request", { action: "opened" });
     const res = await app.request(req);
@@ -86,7 +86,7 @@ describe("createGateway", () => {
   it("dispatches multiple matching agents", async () => {
     const a = createAgent({ name: "agent-a" });
     const b = createAgent({ name: "agent-b" });
-    const app = createGateway({ secret: SECRET, agents: [a, b] });
+    const app = createGateway({ secret: SECRET, model: "test-model", agents: [a, b] });
 
     const req = createWebhookRequest(SECRET, "pull_request", { action: "opened" });
     const res = await app.request(req);
@@ -98,7 +98,7 @@ describe("createGateway", () => {
   });
 
   it("returns 200 OK for GET /health", async () => {
-    const app = createGateway({ secret: SECRET, agents: [] });
+    const app = createGateway({ secret: SECRET, model: "test-model", agents: [] });
     const res = await app.request("http://localhost/health");
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("OK");

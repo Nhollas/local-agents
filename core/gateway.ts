@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { verifyGitHubWebhook, type WebhookVariables } from "./verify-github.ts";
 import { route } from "./router.ts";
+import { createAgentContext } from "./context.ts";
 import { logger } from "./logger.ts";
-import type { AgentDefinition, WebhookContext } from "./types.ts";
+import type { AgentDefinition } from "./types.ts";
 
 type GatewayConfig = {
   secret: string;
+  model: string;
   agents: AgentDefinition[];
 };
 
@@ -36,7 +38,7 @@ export function createGateway(config: GatewayConfig) {
 
     log.info({ agents: matched.map((a) => a.name) }, "gateway.dispatching");
 
-    const ctx: WebhookContext = { event, action, payload, logger: log };
+    const ctx = createAgentContext({ event, action, payload, logger: log, model: config.model });
 
     Promise.allSettled(
       matched.map((agent) =>

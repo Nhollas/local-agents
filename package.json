@@ -9,8 +9,7 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "typecheck": "tsc --noEmit",
-    "conventions-agent": "node examples/pr-conventions-agent/server.ts",
-    "pr-summary-agent": "node examples/pr-summary-agent/server.ts"
+    "conventions-agent": "node examples/pr-conventions-agent/server.ts"
   },
   "keywords": [],
   "author": "",
