@@ -12,9 +12,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import { cloneAndCheckout, postReply } from "../../lib/gh.ts";
-import { logger } from "../../lib/logger.ts";
-import { logAgentMessage } from "../../lib/agent-logging.ts";
+import { cloneAndCheckout, postReply } from "../../core/gh.ts";
+import { logger } from "../../core/logger.ts";
+import { logAgentMessage } from "../../core/agent-logging.ts";
 import { saveJob } from "./storage.ts";
 import type { Finding, ReviewJob } from "./types.ts";
 

@@ -10,8 +10,8 @@ import { z } from "zod";
 import {
   verifyGitHubWebhook,
   type WebhookVariables,
-} from "../../lib/verify-github.ts";
-import { loadConventionsEnv } from "../../lib/env.ts";
+} from "../../core/verify-github.ts";
+import { loadConventionsEnv } from "../../core/env.ts";
 import {
   deleteComment,
   findReviewComment,
@@ -19,8 +19,8 @@ import {
   postReply,
   isPrOpen,
   getPrDetails,
-} from "../../lib/gh.ts";
-import { logger } from "../../lib/logger.ts";
+} from "../../core/gh.ts";
+import { logger } from "../../core/logger.ts";
 import { loadJob } from "./storage.ts";
 import { runCheck } from "./check.ts";
 import { implementFindings } from "./implement.ts";

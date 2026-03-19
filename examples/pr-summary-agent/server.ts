@@ -9,9 +9,9 @@ import { z } from "zod";
 import {
   verifyGitHubWebhook,
   type WebhookVariables,
-} from "../../lib/verify-github.ts";
-import { loadWebhookEnv } from "../../lib/env.ts";
-import { logger } from "../../lib/logger.ts";
+} from "../../core/verify-github.ts";
+import { loadGatewayEnv } from "../../core/env.ts";
+import { logger } from "../../core/logger.ts";
 import { summarisePr } from "./summarise.ts";
 
 const pullRequestPayload = z.object({
@@ -20,7 +20,7 @@ const pullRequestPayload = z.object({
   repository: z.object({ full_name: z.string() }),
 });
 
-const config = loadWebhookEnv();
+const config = loadGatewayEnv();
 
 const app = new Hono<{ Variables: WebhookVariables }>();
 

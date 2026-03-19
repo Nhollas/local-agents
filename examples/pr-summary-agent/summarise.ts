@@ -2,8 +2,8 @@
  * Summarises a PR diff and posts a comment.
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { getPrDiff, postComment } from "../../lib/gh.ts";
-import { logger } from "../../lib/logger.ts";
+import { getPrDiff, postComment } from "../../core/gh.ts";
+import { logger } from "../../core/logger.ts";
 
 export async function summarisePr(
   repo: string,

@@ -8,7 +8,7 @@
 import "dotenv/config";
 import { z } from "zod";
 
-function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
+export function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
   const result = schema.safeParse(process.env);
 
   if (!result.success) {
@@ -22,19 +22,19 @@ function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
   return result.data;
 }
 
-const webhookEnvSchema = z.object({
+const gatewayEnvSchema = z.object({
   GITHUB_WEBHOOK_SECRET: z.string().min(1, "Required"),
   PORT: z.coerce.number().default(3000),
   MODEL: z.string().default("claude-sonnet-4-6"),
 });
 
-const conventionsEnvSchema = webhookEnvSchema.extend({
+const conventionsEnvSchema = gatewayEnvSchema.extend({
   WORK_DIR: z.string().default("/tmp/pr-conventions-work"),
   DATA_DIR: z.string().default(".data"),
 });
 
-export function loadWebhookEnv() {
-  return parseEnv(webhookEnvSchema);
+export function loadGatewayEnv() {
+  return parseEnv(gatewayEnvSchema);
 }
 
 export function loadConventionsEnv() {

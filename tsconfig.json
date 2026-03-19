@@ -12,6 +12,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["lib/**/*.ts", "examples/**/*.ts"],
+  "include": ["core/**/*.ts", "agents/**/*.ts", "examples/**/*.ts", "server.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
