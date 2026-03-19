@@ -14,6 +14,17 @@ vi.mock("./logger.ts", () => {
   return { logger: log };
 });
 
+vi.mock("./db.ts", () => {
+  const noopRun = () => ({ changes: 0, lastInsertRowid: 0 });
+  return {
+    getDb: () => ({
+      insert: () => ({ values: () => ({ run: noopRun, onConflictDoUpdate: () => ({ run: noopRun }) }) }),
+      update: () => ({ set: () => ({ where: () => ({ run: noopRun }) }) }),
+      run: noopRun,
+    }),
+  };
+});
+
 const SECRET = "test-secret";
 
 function createAgent(

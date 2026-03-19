@@ -9,14 +9,14 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["**/*.test.ts"],
-          exclude: ["**/*.integration.test.ts", "node_modules/**"],
+          exclude: ["**/*.integration.test.ts", "node_modules/**", "dashboard/**"],
         },
       },
       {
         test: {
           name: "integration",
           include: ["**/*.integration.test.ts"],
-          exclude: ["node_modules/**"],
+          exclude: ["node_modules/**", "dashboard/**"],
         },
       },
     ],
