@@ -11,7 +11,7 @@ if (agents.length === 0) {
   logger.warn("No agents found in ./agents/ directory");
 }
 
-const app = createGateway({
+const { app } = createGateway({
   secret: config.GITHUB_WEBHOOK_SECRET,
   model: config.MODEL,
   agents,

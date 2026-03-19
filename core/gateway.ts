@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { verifyGitHubWebhook, type WebhookVariables } from "./verify-github.ts";
 import { route } from "./router.ts";
 import { createAgentContext } from "./context.ts";
+import { createJobQueue, type JobQueue } from "./queue.ts";
 import { logger } from "./logger.ts";
 import type { AgentDefinition } from "./types.ts";
 
@@ -9,6 +10,7 @@ type GatewayConfig = {
   secret: string;
   model: string;
   agents: AgentDefinition[];
+  maxConcurrency?: number;
 };
 
 /**
@@ -17,9 +19,11 @@ type GatewayConfig = {
  * - Verifies webhook signatures
  * - Extracts event + action from headers/payload
  * - Routes to matching agents
+ * - Enqueues handlers via FIFO job queue with concurrency control
  * - Returns 202 immediately; handlers run async
  */
 export function createGateway(config: GatewayConfig) {
+  const queue = createJobQueue({ maxConcurrency: config.maxConcurrency });
   const app = new Hono<{ Variables: WebhookVariables }>();
 
   app.post("/webhook", verifyGitHubWebhook(config.secret), async (c) => {
@@ -40,18 +44,18 @@ export function createGateway(config: GatewayConfig) {
 
     const ctx = createAgentContext({ event, action, payload, logger: log, model: config.model });
 
-    Promise.allSettled(
-      matched.map((agent) =>
+    for (const agent of matched) {
+      queue.enqueue(() =>
         agent.handler(ctx).catch((err) => {
           log.error({ agent: agent.name, err }, "gateway.handler_failed");
         }),
-      ),
-    );
+      );
+    }
 
     return c.text("Accepted", 202);
   });
 
   app.get("/health", (c) => c.text("OK"));
 
-  return app;
+  return { app, queue };
 }
