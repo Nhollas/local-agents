@@ -6,26 +6,13 @@ import { RunDetails } from "./RunDetails.tsx";
 import type { Run } from "./types.ts";
 
 export function App() {
-  const { runs: liveRuns, connected } = useEventStream("/events");
-  const { history } = useRunHistory();
+  const { connected } = useEventStream("/events");
+  const { data: runs = [] } = useRunHistory();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  // Merge live runs with history — live takes precedence
-  const allRuns = useMemo(() => {
-    const merged = new Map<string, Run>();
-    for (const run of history) {
-      merged.set(run.id, run);
-    }
-    for (const run of liveRuns.values()) {
-      merged.set(run.id, run);
-    }
-    return merged;
-  }, [liveRuns, history]);
-
-  // Group runs by agent name
   const sortedAgents = useMemo(() => {
     const agentRuns = new Map<string, Run[]>();
-    for (const run of allRuns.values()) {
+    for (const run of runs) {
       const existing = agentRuns.get(run.agentName) ?? [];
       existing.push(run);
       agentRuns.set(run.agentName, existing);
@@ -33,25 +20,28 @@ export function App() {
 
     return Array.from(agentRuns.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, runs]) => ({
+      .map(([name, agentRunList]) => ({
         name,
-        runs: runs.sort(
-          (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+        runs: agentRunList.sort(
+          (a, b) =>
+            new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
         ),
       }));
-  }, [allRuns]);
+  }, [runs]);
 
-  const selectedRun = selectedRunId ? allRuns.get(selectedRunId) : null;
+  const selectedRun = selectedRunId
+    ? runs.find((r) => r.id === selectedRunId)
+    : null;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-surface-0 text-text-primary">
+      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Agent Dashboard</h1>
         <div role="status" className="flex items-center gap-2 text-sm">
           <span
-            className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`}
+            className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-connected" : "bg-disconnected"}`}
           />
-          <span className="text-gray-400">
+          <span className="text-text-secondary">
             {connected ? "Connected" : "Disconnected"}
           </span>
         </div>
@@ -64,7 +54,7 @@ export function App() {
             onBack={() => setSelectedRunId(null)}
           />
         ) : sortedAgents.length === 0 ? (
-          <p className="text-gray-500 text-center py-12">
+          <p className="text-text-muted text-center py-12">
             No agent activity yet. Waiting for events...
           </p>
         ) : (

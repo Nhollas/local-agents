@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse, sse } from "msw";
 import { test as base } from "vitest";
 import { page } from "vitest/browser";
@@ -69,7 +70,24 @@ export const test = base.extend<DashboardFixtures>({
       http.get("/runs", () => HttpResponse.json([])),
     );
 
-    await render(<App />);
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          staleTime: Number.POSITIVE_INFINITY,
+        },
+      },
+    });
+
+    // Pre-populate so fetchRuns won't race with SSE events
+    // (staleTime: Infinity means useQuery won't call queryFn when data exists)
+    queryClient.setQueryData(["runs"], []);
+
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>,
+    );
     await sseStream.waitForConnection();
     await use(dashboardPageObject(page));
   },

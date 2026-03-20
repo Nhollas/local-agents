@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { describe } from "vitest";
 import { page } from "vitest/browser";
@@ -7,6 +8,23 @@ import { createRunEvent, createRunFromApi } from "../tests/support/contract";
 import { dashboardPageObject } from "../tests/support/page-object";
 import { browserWorker } from "../tests/support/msw";
 import { test } from "../tests/support/fixture";
+
+function renderApp() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        staleTime: Number.POSITIVE_INFINITY,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>,
+  );
+}
 
 describe("Dashboard - history", () => {
   test("loads and displays historical runs on mount", async () => {
@@ -28,7 +46,7 @@ describe("Dashboard - history", () => {
       ),
     );
 
-    await render(<App />);
+    await renderApp();
     const dashboard = dashboardPageObject(page);
 
     await dashboard.expectAgentVisible("pr-summary");
@@ -50,7 +68,7 @@ describe("Dashboard - history", () => {
       ),
     );
 
-    await render(<App />);
+    await renderApp();
     const dashboard = dashboardPageObject(page);
 
     await dashboard.expectRunVisible("run-old");

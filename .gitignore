@@ -24,6 +24,10 @@ coverage
 # TypeScript
 *.tsbuildinfo
 
+# Test artifacts
+__screenshots__/
+.vitest-attachments/
+
 # OS
 .DS_Store
 

@@ -32,6 +32,7 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
+            screenshotFailures: false,
             provider: playwright(),
             instances: [
               {

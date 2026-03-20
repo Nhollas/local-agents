@@ -1,57 +1,62 @@
 import { useEffect, useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Run, RunEvent } from "./types.ts";
 
 export function useEventStream(url: string) {
-  const [runs, setRuns] = useState<Map<string, Run>>(new Map());
+  const queryClient = useQueryClient();
   const [connected, setConnected] = useState(false);
 
-  const handleEvent = useCallback((event: RunEvent) => {
-    setRuns((prev) => {
-      const next = new Map(prev);
+  const handleEvent = useCallback(
+    (event: RunEvent) => {
+      queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {
+        const runs = [...prev];
+        const idx = runs.findIndex((r) => r.id === event.runId);
 
-      switch (event.type) {
-        case "run:started":
-          next.set(event.runId, {
-            id: event.runId,
-            agentName: event.agentName,
-            status: "running",
-            startedAt: event.createdAt,
-          });
-          break;
-
-        case "run:completed":
-          {
-            const existing = next.get(event.runId);
-            if (existing) {
-              next.set(event.runId, {
-                ...existing,
+        switch (event.type) {
+          case "run:started": {
+            const newRun: Run = {
+              id: event.runId,
+              agentName: event.agentName,
+              status: "running",
+              startedAt: event.createdAt,
+            };
+            if (idx >= 0) {
+              runs[idx] = newRun;
+            } else {
+              runs.push(newRun);
+            }
+            break;
+          }
+          case "run:completed": {
+            if (idx >= 0) {
+              runs[idx] = {
+                ...runs[idx],
                 status: "completed",
                 completedAt: event.createdAt,
                 durationMs: event.data.durationMs as number | undefined,
-              });
+              };
             }
+            break;
           }
-          break;
-
-        case "run:failed":
-          {
-            const existing = next.get(event.runId);
-            if (existing) {
-              next.set(event.runId, {
-                ...existing,
+          case "run:failed": {
+            if (idx >= 0) {
+              runs[idx] = {
+                ...runs[idx],
                 status: "failed",
                 completedAt: event.createdAt,
                 error: event.data.error as string | undefined,
                 durationMs: event.data.durationMs as number | undefined,
-              });
+              };
             }
+            break;
           }
-          break;
-      }
+        }
 
-      return next;
-    });
-  }, []);
+        return runs;
+      });
+    },
+    [queryClient],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -127,5 +132,5 @@ export function useEventStream(url: string) {
     };
   }, [url, handleEvent]);
 
-  return { runs, connected };
+  return { connected };
 }
