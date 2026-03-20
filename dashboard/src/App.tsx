@@ -3,6 +3,7 @@ import { useEventStream } from "./use-event-stream.ts";
 import { useRunHistory } from "./use-run-history.ts";
 import { AgentFeed } from "./AgentFeed.tsx";
 import { RunDetails } from "./RunDetails.tsx";
+import { ThemeToggle } from "./ThemeToggle.tsx";
 import type { Run } from "./types.ts";
 
 export function App() {
@@ -37,13 +38,16 @@ export function App() {
     <div className="min-h-screen bg-surface-0 text-text-primary">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Agent Dashboard</h1>
-        <div role="status" className="flex items-center gap-2 text-sm">
-          <span
-            className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-connected" : "bg-disconnected"}`}
-          />
-          <span className="text-text-secondary">
-            {connected ? "Connected" : "Disconnected"}
-          </span>
+        <div className="flex items-center gap-4">
+          <div role="status" className="flex items-center gap-2 text-sm">
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-connected" : "bg-disconnected"}`}
+            />
+            <span className="text-text-secondary">
+              {connected ? "Connected" : "Disconnected"}
+            </span>
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
