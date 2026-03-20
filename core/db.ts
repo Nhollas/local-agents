@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
@@ -10,6 +12,7 @@ let db: ReturnType<typeof drizzle> | undefined;
 export function getDb(dbPath?: string) {
   if (db) return db;
   const resolvedPath = dbPath ?? `${process.env.DATA_DIR ?? ".data"}/gateway.db`;
+  mkdirSync(dirname(resolvedPath), { recursive: true });
   const sqlite = new Database(resolvedPath);
   sqlite.pragma("journal_mode = WAL");
   db = drizzle(sqlite);
