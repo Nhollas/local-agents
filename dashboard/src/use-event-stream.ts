@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { RunDetailFromApi } from "./api.ts";
 import type { Run, RunEvent } from "./types.ts";
 
 export function useEventStream(url: string) {
@@ -8,52 +9,63 @@ export function useEventStream(url: string) {
 
   const handleEvent = useCallback(
     (event: RunEvent) => {
-      queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {
-        const runs = [...prev];
-        const idx = runs.findIndex((r) => r.id === event.runId);
-
-        switch (event.type) {
-          case "run:started": {
+      // Update run status in the runs list cache
+      switch (event.type) {
+        case "run:started":
+          queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {
             const newRun: Run = {
               id: event.runId,
               agentName: event.agentName,
               status: "running",
               startedAt: event.createdAt,
             };
+            const idx = prev.findIndex((r) => r.id === event.runId);
             if (idx >= 0) {
+              const runs = [...prev];
               runs[idx] = newRun;
-            } else {
-              runs.push(newRun);
+              return runs;
             }
-            break;
-          }
-          case "run:completed": {
-            if (idx >= 0) {
-              runs[idx] = {
-                ...runs[idx],
-                status: "completed",
-                completedAt: event.createdAt,
-                durationMs: event.data.durationMs as number | undefined,
-              };
-            }
-            break;
-          }
-          case "run:failed": {
-            if (idx >= 0) {
-              runs[idx] = {
-                ...runs[idx],
-                status: "failed",
-                completedAt: event.createdAt,
-                error: event.data.error as string | undefined,
-                durationMs: event.data.durationMs as number | undefined,
-              };
-            }
-            break;
-          }
-        }
+            return [...prev, newRun];
+          });
+          break;
+        case "run:completed":
+        case "run:failed":
+          queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {
+            const idx = prev.findIndex((r) => r.id === event.runId);
+            if (idx < 0) return prev;
+            const runs = [...prev];
+            runs[idx] = {
+              ...runs[idx],
+              status: event.type === "run:completed" ? "completed" : "failed",
+              completedAt: event.createdAt,
+              error: event.data.error as string | undefined,
+              durationMs: event.data.durationMs as number | undefined,
+            };
+            return runs;
+          });
+          break;
+      }
 
-        return runs;
-      });
+      // Append every event to the run detail cache (if open)
+      queryClient.setQueryData<RunDetailFromApi>(
+        ["runs", event.runId],
+        (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            events: [
+              ...prev.events,
+              {
+                id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                runId: event.runId,
+                type: event.type,
+                data: event.data,
+                createdAt: event.createdAt,
+              },
+            ],
+          };
+        },
+      );
     },
     [queryClient],
   );

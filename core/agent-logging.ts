@@ -18,7 +18,8 @@ export function shortPath(fullPath: string, workDir: string): string {
 /** Log assistant text and tool use activity from an agent message. */
 export function logAgentMessage(
   msg: { type: string; message: { content: Array<Record<string, unknown>> } },
-  workDir: string
+  workDir: string,
+  emitToolUse?: (tool: string, target: string) => void,
 ): void {
   const text = msg.message.content
     .filter((b): b is { type: "text"; text: string } => b.type === "text")
@@ -34,5 +35,6 @@ export function logAgentMessage(
     const raw = String(tool.input.pattern ?? tool.input.file_path ?? tool.input.command ?? "");
     const detail = shortPath(raw, workDir);
     logger.debug({ tool: tool.name, target: detail.slice(0, 100) }, "agent.tool_use");
+    emitToolUse?.(tool.name, detail.slice(0, 100));
   }
 }

@@ -126,7 +126,7 @@ export default defineAgent({
         },
       })) {
         if (msg.type === "assistant") {
-          logAgentMessage(msg, workDir);
+          logAgentMessage(msg, workDir, ctx.emitToolUse);
         }
 
         if (msg.type === "result" && msg.subtype === "success") {

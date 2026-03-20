@@ -1,8 +1,9 @@
-import { getPrDiff, postComment, cloneAndCheckout } from "./gh.ts";
+import { getPrDetails, getPrDiff, postComment, cloneAndCheckout } from "./gh.ts";
 import type { AgentContext, ContextDeps } from "./types.ts";
 import type { Logger } from "pino";
 
 const defaultDeps: ContextDeps = {
+  getPrDetails,
   getPrDiff,
   postComment,
   cloneAndCheckout,
@@ -17,15 +18,21 @@ type CreateAgentContextParams = {
 };
 
 /** Create the rich context object injected into agent handlers. */
-export function createAgentContext(
+export async function createAgentContext(
   params: CreateAgentContextParams,
   deps: Partial<ContextDeps> = {},
-): AgentContext {
+): Promise<AgentContext> {
   const resolved: ContextDeps = { ...defaultDeps, ...deps };
 
   const repo = extractRepo(params.payload);
   const prNumber = extractPrNumber(params.payload);
-  const headBranch = extractHeadBranch(params.payload);
+  let headBranch = extractHeadBranch(params.payload);
+
+  // issue_comment payloads don't include the head branch — fetch it from the API
+  if (!headBranch && repo && prNumber) {
+    const details = await resolved.getPrDetails(repo, prNumber);
+    headBranch = details.headBranch;
+  }
 
   return {
     event: params.event,
@@ -39,6 +46,7 @@ export function createAgentContext(
     diff: () => resolved.getPrDiff(repo, prNumber),
     clone: (targetDir: string) => resolved.cloneAndCheckout(repo, headBranch, targetDir),
     comment: (body: string) => resolved.postComment(repo, prNumber, body),
+    emitToolUse: () => {},
   };
 }
 

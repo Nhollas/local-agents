@@ -48,7 +48,7 @@ export function createGateway(config: GatewayConfig) {
 
     log.info({ agents: matched.map((a) => a.name) }, "gateway.dispatching");
 
-    const ctx = createAgentContext({ event, action, payload, logger: log, model: config.model });
+    const ctx = await createAgentContext({ event, action, payload, logger: log, model: config.model });
 
     for (const agent of matched) {
       runner.enqueue(agent, ctx);

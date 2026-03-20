@@ -10,6 +10,7 @@ export type Trigger = {
 
 /** Dependencies injected into the context factory. Tests can override these. */
 export type ContextDeps = {
+  getPrDetails: (repo: string, prNumber: number) => Promise<{ headBranch: string; baseBranch: string }>;
   getPrDiff: (repo: string, prNumber: number) => Promise<string>;
   postComment: (repo: string, prNumber: number, body: string) => Promise<number>;
   cloneAndCheckout: (repo: string, branch: string, targetDir: string) => Promise<void>;
@@ -31,6 +32,8 @@ export type AgentContext = {
   clone: (targetDir: string) => Promise<void>;
   /** Post a comment on the PR. Returns the comment ID. */
   comment: (body: string) => Promise<number>;
+  /** Emit a tool_use event over SSE. */
+  emitToolUse: (tool: string, target: string) => void;
 };
 
 /** The definition of an agent, returned by defineAgent() and exported as default from agent modules. */

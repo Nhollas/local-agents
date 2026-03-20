@@ -1,4 +1,4 @@
-export type RunEventType = "run:started" | "run:output" | "run:completed" | "run:failed";
+export type RunEventType = "run:started" | "run:output" | "run:tool_use" | "run:completed" | "run:failed";
 
 export type RunEvent = {
   type: RunEventType;

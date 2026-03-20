@@ -3,6 +3,7 @@ import { createAgentContext } from "./context.ts";
 import type { ContextDeps } from "./types.ts";
 
 vi.mock("./gh.ts", () => ({
+  getPrDetails: vi.fn(),
   getPrDiff: vi.fn(),
   postComment: vi.fn(),
   cloneAndCheckout: vi.fn(),
@@ -46,6 +47,7 @@ function baseParams(payload: Record<string, unknown> = prPayload()) {
 
 function mockDeps(): ContextDeps {
   return {
+    getPrDetails: vi.fn(async () => ({ headBranch: "pr-branch", baseBranch: "main" })),
     getPrDiff: vi.fn(async () => "diff content"),
     postComment: vi.fn(async () => 123),
     cloneAndCheckout: vi.fn(async () => {}),
@@ -53,50 +55,52 @@ function mockDeps(): ContextDeps {
 }
 
 describe("createAgentContext", () => {
-  it("extracts repo from pull_request payload", () => {
-    const ctx = createAgentContext(baseParams(), mockDeps());
+  it("extracts repo from pull_request payload", async () => {
+    const ctx = await createAgentContext(baseParams(), mockDeps());
     expect(ctx.repo).toBe("owner/repo");
   });
 
-  it("extracts prNumber from pull_request payload", () => {
-    const ctx = createAgentContext(baseParams(), mockDeps());
+  it("extracts prNumber from pull_request payload", async () => {
+    const ctx = await createAgentContext(baseParams(), mockDeps());
     expect(ctx.prNumber).toBe(42);
   });
 
-  it("extracts headBranch from pull_request payload", () => {
-    const ctx = createAgentContext(baseParams(), mockDeps());
+  it("extracts headBranch from pull_request payload", async () => {
+    const ctx = await createAgentContext(baseParams(), mockDeps());
     expect(ctx.headBranch).toBe("feature-branch");
   });
 
-  it("extracts prNumber from issue_comment payload", () => {
-    const ctx = createAgentContext(
+  it("extracts prNumber from issue_comment payload", async () => {
+    const ctx = await createAgentContext(
       baseParams(issueCommentPayload()),
       mockDeps(),
     );
     expect(ctx.prNumber).toBe(7);
   });
 
-  it("defaults repo to empty string when repository is missing", () => {
-    const ctx = createAgentContext(baseParams({}), mockDeps());
+  it("defaults repo to empty string when repository is missing", async () => {
+    const ctx = await createAgentContext(baseParams({}), mockDeps());
     expect(ctx.repo).toBe("");
   });
 
-  it("defaults prNumber to 0 when neither pull_request nor issue is present", () => {
-    const ctx = createAgentContext(baseParams({}), mockDeps());
+  it("defaults prNumber to 0 when neither pull_request nor issue is present", async () => {
+    const ctx = await createAgentContext(baseParams({}), mockDeps());
     expect(ctx.prNumber).toBe(0);
   });
 
-  it("defaults headBranch to empty string when pull_request is missing", () => {
-    const ctx = createAgentContext(
+  it("fetches headBranch via getPrDetails for issue_comment payloads", async () => {
+    const deps = mockDeps();
+    const ctx = await createAgentContext(
       baseParams(issueCommentPayload()),
-      mockDeps(),
+      deps,
     );
-    expect(ctx.headBranch).toBe("");
+    expect(deps.getPrDetails).toHaveBeenCalledWith("owner/repo", 7);
+    expect(ctx.headBranch).toBe("pr-branch");
   });
 
   it("diff() delegates to getPrDiff with repo and prNumber", async () => {
     const deps = mockDeps();
-    const ctx = createAgentContext(baseParams(), deps);
+    const ctx = await createAgentContext(baseParams(), deps);
     const result = await ctx.diff();
     expect(deps.getPrDiff).toHaveBeenCalledWith("owner/repo", 42);
     expect(result).toBe("diff content");
@@ -104,7 +108,7 @@ describe("createAgentContext", () => {
 
   it("clone() delegates to cloneAndCheckout with repo, headBranch, and targetDir", async () => {
     const deps = mockDeps();
-    const ctx = createAgentContext(baseParams(), deps);
+    const ctx = await createAgentContext(baseParams(), deps);
     await ctx.clone("/tmp/work");
     expect(deps.cloneAndCheckout).toHaveBeenCalledWith(
       "owner/repo",
@@ -115,15 +119,15 @@ describe("createAgentContext", () => {
 
   it("comment() delegates to postComment with repo, prNumber, and body", async () => {
     const deps = mockDeps();
-    const ctx = createAgentContext(baseParams(), deps);
+    const ctx = await createAgentContext(baseParams(), deps);
     const id = await ctx.comment("Hello!");
     expect(deps.postComment).toHaveBeenCalledWith("owner/repo", 42, "Hello!");
     expect(id).toBe(123);
   });
 
-  it("passes through event, action, payload, logger, and model", () => {
+  it("passes through event, action, payload, logger, and model", async () => {
     const params = baseParams();
-    const ctx = createAgentContext(params, mockDeps());
+    const ctx = await createAgentContext(params, mockDeps());
     expect(ctx.event).toBe("pull_request");
     expect(ctx.action).toBe("opened");
     expect(ctx.payload).toBe(params.payload);
@@ -133,7 +137,7 @@ describe("createAgentContext", () => {
 
   it("partial deps override only the specified function", async () => {
     const customDiff = vi.fn(async () => "custom diff");
-    const ctx = createAgentContext(baseParams(), { getPrDiff: customDiff });
+    const ctx = await createAgentContext(baseParams(), { getPrDiff: customDiff });
     const result = await ctx.diff();
     expect(customDiff).toHaveBeenCalledWith("owner/repo", 42);
     expect(result).toBe("custom diff");

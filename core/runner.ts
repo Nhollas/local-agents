@@ -63,6 +63,19 @@ export function createRunner(config: RunnerConfig = {}): Runner {
       persistEvent(runId, startEvent);
       eventBus.emit(startEvent);
 
+      // Wire up tool_use emission on the context
+      ctx.emitToolUse = (tool: string, target: string) => {
+        const toolEvent: RunEvent = {
+          type: "run:tool_use",
+          runId,
+          agentName: agent.name,
+          data: { tool, target },
+          createdAt: new Date().toISOString(),
+        };
+        persistEvent(runId, toolEvent);
+        eventBus.emit(toolEvent);
+      };
+
       const startTime = Date.now();
 
       try {

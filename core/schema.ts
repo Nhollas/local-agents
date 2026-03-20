@@ -19,7 +19,7 @@ export const runEvents = sqliteTable("run_events", {
 });
 
 export type RunStatus = "running" | "completed" | "failed";
-export type RunEventType = "run:started" | "run:output" | "run:completed" | "run:failed";
+export type RunEventType = "run:started" | "run:output" | "run:tool_use" | "run:completed" | "run:failed";
 
 export const reviewJobs = sqliteTable("review_jobs", {
   id: text("id").primaryKey(),
