@@ -24,8 +24,9 @@ ${diff}
 \`\`\``,
       options: {
         model: ctx.model,
+        settingSources: ["project"],
         permissionMode: "dontAsk",
-        allowedTools: [],
+        allowedTools: ["Skill"],
       },
     })) {
       if (msg.type === "result" && msg.subtype === "success") {

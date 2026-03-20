@@ -181,7 +181,8 @@ export default defineAgent({
         options: {
           cwd: workDir,
           model: ctx.model,
-          allowedTools: ["Read", "Glob", "Grep"],
+          settingSources: ["project"],
+          allowedTools: ["Skill", "Read", "Glob", "Grep"],
           permissionMode: "dontAsk",
           outputFormat: { type: "json_schema", schema: FINDINGS_SCHEMA },
         },

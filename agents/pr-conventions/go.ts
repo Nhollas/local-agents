@@ -108,7 +108,8 @@ export default defineAgent({
         options: {
           cwd: workDir,
           model: ctx.model,
-          allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+          settingSources: ["project"],
+          allowedTools: ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"],
           permissionMode: "dontAsk",
           sandbox: {
             enabled: true,
