@@ -47,7 +47,7 @@ export function App() {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Agent Dashboard</h1>
-        <div className="flex items-center gap-2 text-sm">
+        <div role="status" className="flex items-center gap-2 text-sm">
           <span
             className={`inline-block w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`}
           />

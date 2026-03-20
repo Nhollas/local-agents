@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatDuration } from "./format.ts";
 import type { Run } from "./types.ts";
 
 type RunEventFromApi = {
@@ -17,12 +18,6 @@ type Props = {
   run: Run;
   onBack: () => void;
 };
-
-function formatDuration(ms?: number): string {
-  if (ms == null) return "...";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
 
 export function RunDetails({ run, onBack }: Props) {
   const [events, setEvents] = useState<RunEventFromApi[]>([]);
@@ -76,7 +71,7 @@ export function RunDetails({ run, onBack }: Props) {
         </dl>
 
         {run.error && (
-          <div className="rounded border border-red-500/30 bg-red-500/10 p-3">
+          <div role="alert" className="rounded border border-red-500/30 bg-red-500/10 p-3">
             <h3 className="text-sm font-medium text-red-400 mb-1">Error</h3>
             <pre className="text-xs text-red-300 whitespace-pre-wrap font-mono">
               {run.error}
@@ -87,9 +82,9 @@ export function RunDetails({ run, onBack }: Props) {
         {events.length > 0 && (
           <div>
             <h3 className="text-sm font-medium text-gray-400 mb-2">Events</h3>
-            <div className="space-y-1">
+            <ol aria-label="Events" className="space-y-1">
               {events.map((ev) => (
-                <div
+                <li
                   key={ev.id}
                   className="flex items-center gap-3 text-xs py-1"
                 >
@@ -102,9 +97,9 @@ export function RunDetails({ run, onBack }: Props) {
                       {JSON.stringify(ev.data)}
                     </span>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
         )}
       </div>

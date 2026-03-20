@@ -1,3 +1,4 @@
+import { formatDuration, formatTime } from "./format.ts";
 import type { Run } from "./types.ts";
 
 type Props = {
@@ -22,23 +23,13 @@ function StatusBadge({ status }: { status: Run["status"] }) {
   );
 }
 
-function formatDuration(ms?: number): string {
-  if (ms == null) return "...";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString();
-}
-
 async function killRun(runId: string) {
   await fetch(`/runs/${runId}/kill`, { method: "POST" });
 }
 
 export function AgentFeed({ name, runs, onSelectRun }: Props) {
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900">
+    <section aria-label={name} className="rounded-lg border border-gray-800 bg-gray-900">
       <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
         <h2 className="font-medium text-sm">{name}</h2>
         <span className="text-xs text-gray-500">{runs.length} run(s)</span>
@@ -51,6 +42,7 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
           >
             <button
               type="button"
+              aria-label={`View run ${run.id}`}
               onClick={() => onSelectRun(run.id)}
               className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
             >
@@ -63,6 +55,7 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
               {run.status === "running" && (
                 <button
                   type="button"
+                  aria-label={`Kill run ${run.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     killRun(run.id);
@@ -76,6 +69,6 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
