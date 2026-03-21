@@ -10,6 +10,9 @@ export function useEventStream(url: string) {
   const handleEvent = useCallback(
     (event: RunEvent) => {
       // Update run status in the runs list cache
+      // Cancel any in-flight /runs fetch so it doesn't overwrite our SSE update
+      queryClient.cancelQueries({ queryKey: ["runs"] });
+
       switch (event.type) {
         case "run:started":
           queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {

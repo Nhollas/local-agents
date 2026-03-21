@@ -3,12 +3,14 @@ import { test } from "../tests/support/fixture";
 
 describe("Dashboard - render", () => {
   test("shows empty state when no runs exist", async ({ dashboardPage }) => {
-    await dashboardPage.expectEmpty();
+    const dashboard = await dashboardPage.mount();
+    await dashboard.expectEmpty();
   });
 
   test("shows connected status when SSE stream is open", async ({
     dashboardPage,
   }) => {
-    await dashboardPage.expectConnected();
+    const dashboard = await dashboardPage.mount();
+    await dashboard.expectConnected();
   });
 });

@@ -23,6 +23,8 @@ describe("Dashboard - run details", () => {
       ),
     );
 
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -30,14 +32,29 @@ describe("Dashboard - run details", () => {
       }),
     );
 
-    await dashboardPage.selectRun("run-abc");
-    await dashboardPage.expectRunDetails("pr-summary");
+    await dashboard.selectRun("run-abc");
+    await dashboard.expectRunDetails("pr-summary");
   });
 
   test("shows error details for a failed run", async ({
     dashboardPage,
     sseStream,
   }) => {
+    browserWorker.use(
+      http.get("/runs/run-abc", () =>
+        HttpResponse.json(
+          createRunDetailFromApi({
+            id: "run-abc",
+            agentName: "pr-summary",
+            status: "failed",
+            error: "Agent timeout after 30s",
+          }),
+        ),
+      ),
+    );
+
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -52,21 +69,8 @@ describe("Dashboard - run details", () => {
       }),
     );
 
-    browserWorker.use(
-      http.get("/runs/run-abc", () =>
-        HttpResponse.json(
-          createRunDetailFromApi({
-            id: "run-abc",
-            agentName: "pr-summary",
-            status: "failed",
-            error: "Agent timeout after 30s",
-          }),
-        ),
-      ),
-    );
-
-    await dashboardPage.selectRun("run-abc");
-    await dashboardPage.expectError("Agent timeout after 30s");
+    await dashboard.selectRun("run-abc");
+    await dashboard.expectError("Agent timeout after 30s");
   });
 
   test("displays the event timeline for a run", async ({
@@ -100,6 +104,8 @@ describe("Dashboard - run details", () => {
       ),
     );
 
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -107,8 +113,8 @@ describe("Dashboard - run details", () => {
       }),
     );
 
-    await dashboardPage.selectRun("run-abc");
-    await dashboardPage.expectEvents(2);
+    await dashboard.selectRun("run-abc");
+    await dashboard.expectEvents(2);
   });
 
   test("navigates back to the feed when back button is clicked", async ({
@@ -126,6 +132,8 @@ describe("Dashboard - run details", () => {
       ),
     );
 
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -133,10 +141,10 @@ describe("Dashboard - run details", () => {
       }),
     );
 
-    await dashboardPage.selectRun("run-abc");
-    await dashboardPage.expectRunDetails("pr-summary");
+    await dashboard.selectRun("run-abc");
+    await dashboard.expectRunDetails("pr-summary");
 
-    await dashboardPage.goBack();
-    await dashboardPage.expectAgentVisible("pr-summary");
+    await dashboard.goBack();
+    await dashboard.expectAgentVisible("pr-summary");
   });
 });

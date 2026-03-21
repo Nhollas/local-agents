@@ -7,7 +7,8 @@ describe("Dashboard - live feed", () => {
     dashboardPage,
     sseStream,
   }) => {
-    await dashboardPage.expectEmpty();
+    const dashboard = await dashboardPage.mount();
+    await dashboard.expectEmpty();
 
     sseStream.emit(
       createRunEvent("run:started", {
@@ -16,14 +17,16 @@ describe("Dashboard - live feed", () => {
       }),
     );
 
-    await dashboardPage.expectAgentVisible("pr-summary");
-    await dashboardPage.expectRunVisible("run-abc");
+    await dashboard.expectAgentVisible("pr-summary");
+    await dashboard.expectRunVisible("run-abc");
   });
 
   test("updates run status when run:completed event arrives", async ({
     dashboardPage,
     sseStream,
   }) => {
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -31,7 +34,7 @@ describe("Dashboard - live feed", () => {
       }),
     );
 
-    await dashboardPage.expectRunVisible("run-abc");
+    await dashboard.expectRunVisible("run-abc");
 
     sseStream.emit(
       createRunEvent("run:completed", {
@@ -41,7 +44,7 @@ describe("Dashboard - live feed", () => {
       }),
     );
 
-    const section = dashboardPage.getAgentSection("pr-summary");
+    const section = dashboard.getAgentSection("pr-summary");
     await expect.element(section).toHaveTextContent("completed");
   });
 
@@ -49,6 +52,8 @@ describe("Dashboard - live feed", () => {
     dashboardPage,
     sseStream,
   }) => {
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -64,11 +69,13 @@ describe("Dashboard - live feed", () => {
       }),
     );
 
-    const section = dashboardPage.getAgentSection("pr-summary");
+    const section = dashboard.getAgentSection("pr-summary");
     await expect.element(section).toHaveTextContent("failed");
   });
 
   test("groups runs by agent name", async ({ dashboardPage, sseStream }) => {
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-1",
@@ -82,16 +89,18 @@ describe("Dashboard - live feed", () => {
       }),
     );
 
-    await dashboardPage.expectAgentVisible("pr-summary");
-    await dashboardPage.expectAgentVisible("pr-conventions");
-    await dashboardPage.expectRunCount("pr-summary", 1);
-    await dashboardPage.expectRunCount("pr-conventions", 1);
+    await dashboard.expectAgentVisible("pr-summary");
+    await dashboard.expectAgentVisible("pr-conventions");
+    await dashboard.expectRunCount("pr-summary", 1);
+    await dashboard.expectRunCount("pr-conventions", 1);
   });
 
   test("shows multiple runs under the same agent", async ({
     dashboardPage,
     sseStream,
   }) => {
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-1",
@@ -105,8 +114,8 @@ describe("Dashboard - live feed", () => {
       }),
     );
 
-    await dashboardPage.expectRunCount("pr-summary", 2);
-    await dashboardPage.expectRunVisible("run-1");
-    await dashboardPage.expectRunVisible("run-2");
+    await dashboard.expectRunCount("pr-summary", 2);
+    await dashboard.expectRunVisible("run-1");
+    await dashboard.expectRunVisible("run-2");
   });
 });

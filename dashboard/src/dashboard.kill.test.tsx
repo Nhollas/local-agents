@@ -15,6 +15,8 @@ describe("Dashboard - kill action", () => {
 
     browserWorker.use(killHandler);
 
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -22,7 +24,7 @@ describe("Dashboard - kill action", () => {
       }),
     );
 
-    await dashboardPage.killRun("run-abc");
+    await dashboard.killRun("run-abc");
 
     await expect.poll(() => killHandler.isUsed).toBe(true);
   });
@@ -31,6 +33,8 @@ describe("Dashboard - kill action", () => {
     dashboardPage,
     sseStream,
   }) => {
+    const dashboard = await dashboardPage.mount();
+
     sseStream.emit(
       createRunEvent("run:started", {
         runId: "run-abc",
@@ -45,12 +49,10 @@ describe("Dashboard - kill action", () => {
       }),
     );
 
-    const section = dashboardPage.getAgentSection("pr-summary");
+    const section = dashboard.getAgentSection("pr-summary");
     await expect.element(section).toHaveTextContent("completed");
     await expect
-      .element(
-        dashboardPage.getByRole("button", { name: "Kill run run-abc" }),
-      )
+      .element(dashboard.getKillButton("run-abc"))
       .not.toBeInTheDocument();
   });
 });

@@ -1,33 +1,11 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { describe } from "vitest";
-import { page } from "vitest/browser";
-import { render } from "vitest-browser-react";
-import { App } from "./App";
 import { createRunEvent, createRunFromApi } from "../tests/support/contract";
-import { dashboardPageObject } from "../tests/support/page-object";
-import { browserWorker } from "../tests/support/msw";
 import { test } from "../tests/support/fixture";
-
-function renderApp() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        staleTime: Number.POSITIVE_INFINITY,
-      },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>,
-  );
-}
+import { browserWorker } from "../tests/support/msw";
 
 describe("Dashboard - history", () => {
-  test("loads and displays historical runs on mount", async () => {
+  test("loads and displays historical runs on mount", async ({ dashboardPage}) => {
     browserWorker.use(
       http.get("/runs", () =>
         HttpResponse.json([
@@ -46,8 +24,7 @@ describe("Dashboard - history", () => {
       ),
     );
 
-    await renderApp();
-    const dashboard = dashboardPageObject(page);
+    const dashboard = await dashboardPage.mount();
 
     await dashboard.expectAgentVisible("pr-summary");
     await dashboard.expectAgentVisible("pr-conventions");
@@ -55,7 +32,7 @@ describe("Dashboard - history", () => {
     await dashboard.expectRunVisible("run-old-2");
   });
 
-  test("merges live runs with historical runs", async ({ sseStream }) => {
+  test("merges live runs with historical runs", async ({ dashboardPage, sseStream }) => {
     browserWorker.use(
       http.get("/runs", () =>
         HttpResponse.json([
@@ -68,8 +45,7 @@ describe("Dashboard - history", () => {
       ),
     );
 
-    await renderApp();
-    const dashboard = dashboardPageObject(page);
+    const dashboard = await dashboardPage.mount();
 
     await dashboard.expectRunVisible("run-old");
 
