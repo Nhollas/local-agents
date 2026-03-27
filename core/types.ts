@@ -12,6 +12,11 @@ export type TrackerAdapter = {
   fetchActiveIssues(repo: string, label: string): Promise<Issue[]>;
 };
 
+export type CodeHostAdapter = {
+  fetchFile(repo: string, path: string, ref?: string): Promise<string | null>;
+  cloneUrl(repo: string): string;
+};
+
 export type WorkflowConfig = {
   tracker: {
     kind: "github";
