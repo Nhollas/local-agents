@@ -24,7 +24,7 @@ export type RunDetailFromApi = RunFromApi & {
   events: RunEventFromApi[];
 };
 
-export function mapApiRun(r: RunFromApi): Run {
+function mapApiRun(r: RunFromApi): Run {
   return {
     id: r.id,
     agentName: r.agentName,

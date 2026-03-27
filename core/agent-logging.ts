@@ -4,7 +4,7 @@
 import { logger } from "./logger.ts";
 
 /** Strip the workdir prefix from a path for cleaner logging. */
-export function shortPath(fullPath: string, workDir: string): string {
+function shortPath(fullPath: string, workDir: string): string {
   const privatePrefixed = `/private${workDir}`;
   if (fullPath.startsWith(privatePrefixed)) {
     return fullPath.slice(privatePrefixed.length + 1);

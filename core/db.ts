@@ -20,13 +20,13 @@ export function getDb(dbPath?: string) {
 }
 
 /** Create a fresh database connection (for testing). */
-export function createDb(dbPath: string) {
+function createDb(dbPath: string) {
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   return drizzle(sqlite);
 }
 
 /** Reset the singleton (for testing). */
-export function resetDb() {
+function resetDb() {
   db = undefined;
 }

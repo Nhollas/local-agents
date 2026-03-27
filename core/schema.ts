@@ -20,5 +20,5 @@ export const runEvents = sqliteTable("run_events", {
   createdAt: text("created_at").notNull(),
 });
 
-export type RunStatus = "running" | "completed" | "failed";
+type RunStatus = "running" | "completed" | "failed";
 export type RunEventType = "run:started" | "run:output" | "run:tool_use" | "run:completed" | "run:failed";

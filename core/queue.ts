@@ -1,4 +1,4 @@
-export type QueueConfig = {
+type QueueConfig = {
   maxConcurrency?: number;
 };
 

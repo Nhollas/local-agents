@@ -38,7 +38,7 @@ export async function ensureWorkspace(
   return { path: wsPath, created: true };
 }
 
-export async function cleanWorkspace(
+async function cleanWorkspace(
   issue: Issue,
   workspaceRoot: string,
 ): Promise<void> {

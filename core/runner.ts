@@ -13,7 +13,7 @@ export type AgentJob = {
   handler: (emitToolUse: (tool: string, target: string) => void) => Promise<void>;
 };
 
-export type RunnerConfig = {
+type RunnerConfig = {
   maxConcurrency?: number;
 };
 

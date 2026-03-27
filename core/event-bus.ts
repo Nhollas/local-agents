@@ -12,15 +12,15 @@ export type RunEvent = {
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50);
 
-export function emit(event: RunEvent): void {
+function emit(event: RunEvent): void {
   emitter.emit("run-event", event);
 }
 
-export function on(handler: (event: RunEvent) => void): void {
+function on(handler: (event: RunEvent) => void): void {
   emitter.on("run-event", handler);
 }
 
-export function off(handler: (event: RunEvent) => void): void {
+function off(handler: (event: RunEvent) => void): void {
   emitter.off("run-event", handler);
 }
 

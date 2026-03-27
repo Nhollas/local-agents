@@ -5,7 +5,7 @@ import { logger } from "./logger.ts";
 const WORKFLOW_PATH = ".agents/workflow.yaml";
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
-export type WorkflowCache = {
+type WorkflowCache = {
   workflows: Map<string, RepoWorkflow>;
   refresh(): Promise<void>;
   start(): void;

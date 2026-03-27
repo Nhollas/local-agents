@@ -1,8 +1,6 @@
 import { expect } from "vitest";
 import type { BrowserPage } from "vitest/browser";
 
-export type DashboardPageObject = ReturnType<typeof dashboardPageObject>;
-
 export function dashboardPageObject(page: BrowserPage) {
   const self = {
     // --- Locators ---

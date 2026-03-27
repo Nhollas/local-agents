@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { z } from "zod";
 
-export function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
+function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
   const result = schema.safeParse(process.env);
 
   if (!result.success) {
