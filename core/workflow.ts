@@ -4,6 +4,9 @@ import type { Issue, RepoWorkflow } from "./types.ts";
 
 const repoWorkflowSchema = z.object({
 	label: z.string().default("agent"),
+	completed_label: z.string().default("awaiting-review"),
+	branch: z.string().default("agent/issue-{{ issue.number }}"),
+	base_branch: z.string().default("main"),
 	hooks: z
 		.object({
 			after_create: z.string().optional(),

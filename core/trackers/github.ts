@@ -4,10 +4,10 @@ import type { Issue, TrackerAdapter } from "../types.ts";
 type GitHubIssue = {
 	number: number;
 	title: string;
-	body: string;
+	body: string | null;
 	labels: { name: string }[];
-	url: string;
-	createdAt: string;
+	html_url: string;
+	created_at: string;
 };
 
 export function createGitHubTracker(
@@ -19,16 +19,16 @@ export function createGitHubTracker(
 
 			for (const state of activeStates) {
 				const stdout = await gh(
-					"issue",
-					"list",
-					"--repo",
-					repo,
-					"--label",
-					label,
-					"--state",
-					state,
-					"--json",
-					"number,title,body,labels,url,createdAt",
+					"api",
+					`repos/${repo}/issues`,
+					"--method",
+					"GET",
+					"-f",
+					`labels=${label}`,
+					"-f",
+					`state=${state}`,
+					"-f",
+					"per_page=100",
 				);
 				results.push(...JSON.parse(stdout));
 			}
@@ -47,9 +47,31 @@ export function createGitHubTracker(
 					title: i.title,
 					description: i.body ?? "",
 					labels: i.labels.map((l) => l.name),
-					url: i.url,
-					createdAt: i.createdAt,
+					url: i.html_url,
+					createdAt: i.created_at,
 				}));
+		},
+
+		async swapLabel(
+			repo: string,
+			issueNumber: number,
+			remove: string,
+			add: string,
+		): Promise<void> {
+			await gh(
+				"api",
+				`repos/${repo}/issues/${issueNumber}/labels/${encodeURIComponent(remove)}`,
+				"--method",
+				"DELETE",
+			);
+			await gh(
+				"api",
+				`repos/${repo}/issues/${issueNumber}/labels`,
+				"--method",
+				"POST",
+				"-f",
+				`labels[]=${add}`,
+			);
 		},
 	};
 }

@@ -2,8 +2,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { logAgentMessage } from "./agent-logging.ts";
+import type { Db } from "./db.ts";
 import { logger } from "./logger.ts";
 import type { Runner } from "./runner.ts";
+import { type RunStatus, runs } from "./schema.ts";
 import type {
 	CodeHostAdapter,
 	Config,
@@ -21,6 +23,7 @@ async function runShell(script: string, cwd: string): Promise<void> {
 }
 
 type OrchestratorConfig = {
+	db: Db;
 	tracker: TrackerAdapter;
 	codeHost: CodeHostAdapter;
 	config: Config;
@@ -28,27 +31,30 @@ type OrchestratorConfig = {
 	runner: Runner;
 };
 
+type RunSnapshot = { id: string; issueKey: string; status: RunStatus };
+
+function getRunSnapshot(db: Db): RunSnapshot[] {
+	return db
+		.select({
+			id: runs.id,
+			issueKey: runs.issueKey,
+			status: runs.status,
+		})
+		.from(runs)
+		.all()
+		.filter((r): r is RunSnapshot => r.issueKey !== null);
+}
+
 export function createOrchestrator(opts: OrchestratorConfig) {
-	const claimed = new Map<string, string>(); // issue.key -> runId
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
-
-	function releaseClaim(runId: string) {
-		for (const [key, id] of claimed) {
-			if (id === runId) {
-				claimed.delete(key);
-				logger.info({ key, runId }, "orchestrator.claim_released");
-				return;
-			}
-		}
-	}
 
 	async function tick() {
 		if (ticking) return;
 		ticking = true;
 
 		try {
-			const { tracker, codeHost, config, workflows, runner } = opts;
+			const { db, tracker, codeHost, config, workflows, runner } = opts;
 			const { defaults } = config;
 
 			type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
@@ -83,21 +89,36 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				a.issue.createdAt.localeCompare(b.issue.createdAt),
 			);
 
-			// 3. RECONCILE: only for repos that were successfully fetched
+			// Single DB snapshot for all decisions this tick
+			const snapshot = getRunSnapshot(db);
+			const issuesWithRuns = new Set(snapshot.map((r) => r.issueKey));
+			const runningByIssue = new Map<string, string[]>();
+			let runningCount = 0;
+			for (const r of snapshot) {
+				if (r.status === "running") {
+					runningCount++;
+					const ids = runningByIssue.get(r.issueKey) ?? [];
+					ids.push(r.id);
+					runningByIssue.set(r.issueKey, ids);
+				}
+			}
+
+			// 3. RECONCILE: kill running agents for issues no longer in the active set
 			const activeKeys = new Set(allTagged.map((t) => t.issue.key));
-			for (const [key, runId] of claimed) {
+			for (const [key, runIds] of runningByIssue) {
 				const repo = key.slice(0, key.lastIndexOf("#"));
 				if (fetchedRepos.has(repo) && !activeKeys.has(key)) {
-					logger.info({ key, runId }, "orchestrator.reconcile_terminal");
-					runner.kill(runId);
-					claimed.delete(key);
+					logger.info({ key }, "orchestrator.reconcile_terminal");
+					for (const id of runIds) {
+						runner.kill(id);
+					}
 				}
 			}
 
 			// 4. DISPATCH oldest-first up to max_concurrent
 			for (const { issue, repo, workflow } of allTagged) {
-				if (claimed.has(issue.key)) continue;
-				if (claimed.size >= defaults.max_concurrent) break;
+				if (issuesWithRuns.has(issue.key)) continue;
+				if (runningCount >= defaults.max_concurrent) break;
 
 				const cloneUrl = codeHost.cloneUrl(repo);
 				const prompt = renderPrompt(workflow.prompt, { issue });
@@ -120,7 +141,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					}
 				}
 
-				const runId = runner.enqueue({
+				runner.enqueue({
 					name: `issue-${issue.number}`,
 					issueKey: issue.key,
 					issueTitle: issue.title,
@@ -144,10 +165,40 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 							await runShell(script, ws.path);
 						}
 					},
+					onComplete: async () => {
+						const head = renderPrompt(workflow.branch, { issue });
+						const pr = await codeHost.createPullRequest(
+							repo,
+							head,
+							workflow.base_branch,
+							issue.title,
+							`Closes ${issue.key}`,
+						);
+						logger.info(
+							{ issue: issue.key, pr: pr.url },
+							"orchestrator.pr_created",
+						);
+
+						await tracker.swapLabel(
+							repo,
+							issue.number,
+							workflow.label,
+							workflow.completed_label,
+						);
+						logger.info(
+							{
+								issue: issue.key,
+								from: workflow.label,
+								to: workflow.completed_label,
+							},
+							"orchestrator.label_swapped",
+						);
+					},
 				});
 
-				claimed.set(issue.key, runId);
-				logger.info({ issue: issue.key, runId }, "orchestrator.dispatched");
+				runningCount++;
+				issuesWithRuns.add(issue.key);
+				logger.info({ issue: issue.key }, "orchestrator.dispatched");
 			}
 		} finally {
 			ticking = false;
@@ -155,7 +206,6 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	}
 
 	return {
-		releaseClaim,
 		start() {
 			logger.info(
 				{ interval: opts.config.defaults.polling_interval_ms },

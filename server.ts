@@ -15,13 +15,15 @@ const env = loadEnv();
 const config = loadConfig(env.CONFIG_PATH);
 
 // Initialize database
-migrate(getDb());
+const db = getDb();
+migrate(db);
 
 // Create components
 const tracker = createGitHubTracker();
 const codeHost = createGitHubCodeHost();
 
 const runner = createRunner({
+	db,
 	maxConcurrency: config.defaults.max_concurrent,
 });
 
@@ -30,6 +32,7 @@ const workflowCache = createWorkflowCache(codeHost, config.repos);
 await workflowCache.refresh();
 
 const orchestrator = createOrchestrator({
+	db,
 	tracker,
 	codeHost,
 	config,
@@ -37,7 +40,6 @@ const orchestrator = createOrchestrator({
 	runner,
 });
 
-runner.onComplete = (runId) => orchestrator.releaseClaim(runId);
 const app = createApi(runner);
 
 // Start polling + workflow refresh

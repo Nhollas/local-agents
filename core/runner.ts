@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { getDb } from "./db.ts";
+import type { Db } from "./db.ts";
 import { eventBus, type RunEvent } from "./event-bus.ts";
 import { logger } from "./logger.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
@@ -13,20 +13,22 @@ export type AgentJob = {
 	handler: (
 		emitToolUse: (tool: string, target: string) => void,
 	) => Promise<void>;
+	onComplete?: () => Promise<void>;
 };
 
 type RunnerConfig = {
+	db: Db;
 	maxConcurrency?: number;
 };
 
 export type Runner = {
 	enqueue(job: AgentJob): string;
 	kill(runId: string): boolean;
-	onComplete: ((runId: string) => void) | null;
 	readonly queue: JobQueue;
 };
 
-export function createRunner(config: RunnerConfig = {}): Runner {
+export function createRunner(config: RunnerConfig): Runner {
+	const { db } = config;
 	const queue = createJobQueue({ maxConcurrency: config.maxConcurrency });
 	const activeRuns = new Map<string, AbortController>();
 
@@ -40,7 +42,6 @@ export function createRunner(config: RunnerConfig = {}): Runner {
 	function enqueue(job: AgentJob): string {
 		const runId = randomUUID().slice(0, 8);
 		const startedAt = new Date().toISOString();
-		const db = getDb();
 		const controller = new AbortController();
 		activeRuns.set(runId, controller);
 
@@ -106,6 +107,21 @@ export function createRunner(config: RunnerConfig = {}): Runner {
 				};
 				persistEvent(runId, completeEvent);
 				eventBus.emit(completeEvent);
+
+				if (job.onComplete) {
+					try {
+						await job.onComplete();
+					} catch (err) {
+						logger.error(
+							{
+								agent: job.name,
+								runId,
+								err: err instanceof Error ? err.message : String(err),
+							},
+							"runner.on_complete_failed",
+						);
+					}
+				}
 			} catch (err) {
 				const failedAt = new Date().toISOString();
 				const durationMs = Date.now() - startTime;
@@ -132,26 +148,24 @@ export function createRunner(config: RunnerConfig = {}): Runner {
 				);
 			} finally {
 				activeRuns.delete(runId);
-				runner.onComplete?.(runId);
 			}
 		});
 
 		return runId;
 	}
 
-	const runner: Runner = { enqueue, kill, onComplete: null, queue };
-	return runner;
-}
+	function persistEvent(runId: string, event: RunEvent): void {
+		db.insert(runEvents)
+			.values({
+				id: randomUUID().slice(0, 8),
+				runId,
+				type: event.type,
+				data: event.data,
+				createdAt: event.createdAt,
+			})
+			.run();
+	}
 
-function persistEvent(runId: string, event: RunEvent): void {
-	const db = getDb();
-	db.insert(runEvents)
-		.values({
-			id: randomUUID().slice(0, 8),
-			runId,
-			type: event.type,
-			data: event.data,
-			createdAt: event.createdAt,
-		})
-		.run();
+	const runner: Runner = { enqueue, kill, queue };
+	return runner;
 }

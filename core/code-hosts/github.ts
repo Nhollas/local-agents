@@ -1,5 +1,5 @@
 import { gh } from "../gh.ts";
-import type { CodeHostAdapter } from "../types.ts";
+import type { CodeHostAdapter, PullRequest } from "../types.ts";
 
 export function createGitHubCodeHost(): CodeHostAdapter {
 	return {
@@ -22,6 +22,31 @@ export function createGitHubCodeHost(): CodeHostAdapter {
 
 		cloneUrl(repo: string): string {
 			return `https://github.com/${repo}.git`;
+		},
+
+		async createPullRequest(
+			repo: string,
+			head: string,
+			base: string,
+			title: string,
+			body: string,
+		): Promise<PullRequest> {
+			const stdout = await gh(
+				"api",
+				`repos/${repo}/pulls`,
+				"--method",
+				"POST",
+				"-f",
+				`title=${title}`,
+				"-f",
+				`body=${body}`,
+				"-f",
+				`head=${head}`,
+				"-f",
+				`base=${base}`,
+			);
+			const pr = JSON.parse(stdout);
+			return { number: pr.number, url: pr.html_url };
 		},
 	};
 }

@@ -14,7 +14,8 @@
 		"test:integration": "vitest run --project integration",
 		"test:dashboard": "vitest run --project dashboard",
 		"typecheck": "tsc --noEmit",
-		"knip": "knip"
+		"knip": "knip",
+		"db:generate": "drizzle-kit generate"
 	},
 	"lint-staged": {
 		"*.{ts,tsx,json,mjs}": "biome check --write --no-errors-on-unmatched"
@@ -51,6 +52,7 @@
 		"@vitejs/plugin-react": "^6.0.1",
 		"@vitest/browser-playwright": "^4.1.0",
 		"concurrently": "^9.2.1",
+		"drizzle-kit": "^0.31.10",
 		"husky": "^9.1.7",
 		"knip": "^6.0.6",
 		"lint-staged": "^16.3.3",

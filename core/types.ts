@@ -10,11 +10,29 @@ export type Issue = {
 
 export type TrackerAdapter = {
 	fetchActiveIssues(repo: string, label: string): Promise<Issue[]>;
+	swapLabel(
+		repo: string,
+		issueNumber: number,
+		remove: string,
+		add: string,
+	): Promise<void>;
+};
+
+export type PullRequest = {
+	number: number;
+	url: string;
 };
 
 export type CodeHostAdapter = {
 	fetchFile(repo: string, path: string, ref?: string): Promise<string | null>;
 	cloneUrl(repo: string): string;
+	createPullRequest(
+		repo: string,
+		head: string,
+		base: string,
+		title: string,
+		body: string,
+	): Promise<PullRequest>;
 };
 
 export type Config = {
@@ -35,6 +53,9 @@ export type Config = {
 
 export type RepoWorkflow = {
 	label: string;
+	completed_label: string;
+	branch: string;
+	base_branch: string;
 	hooks?: {
 		after_create?: string;
 		before_run?: string;
