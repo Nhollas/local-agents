@@ -1,0 +1,42 @@
+tracker:
+  kind: github
+  repo: nhollas/target-dummy
+  label: agent
+  active_states:
+    - open
+  terminal_states:
+    - closed
+
+polling:
+  interval_ms: 30000
+
+agent:
+  max_concurrent: 2
+  timeout_ms: 3600000
+  model: claude-sonnet-4-6
+
+workspace:
+  root: /tmp/local-agent-workspaces
+
+hooks:
+  after_create: |
+    gh repo clone nhollas/target-dummy .
+    git checkout -b agent/issue-{{ issue.number }}
+  before_run: |
+    git fetch origin main && git rebase origin/main
+  after_run: |
+    git push -u origin agent/issue-{{ issue.number }}
+
+prompt: |
+  You are working on a task from GitHub Issues.
+
+  ## Task
+  - **Issue**: {{ issue.key }}
+  - **Title**: {{ issue.title }}
+  - **Description**: {{ issue.description }}
+
+  ## Instructions
+  1. Implement the change described in the task
+  2. Write tests for your changes
+  3. Ensure existing tests pass
+  4. Commit with a clear message referencing {{ issue.key }}

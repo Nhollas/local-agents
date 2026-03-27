@@ -36,3 +36,9 @@ __screenshots__/
 
 # pnpm
 .pnpm-store
+
+# Agent workspaces
+/tmp/local-agent-workspaces/
+
+# Target dummy dependencies
+repos/target-dummy/node_modules/

@@ -44,6 +44,11 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
               <span className="text-xs text-text-muted font-mono">
                 {run.id}
               </span>
+              {run.issueTitle && (
+                <span className="text-xs text-text-secondary truncate">
+                  {run.issueKey ? `${run.issueKey}: ` : ""}{run.issueTitle}
+                </span>
+              )}
             </button>
             <div className="flex items-center gap-4 text-xs text-text-secondary shrink-0">
               <span>{formatDuration(run.durationMs)}</span>

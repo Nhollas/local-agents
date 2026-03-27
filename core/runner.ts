@@ -4,26 +4,26 @@ import { createJobQueue, type JobQueue } from "./queue.ts";
 import { eventBus, type RunEvent } from "./event-bus.ts";
 import { getDb } from "./db.ts";
 import { runs, runEvents } from "./schema.ts";
-import type { AgentContext, AgentDefinition } from "./types.ts";
+import { logger } from "./logger.ts";
+
+export type AgentJob = {
+  name: string;
+  issueKey: string;
+  issueTitle: string;
+  handler: (emitToolUse: (tool: string, target: string) => void) => Promise<void>;
+};
 
 export type RunnerConfig = {
   maxConcurrency?: number;
 };
 
 export type Runner = {
-  enqueue(agent: AgentDefinition, ctx: AgentContext): string;
+  enqueue(job: AgentJob): string;
   kill(runId: string): boolean;
+  onComplete: ((runId: string) => void) | null;
   readonly queue: JobQueue;
 };
 
-/**
- * Create a runner that wraps the job queue with persistence and event emission.
- *
- * Each agent execution becomes a "run" that is:
- * - Tracked in SQLite (runs + run_events tables)
- * - Emitted via the event bus for SSE streaming
- * - Killable via AbortController
- */
 export function createRunner(config: RunnerConfig = {}): Runner {
   const queue = createJobQueue({ maxConcurrency: config.maxConcurrency });
   const activeRuns = new Map<string, AbortController>();
@@ -35,7 +35,7 @@ export function createRunner(config: RunnerConfig = {}): Runner {
     return true;
   }
 
-  function enqueue(agent: AgentDefinition, ctx: AgentContext): string {
+  function enqueue(job: AgentJob): string {
     const runId = randomUUID().slice(0, 8);
     const startedAt = new Date().toISOString();
     const db = getDb();
@@ -43,12 +43,13 @@ export function createRunner(config: RunnerConfig = {}): Runner {
     activeRuns.set(runId, controller);
 
     queue.enqueue(async () => {
-      // Persist run as started
       db.insert(runs)
         .values({
           id: runId,
-          agentName: agent.name,
+          agentName: job.name,
           status: "running",
+          issueKey: job.issueKey,
+          issueTitle: job.issueTitle,
           startedAt,
         })
         .run();
@@ -56,19 +57,18 @@ export function createRunner(config: RunnerConfig = {}): Runner {
       const startEvent: RunEvent = {
         type: "run:started",
         runId,
-        agentName: agent.name,
-        data: { repo: ctx.repo, prNumber: ctx.prNumber },
+        agentName: job.name,
+        data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
         createdAt: startedAt,
       };
       persistEvent(runId, startEvent);
       eventBus.emit(startEvent);
 
-      // Wire up tool_use emission on the context
-      ctx.emitToolUse = (tool: string, target: string) => {
+      const emitToolUse = (tool: string, target: string) => {
         const toolEvent: RunEvent = {
           type: "run:tool_use",
           runId,
-          agentName: agent.name,
+          agentName: job.name,
           data: { tool, target },
           createdAt: new Date().toISOString(),
         };
@@ -79,15 +79,13 @@ export function createRunner(config: RunnerConfig = {}): Runner {
       const startTime = Date.now();
 
       try {
-        // Create a promise that rejects on abort
         const abortPromise = new Promise<never>((_, reject) => {
           controller.signal.addEventListener("abort", () => {
             reject(new Error("Run killed by user"));
           });
         });
 
-        // Race the handler against the abort signal
-        await Promise.race([agent.handler(ctx), abortPromise]);
+        await Promise.race([job.handler(emitToolUse), abortPromise]);
 
         const completedAt = new Date().toISOString();
         const durationMs = Date.now() - startTime;
@@ -100,7 +98,7 @@ export function createRunner(config: RunnerConfig = {}): Runner {
         const completeEvent: RunEvent = {
           type: "run:completed",
           runId,
-          agentName: agent.name,
+          agentName: job.name,
           data: { durationMs },
           createdAt: completedAt,
         };
@@ -119,23 +117,25 @@ export function createRunner(config: RunnerConfig = {}): Runner {
         const failEvent: RunEvent = {
           type: "run:failed",
           runId,
-          agentName: agent.name,
+          agentName: job.name,
           data: { error, durationMs },
           createdAt: failedAt,
         };
         persistEvent(runId, failEvent);
         eventBus.emit(failEvent);
 
-        ctx.logger.error({ agent: agent.name, err: error, runId }, "runner.handler_failed");
+        logger.error({ agent: job.name, err: error, runId }, "runner.handler_failed");
       } finally {
         activeRuns.delete(runId);
+        runner.onComplete?.(runId);
       }
     });
 
     return runId;
   }
 
-  return { enqueue, kill, queue };
+  const runner: Runner = { enqueue, kill, onComplete: null, queue };
+  return runner;
 }
 
 function persistEvent(runId: string, event: RunEvent): void {

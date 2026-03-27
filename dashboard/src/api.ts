@@ -5,6 +5,8 @@ export type RunFromApi = {
   agentName: string;
   status: string;
   error: string | null;
+  issueKey: string | null;
+  issueTitle: string | null;
   startedAt: string;
   completedAt: string | null;
   durationMs: number | null;
@@ -28,6 +30,8 @@ export function mapApiRun(r: RunFromApi): Run {
     agentName: r.agentName,
     status: r.status as Run["status"],
     error: r.error ?? undefined,
+    issueKey: r.issueKey ?? undefined,
+    issueTitle: r.issueTitle ?? undefined,
     startedAt: r.startedAt,
     completedAt: r.completedAt ?? undefined,
     durationMs: r.durationMs ?? undefined,

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.ts",
-    "dev": "concurrently -n gateway,dashboard -c blue,magenta \"node --watch server.ts\" \"vite --config dashboard/vite.config.ts\"",
+    "dev": "concurrently -n orchestrator,dashboard -c blue,magenta \"node --watch server.ts\" \"vite --config dashboard/vite.config.ts\"",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
@@ -29,6 +29,7 @@
     "pino": "^10.3.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "yaml": "^2.8.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {

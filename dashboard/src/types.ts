@@ -15,6 +15,8 @@ export type Run = {
   agentName: string;
   status: RunStatus;
   error?: string;
+  issueKey?: string;
+  issueTitle?: string;
   startedAt: string;
   completedAt?: string;
   durationMs?: number;

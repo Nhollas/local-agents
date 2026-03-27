@@ -5,6 +5,8 @@ type RunFromApi = {
   agentName: string;
   status: string;
   error: string | null;
+  issueKey: string | null;
+  issueTitle: string | null;
   startedAt: string;
   completedAt: string | null;
   durationMs: number | null;
@@ -42,6 +44,8 @@ export function createRunFromApi(
     agentName: "test-agent",
     status: "completed",
     error: null,
+    issueKey: null,
+    issueTitle: null,
     startedAt: "2026-03-20T12:00:00.000Z",
     completedAt: "2026-03-20T12:00:01.500Z",
     durationMs: 1500,
@@ -57,6 +61,8 @@ export function createRunDetailFromApi(
     agentName: "test-agent",
     status: "completed",
     error: null,
+    issueKey: null,
+    issueTitle: null,
     startedAt: "2026-03-20T12:00:00.000Z",
     completedAt: "2026-03-20T12:00:01.500Z",
     durationMs: 1500,

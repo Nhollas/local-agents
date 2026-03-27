@@ -9,6 +9,8 @@ export function migrate(db: { run: (query: any) => any }) {
       agent_name TEXT NOT NULL,
       status TEXT NOT NULL,
       error TEXT,
+      issue_key TEXT,
+      issue_title TEXT,
       started_at TEXT NOT NULL,
       completed_at TEXT,
       duration_ms REAL
@@ -26,18 +28,7 @@ export function migrate(db: { run: (query: any) => any }) {
   `);
 
   db.run(/* sql */ `
-    CREATE TABLE IF NOT EXISTS review_jobs (
-      id TEXT PRIMARY KEY,
-      repo TEXT NOT NULL,
-      pr_number INTEGER NOT NULL,
-      head_branch TEXT NOT NULL,
-      base_branch TEXT NOT NULL,
-      comment_id INTEGER NOT NULL,
-      findings TEXT NOT NULL DEFAULT '[]',
-      status TEXT NOT NULL,
-      error TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
+    CREATE INDEX IF NOT EXISTS idx_run_events_run_id
+    ON run_events(run_id)
   `);
 }

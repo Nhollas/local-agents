@@ -1,30 +1,47 @@
 import { serve } from "@hono/node-server";
-import { loadGatewayEnv } from "./core/env.ts";
-import { loadRegistry } from "./core/registry.ts";
-import { createGateway } from "./core/gateway.ts";
+import { loadEnv } from "./core/env.ts";
+import { loadWorkflow } from "./core/workflow.ts";
 import { getDb } from "./core/db.ts";
 import { migrate } from "./core/migrate.ts";
+import { createRunner } from "./core/runner.ts";
+import { createGitHubTracker } from "./core/trackers/github.ts";
+import { createOrchestrator } from "./core/orchestrator.ts";
+import { createApi } from "./core/api.ts";
 import { logger } from "./core/logger.ts";
 
-const config = loadGatewayEnv();
+const env = loadEnv();
+const workflow = loadWorkflow(env.WORKFLOW_PATH);
 
 // Initialize database
 migrate(getDb());
-const agents = await loadRegistry("./agents");
 
-if (agents.length === 0) {
-  logger.warn("No agents found in ./agents/ directory");
-}
+// Create components
+const tracker = createGitHubTracker(
+  workflow.config.tracker.repo,
+  workflow.config.tracker.label,
+  workflow.config.tracker.active_states,
+);
 
-const { app } = createGateway({
-  secret: config.GITHUB_WEBHOOK_SECRET,
-  model: config.MODEL,
-  agents,
+const runner = createRunner({
+  maxConcurrency: workflow.config.agent.max_concurrent,
 });
 
-serve({ fetch: app.fetch, port: config.PORT }, (info) => {
+const orchestrator = createOrchestrator({ tracker, workflow, runner });
+
+runner.onComplete = (runId) => orchestrator.releaseClaim(runId);
+const app = createApi(runner);
+
+// Start polling + API server
+orchestrator.start();
+
+serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   logger.info(
-    { port: info.port, agents: agents.map((a) => a.name) },
-    "gateway.started",
+    {
+      port: info.port,
+      repo: workflow.config.tracker.repo,
+      label: workflow.config.tracker.label,
+      interval: workflow.config.polling.interval_ms,
+    },
+    "orchestrator.started",
   );
 });

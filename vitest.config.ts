@@ -26,7 +26,6 @@ export default defineConfig({
         plugins: [react(), tailwindcss()],
         test: {
           name: "dashboard",
-          silent: "passed-only",
           include: ["dashboard/src/**/*.test.tsx"],
           setupFiles: ["dashboard/tests/setup/browser.ts"],
           browser: {

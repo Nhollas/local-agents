@@ -1,44 +1,46 @@
-import type { Logger } from "pino";
-
-/** A trigger declaration: which GitHub event (and optional action) an agent responds to. */
-export type Trigger = {
-  event: string;
-  action?: string;
-  /** If set, this trigger only matches when the comment body starts with this command. */
-  command?: string;
+export type Issue = {
+  id: number;
+  key: string; // "nhollas/target-dummy#42"
+  number: number;
+  title: string;
+  description: string;
+  state: string;
+  labels: string[];
+  url: string;
 };
 
-/** Dependencies injected into the context factory. Tests can override these. */
-export type ContextDeps = {
-  getPrDetails: (repo: string, prNumber: number) => Promise<{ headBranch: string; baseBranch: string }>;
-  getPrDiff: (repo: string, prNumber: number) => Promise<string>;
-  postComment: (repo: string, prNumber: number, body: string) => Promise<number>;
-  cloneAndCheckout: (repo: string, branch: string, targetDir: string) => Promise<void>;
+export type TrackerAdapter = {
+  fetchActiveIssues(): Promise<Issue[]>;
+  fetchIssueState(issueNumber: number): Promise<string | null>;
 };
 
-/** The rich context passed to every agent handler. */
-export type AgentContext = {
-  event: string;
-  action: string;
-  payload: Record<string, unknown>;
-  logger: Logger;
-  model: string;
-  repo: string;
-  prNumber: number;
-  headBranch: string;
-  /** Fetch the PR diff. */
-  diff: () => Promise<string>;
-  /** Clone the repo at the PR's head branch into targetDir. */
-  clone: (targetDir: string) => Promise<void>;
-  /** Post a comment on the PR. Returns the comment ID. */
-  comment: (body: string) => Promise<number>;
-  /** Emit a tool_use event over SSE. */
-  emitToolUse: (tool: string, target: string) => void;
+export type WorkflowConfig = {
+  tracker: {
+    kind: "github";
+    repo: string;
+    label: string;
+    active_states: string[];
+    terminal_states: string[];
+  };
+  polling: {
+    interval_ms: number;
+  };
+  agent: {
+    max_concurrent: number;
+    timeout_ms: number;
+    model: string;
+  };
+  workspace: {
+    root: string;
+  };
+  hooks?: {
+    after_create?: string;
+    before_run?: string;
+    after_run?: string;
+  };
 };
 
-/** The definition of an agent, returned by defineAgent() and exported as default from agent modules. */
-export type AgentDefinition = {
-  name: string;
-  triggers: Trigger[];
-  handler: (ctx: AgentContext) => Promise<void>;
+export type WorkflowDefinition = {
+  config: WorkflowConfig;
+  prompt: string;
 };
