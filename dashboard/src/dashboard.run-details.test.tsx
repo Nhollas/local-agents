@@ -4,7 +4,7 @@ import {
 	createRunDetailFromApi,
 	createRunEvent,
 } from "../tests/support/contract";
-import { expect, test } from "../tests/support/fixture";
+import { test } from "../tests/support/fixture";
 import { browserWorker } from "../tests/support/msw";
 
 describe("Dashboard - run details", () => {

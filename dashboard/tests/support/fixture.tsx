@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { sse } from "msw";
 import { test as base } from "vitest";
 import { page } from "vitest/browser";

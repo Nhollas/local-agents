@@ -22,7 +22,8 @@ export function createJobQueue(config: QueueConfig = {}): JobQueue {
 
 	function drain(): void {
 		while (running < maxConcurrency && pending.length > 0) {
-			const execute = pending.shift()!;
+			const execute = pending.shift();
+			if (!execute) break;
 			running++;
 			execute().finally(() => {
 				running--;
