@@ -1,10 +1,22 @@
+import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { z } from "zod";
 import { getDb } from "./db.ts";
 import { eventBus, type RunEvent } from "./event-bus.ts";
 import type { Runner } from "./runner.ts";
 import { runEvents, runs } from "./schema.ts";
+
+const runsQuerySchema = z.object({
+	agent: z.string().optional(),
+	status: z.enum(["running", "completed", "failed"]).optional(),
+	limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+const runParamSchema = z.object({
+	id: z.string().min(1),
+});
 
 export function createApi(runner: Runner) {
 	const app = new Hono();
@@ -33,21 +45,13 @@ export function createApi(runner: Runner) {
 		});
 	});
 
-	const validStatuses = new Set(["running", "completed", "failed"]);
-
-	app.get("/runs", (c) => {
+	app.get("/runs", zValidator("query", runsQuerySchema), (c) => {
 		const db = getDb();
-		const agentName = c.req.query("agent");
-		const status = c.req.query("status");
-		const limit = Math.min(Number(c.req.query("limit")) || 50, 200);
+		const { agent, status, limit } = c.req.valid("query");
 
 		const conditions: SQL[] = [];
-		if (agentName) conditions.push(eq(runs.agentName, agentName));
-		if (status && validStatuses.has(status)) {
-			conditions.push(
-				eq(runs.status, status as "running" | "completed" | "failed"),
-			);
-		}
+		if (agent) conditions.push(eq(runs.agentName, agent));
+		if (status) conditions.push(eq(runs.status, status));
 
 		const query = db
 			.select()
@@ -63,9 +67,9 @@ export function createApi(runner: Runner) {
 		return c.json(result);
 	});
 
-	app.get("/runs/:id", (c) => {
+	app.get("/runs/:id", zValidator("param", runParamSchema), (c) => {
 		const db = getDb();
-		const id = c.req.param("id");
+		const { id } = c.req.valid("param");
 
 		const run = db.select().from(runs).where(eq(runs.id, id)).get();
 		if (!run) return c.json({ error: "Not found" }, 404);
@@ -79,8 +83,8 @@ export function createApi(runner: Runner) {
 		return c.json({ ...run, events });
 	});
 
-	app.post("/runs/:id/kill", (c) => {
-		const id = c.req.param("id");
+	app.post("/runs/:id/kill", zValidator("param", runParamSchema), (c) => {
+		const { id } = c.req.valid("param");
 		const killed = runner.kill(id);
 		if (!killed) return c.json({ error: "Run not found or not running" }, 404);
 		return c.json({ killed: true });

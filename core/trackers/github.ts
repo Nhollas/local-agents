@@ -34,9 +34,7 @@ export function createGitHubTracker(
 						creator: username,
 						per_page: "100",
 					});
-					return client.get<GitHubIssue[]>(
-						`/repos/${repo}/issues?${params}`,
-					);
+					return client.get<GitHubIssue[]>(`/repos/${repo}/issues?${params}`);
 				}),
 			);
 
@@ -70,10 +68,9 @@ export function createGitHubTracker(
 				client.delete(
 					`/repos/${repo}/issues/${issueNumber}/labels/${encodeURIComponent(remove)}`,
 				),
-				client.post(
-					`/repos/${repo}/issues/${issueNumber}/labels`,
-					{ labels: [add] },
-				),
+				client.post(`/repos/${repo}/issues/${issueNumber}/labels`, {
+					labels: [add],
+				}),
 			]);
 		},
 	};

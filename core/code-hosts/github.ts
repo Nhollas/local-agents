@@ -40,10 +40,12 @@ export function createGitHubCodeHost(client: GitHubClient): CodeHostAdapter {
 			title: string,
 			body: string,
 		): Promise<PullRequest> {
-			const pr = await client.post<GitHubPullRequest>(
-				`/repos/${repo}/pulls`,
-				{ title, body, head, base },
-			);
+			const pr = await client.post<GitHubPullRequest>(`/repos/${repo}/pulls`, {
+				title,
+				body,
+				head,
+				base,
+			});
 			return { number: pr.number, url: pr.html_url };
 		},
 	};
