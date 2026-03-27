@@ -10,11 +10,19 @@ type GitHubIssue = {
 	created_at: string;
 };
 
+async function getAuthenticatedUser(): Promise<string> {
+	const stdout = await gh("api", "user", "--jq", ".login");
+	return stdout;
+}
+
 export function createGitHubTracker(
 	activeStates: string[] = ["open"],
 ): TrackerAdapter {
+	const usernamePromise = getAuthenticatedUser();
+
 	return {
 		async fetchActiveIssues(repo: string, label: string): Promise<Issue[]> {
+			const username = await usernamePromise;
 			const results: GitHubIssue[] = [];
 
 			for (const state of activeStates) {
@@ -27,6 +35,8 @@ export function createGitHubTracker(
 					`labels=${label}`,
 					"-f",
 					`state=${state}`,
+					"-f",
+					`creator=${username}`,
 					"-f",
 					"per_page=100",
 				);
