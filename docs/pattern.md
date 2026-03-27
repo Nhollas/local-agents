@@ -11,7 +11,10 @@ Issue Tracker (GitHub Issues, GitLab, Jira)
 Polling Orchestrator (tick every N seconds)
         │
         ▼
-Claim Issue → Create Workspace → Run Agent
+Fetch All Repos → Merge → Sort by createdAt (oldest first)
+        │
+        ▼
+Claim Issue → Create Workspace (git clone) → Run Agent
         │
         ▼
 Claude Agent SDK (query)
@@ -20,7 +23,7 @@ Claude Agent SDK (query)
 Push Result (commits, branches)
 ```
 
-The orchestrator polls an issue tracker for work, claims issues, creates isolated workspaces, runs Claude agents, and reconciles state. The issue tracker IS the orchestration layer.
+The orchestrator polls multiple repos for labeled issues, merges them into a single queue sorted oldest-first, creates isolated workspaces, runs Claude agents, and reconciles state. The issue tracker IS the orchestration layer.
 
 ## Why Polling Over Webhooks
 
@@ -36,63 +39,109 @@ The orchestrator polls an issue tracker for work, claims issues, creates isolate
 
 ## How It Works
 
-### 1. Configure a workflow
+### 1. Central config
 
-A `workflow.yaml` defines what to poll, how to run agents, and what hooks to execute:
+A `config.yaml` defines which repos to poll and operational defaults:
 
 ```yaml
 tracker:
   kind: github
-  repo: org/repo
-  label: agent
 
-agent:
+code_host:
+  kind: github
+
+repos:
+  - org/repo-a
+  - org/repo-b
+
+defaults:
+  polling_interval_ms: 30000
   max_concurrent: 2
   model: claude-sonnet-4-6
+  workspace_root: /tmp/local-agent-workspaces
+```
+
+### 2. Per-repo workflow
+
+Each target repo contains `.agents/workflow.yaml` with the label, hooks, and prompt:
+
+```yaml
+label: agent
+
+hooks:
+  after_create: |
+    git checkout -b agent/issue-{{ issue.number }}
+  before_run: |
+    git fetch origin main && git rebase origin/main
+  after_run: |
+    git push -u origin agent/issue-{{ issue.number }}
 
 prompt: |
   You are working on: {{ issue.title }}
   {{ issue.description }}
 ```
 
-### 2. The orchestrator loop
+Hooks must use plain git commands — no platform-specific CLI tools. The orchestrator handles cloning via `git clone <cloneUrl>` before the `after_create` hook runs.
+
+### 3. The orchestrator loop
 
 Each tick:
 
-1. **Fetch** active issues from the tracker
-2. **Reconcile** — if a claimed issue is no longer active, kill the run and release the claim
-3. **Dispatch** — for each unclaimed issue (up to `max_concurrent`), create a workspace, run hooks, and start a Claude agent
+1. **Fetch** active issues from all repos with cached workflows (concurrent)
+2. **Merge** all issues into a single list, sorted by `createdAt` ascending (oldest first)
+3. **Reconcile** — if a claimed issue is no longer active, kill the run and release the claim
+4. **Dispatch** — for each unclaimed issue (up to `max_concurrent`), create a workspace, run hooks, and start a Claude agent
 
-### 3. Workspaces and hooks
+### 4. Workflow caching
 
-Each issue gets an isolated workspace directory. Lifecycle hooks run shell commands at key points:
+The orchestrator fetches `.agents/workflow.yaml` from each repo via the `CodeHostAdapter` at startup. Workflows are cached and refreshed every 10 minutes. Repos without a workflow are skipped with a warning. Failed refreshes keep the last-known-good workflow.
 
-- `after_create` — clone the repo, create a branch
-- `before_run` — fetch latest, rebase
-- `after_run` — push the branch
+### 5. Workspaces and hooks
 
-### 4. The agent
+Each issue gets an isolated workspace directory. The orchestrator runs `git clone <cloneUrl> .` to set up the workspace, then executes lifecycle hooks:
 
-Uses `query()` from the Claude Agent SDK with full tool access. The prompt is rendered from the workflow template with issue context injected.
+- `after_create` — create a branch (runs once when workspace is first created)
+- `before_run` — fetch latest, rebase (runs before each agent execution)
+- `after_run` — push the branch (runs after agent completes)
 
-### 5. Reconciliation
+### 6. The agent
 
-The orchestrator detects when issues are closed/resolved and kills the corresponding agent run. Claims are also released when runs complete or fail.
+Uses `query()` from the Claude Agent SDK with full tool access. The prompt is rendered from the workflow template with issue context injected via `{{ variable.path }}` interpolation.
 
-## Tracker Adapters
+### 7. Reconciliation
 
-The system is designed for multiple tracker backends. Currently supported:
+The orchestrator detects when issues are closed/resolved and kills the corresponding agent run. Only repos whose issues were successfully fetched are considered for reconciliation — transient fetch failures do not kill active runs. Claims are also released when runs complete or fail.
 
-| Tracker | Implementation |
-|---------|---------------|
-| GitHub Issues | `core/trackers/github.ts` — uses `gh` CLI |
+## Adapter Interfaces
 
-Future adapters: GitLab Issues, Jira.
+### TrackerAdapter
+
+```typescript
+type TrackerAdapter = {
+  fetchActiveIssues(repo: string, label: string): Promise<Issue[]>;
+};
+```
+
+One instance per platform, parameterized per call. Currently implemented for GitHub Issues via the `gh` CLI.
+
+### CodeHostAdapter
+
+```typescript
+type CodeHostAdapter = {
+  fetchFile(repo: string, path: string, ref?: string): Promise<string | null>;
+  cloneUrl(repo: string): string;
+};
+```
+
+Used to fetch `.agents/workflow.yaml` from repos and generate clone URLs. Currently implemented for GitHub via the `gh` API.
 
 ## Design Principles
 
 - **Issue tracker as orchestration** — no separate task queue or job system
+- **Multi-repo, single orchestrator** — one process polls all configured repos with a shared concurrency pool
+- **Oldest first** — cross-repo fairness via `createdAt` sorting
 - **Narrow scope** — each agent works on one issue at a time
 - **Codebase as source of truth** — agents discover context by reading, not from config
 - **Disposable work environments** — clone fresh, work in /tmp, clean up after
 - **Same toolchain as engineers** — agents run tests, hooks, and linters the same way you do
+- **Plain git hooks** — no platform-specific commands in repo workflows
