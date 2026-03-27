@@ -12,9 +12,11 @@ export { parseRepoWorkflow, renderPrompt } from "./workflow.ts";
 export { ensureWorkspace, cleanWorkspace } from "./workspace.ts";
 export { createGitHubTracker } from "./trackers/github.ts";
 export { createGitHubCodeHost } from "./code-hosts/github.ts";
+export { createWorkflowCache } from "./workflow-cache.ts";
 
 export type { Issue, TrackerAdapter, CodeHostAdapter, Config, RepoWorkflow } from "./types.ts";
 export type { AgentJob, Runner, RunnerConfig } from "./runner.ts";
 export type { JobQueue, QueueConfig } from "./queue.ts";
 export type { RunEvent } from "./event-bus.ts";
 export type { RunStatus, RunEventType } from "./schema.ts";
+export type { WorkflowCache } from "./workflow-cache.ts";

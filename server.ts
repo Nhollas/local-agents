@@ -5,6 +5,8 @@ import { getDb } from "./core/db.ts";
 import { migrate } from "./core/migrate.ts";
 import { createRunner } from "./core/runner.ts";
 import { createGitHubTracker } from "./core/trackers/github.ts";
+import { createGitHubCodeHost } from "./core/code-hosts/github.ts";
+import { createWorkflowCache } from "./core/workflow-cache.ts";
 import { createOrchestrator } from "./core/orchestrator.ts";
 import { createApi } from "./core/api.ts";
 import { logger } from "./core/logger.ts";
@@ -17,25 +19,28 @@ migrate(getDb());
 
 // Create components
 const tracker = createGitHubTracker();
+const codeHost = createGitHubCodeHost();
 
 const runner = createRunner({
   maxConcurrency: config.defaults.max_concurrent,
 });
 
-// TODO: #13 will fetch workflow from repo via CodeHostAdapter
-const repo = config.repos[0];
-const workflow = {
-  label: "agent",
-  prompt: "",
-  hooks: undefined,
-};
+// Fetch workflows from all repos, then start
+const workflowCache = createWorkflowCache(codeHost, config.repos);
+await workflowCache.refresh();
 
-const orchestrator = createOrchestrator({ tracker, config, repo, workflow, runner });
+const orchestrator = createOrchestrator({
+  tracker,
+  config,
+  workflows: workflowCache.workflows,
+  runner,
+});
 
 runner.onComplete = (runId) => orchestrator.releaseClaim(runId);
 const app = createApi(runner);
 
-// Start polling + API server
+// Start polling + workflow refresh
+workflowCache.start();
 orchestrator.start();
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
@@ -43,6 +48,7 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     {
       port: info.port,
       repos: config.repos,
+      activeRepos: [...workflowCache.workflows.keys()],
       interval: config.defaults.polling_interval_ms,
     },
     "orchestrator.started",
