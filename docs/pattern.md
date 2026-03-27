@@ -1,157 +1,98 @@
-# Pattern: Local Autonomous Agents
+# Pattern: Polling Orchestrator
 
-Run AI agents on your machine, triggered by external events, using your Claude subscription. No API billing, no cloud infrastructure, no human in the loop until you choose to be.
+Run AI agents on your machine, triggered by issue trackers, using your Claude subscription. No API billing, no cloud infrastructure, no webhooks.
 
 ## The Pattern
 
 ```
-External Event (GitHub, Slack, etc.)
+Issue Tracker (GitHub Issues, GitLab, Jira)
         │
         ▼
-Cloudflare Tunnel (secure, stable URL)
+Polling Orchestrator (tick every N seconds)
         │
         ▼
-Local Webhook Server (Hono)
+Claim Issue → Create Workspace → Run Agent
         │
         ▼
 Claude Agent SDK (query)
         │
         ▼
-Push Result Back (comment, commit, message)
+Push Result (commits, branches)
 ```
 
-Three components, same every time:
+The orchestrator polls an issue tracker for work, claims issues, creates isolated workspaces, runs Claude agents, and reconciles state. The issue tracker IS the orchestration layer.
 
-1. **Webhook server** — receives events, routes to the right handler
-2. **Cloudflare Tunnel** — gives your local server a stable public URL
-3. **Agent** — Claude Agent SDK `query()` with the right tools and prompt
+## Why Polling Over Webhooks
+
+- **Resilient** — if the service is down, it picks up issues on the next tick. No missed events.
+- **Simple** — no Cloudflare tunnel, no webhook signature verification, no public URL needed.
+- **Portable** — works behind NATs, VPNs, firewalls. Runs anywhere.
 
 ## Why Local
 
 - **Subscription-powered** — uses your existing Claude Code login
 - **Your machine, your data** — nothing leaves your control beyond what the agent explicitly pushes
 - **Full toolchain available** — the agent has access to git, pnpm, your test suite, everything an engineer has
-- **No infrastructure to manage** — runs locally, tunnel handles ingress
 
-## How to Build an Agent
+## How It Works
 
-### 1. Define the trigger
+### 1. Configure a workflow
 
-What external event starts the work? A GitHub webhook, a Slack message, a cron job. This determines which events your server listens for.
-
-### 2. Define the scope
-
-What does the agent do? Keep it narrow, specific, and objective. The best agents answer questions that have clear right answers discoverable from the context (codebase, logs, docs).
-
-### 3. Write the server
-
-A Hono server that receives webhooks, verifies signatures, and dispatches to your agent function. The server responds immediately (202) and processes asynchronously.
-
-```typescript
-app.post("/webhook", async (c) => {
-  const payload = JSON.parse(await c.req.text());
-
-  // Dispatch asynchronously
-  handleEvent(payload).catch(console.error);
-
-  return c.text("Processing", 202);
-});
-```
-
-### 4. Write the agent
-
-Use `query()` with the tools the agent needs and a clear prompt. The prompt should describe the role and the constraints, not step-by-step instructions — the model knows how to do its job.
-
-```typescript
-for await (const msg of query({
-  prompt: "...",
-  options: {
-    model: "claude-sonnet-4-6",
-    allowedTools: ["Read", "Glob", "Grep"],
-    permissionMode: "dontAsk",
-  },
-})) {
-  // handle messages
-}
-```
-
-### 5. Push the result
-
-Post a comment, push commits, send a Slack message — whatever the appropriate output is. Use `gh` CLI for GitHub operations since it handles auth automatically.
-
-## Running
-
-Two terminals:
-
-```bash
-# Terminal 1: agent server
-pnpm <agent-name>
-
-# Terminal 2: tunnel
-cloudflared tunnel run <tunnel-name>
-```
-
-## Sandboxing
-
-For agents that modify code, use the SDK's built-in sandbox (`@anthropic-ai/sandbox-runtime`). It uses OS-level isolation (Seatbelt on macOS) to restrict filesystem writes and network access.
-
-```typescript
-sandbox: {
-  enabled: true,
-  autoAllowBashIfSandboxed: true,
-  allowUnsandboxedCommands: true,
-  excludedCommands: ["git push"],
-  filesystem: {
-    allowWrite: [workDir],
-  },
-  network: {
-    allowLocalBinding: true,
-    allowedDomains: ["github.com", "api.anthropic.com"],
-  },
-}
-```
-
-Key points:
-- `allowWrite` restricts where the agent can write — use a disposable temp directory
-- `allowedDomains` restricts network access
-- `excludedCommands` lets specific commands (like `git push`) run outside the sandbox when they need capabilities the sandbox blocks (e.g. Chromium for pre-push hook tests)
-- Read-only agents can skip sandboxing
-
-## Cloudflare Tunnel Setup (One-Time)
-
-```bash
-brew install cloudflared
-cloudflared tunnel login
-cloudflared tunnel create <tunnel-name>
-cloudflared tunnel route dns <tunnel-name> <subdomain.yourdomain.com>
-```
-
-Create `~/.cloudflared/config.yml`:
+A `workflow.yaml` defines what to poll, how to run agents, and what hooks to execute:
 
 ```yaml
-tunnel: <tunnel-name>
-credentials-file: ~/.cloudflared/<tunnel-id>.json
+tracker:
+  kind: github
+  repo: org/repo
+  label: agent
 
-ingress:
-  - hostname: <subdomain.yourdomain.com>
-    service: http://localhost:<port>
-  - service: http_status:404
+agent:
+  max_concurrent: 2
+  model: claude-sonnet-4-6
+
+prompt: |
+  You are working on: {{ issue.title }}
+  {{ issue.description }}
 ```
 
-Register the webhook on GitHub (or via `gh api`), pointing at `https://<subdomain.yourdomain.com>/webhook`.
+### 2. The orchestrator loop
 
-## Examples in This Repo
+Each tick:
 
-| Agent | Trigger | What it does |
-|-------|---------|-------------|
-| `conventions-agent` | `/check` comment on PR | Finds codebase convention violations, offers to fix them |
-| `pr-summary-agent` | PR opened | Posts a concise summary of what changed |
+1. **Fetch** active issues from the tracker
+2. **Reconcile** — if a claimed issue is no longer active, kill the run and release the claim
+3. **Dispatch** — for each unclaimed issue (up to `max_concurrent`), create a workspace, run hooks, and start a Claude agent
+
+### 3. Workspaces and hooks
+
+Each issue gets an isolated workspace directory. Lifecycle hooks run shell commands at key points:
+
+- `after_create` — clone the repo, create a branch
+- `before_run` — fetch latest, rebase
+- `after_run` — push the branch
+
+### 4. The agent
+
+Uses `query()` from the Claude Agent SDK with full tool access. The prompt is rendered from the workflow template with issue context injected.
+
+### 5. Reconciliation
+
+The orchestrator detects when issues are closed/resolved and kills the corresponding agent run. Claims are also released when runs complete or fail.
+
+## Tracker Adapters
+
+The system is designed for multiple tracker backends. Currently supported:
+
+| Tracker | Implementation |
+|---------|---------------|
+| GitHub Issues | `core/trackers/github.ts` — uses `gh` CLI |
+
+Future adapters: GitLab Issues, Jira.
 
 ## Design Principles
 
-- **Narrow scope** — each agent does one specific job well
+- **Issue tracker as orchestration** — no separate task queue or job system
+- **Narrow scope** — each agent works on one issue at a time
 - **Codebase as source of truth** — agents discover context by reading, not from config
-- **Objective outputs** — agents answer questions with clear, verifiable answers
-- **Human in the loop at the right moments** — autonomous for small, specific tasks; escalate for ambiguous decisions
 - **Disposable work environments** — clone fresh, work in /tmp, clean up after
 - **Same toolchain as engineers** — agents run tests, hooks, and linters the same way you do
