@@ -5,9 +5,9 @@ import { Providers } from "./Providers.tsx";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <Providers>
-      <App />
-    </Providers>
-  </StrictMode>,
+	<StrictMode>
+		<Providers>
+			<App />
+		</Providers>
+	</StrictMode>,
 );

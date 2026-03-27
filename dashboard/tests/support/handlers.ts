@@ -1,5 +1,3 @@
-import { http, HttpResponse } from "msw";
+import { HttpResponse, http } from "msw";
 
-export const handlers = [
-  http.get("/runs", () => HttpResponse.json([])),
-];
+export const handlers = [http.get("/runs", () => HttpResponse.json([]))];

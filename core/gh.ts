@@ -5,6 +5,6 @@ const exec = promisify(execFile);
 
 /** Run a gh CLI command and return stdout. */
 export async function gh(...args: string[]): Promise<string> {
-  const { stdout } = await exec("gh", args);
-  return stdout.trim();
+	const { stdout } = await exec("gh", args);
+	return stdout.trim();
 }

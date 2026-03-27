@@ -3,16 +3,16 @@ import { browserWorker } from "../support/msw";
 import "../../src/index.css";
 
 beforeAll(async () => {
-  await browserWorker.start({
-    onUnhandledRequest: "error",
-    quiet: true,
-  });
+	await browserWorker.start({
+		onUnhandledRequest: "error",
+		quiet: true,
+	});
 });
 
 afterEach(() => {
-  browserWorker.resetHandlers();
+	browserWorker.resetHandlers();
 });
 
 afterAll(() => {
-  browserWorker.stop();
+	browserWorker.stop();
 });

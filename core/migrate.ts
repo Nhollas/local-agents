@@ -3,7 +3,7 @@
  * Uses raw SQL to create tables if they don't exist.
  */
 export function migrate(db: { run: (query: any) => any }) {
-  db.run(/* sql */ `
+	db.run(/* sql */ `
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
       agent_name TEXT NOT NULL,
@@ -17,7 +17,7 @@ export function migrate(db: { run: (query: any) => any }) {
     )
   `);
 
-  db.run(/* sql */ `
+	db.run(/* sql */ `
     CREATE TABLE IF NOT EXISTS run_events (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL,
@@ -27,7 +27,7 @@ export function migrate(db: { run: (query: any) => any }) {
     )
   `);
 
-  db.run(/* sql */ `
+	db.run(/* sql */ `
     CREATE INDEX IF NOT EXISTS idx_run_events_run_id
     ON run_events(run_id)
   `);
