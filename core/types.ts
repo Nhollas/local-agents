@@ -18,7 +18,7 @@ export type TrackerAdapter = {
 	): Promise<void>;
 };
 
-export type PullRequest = {
+export type ChangeRequest = {
 	number: number;
 	url: string;
 };
@@ -26,13 +26,13 @@ export type PullRequest = {
 export type CodeHostAdapter = {
 	fetchFile(repo: string, path: string, ref?: string): Promise<string | null>;
 	cloneUrl(repo: string): string;
-	createPullRequest(
+	createChangeRequest(
 		repo: string,
 		head: string,
 		base: string,
 		title: string,
 		body: string,
-	): Promise<PullRequest>;
+	): Promise<ChangeRequest>;
 };
 
 export type Config = {
@@ -52,8 +52,6 @@ export type Config = {
 };
 
 export type RepoWorkflow = {
-	label: string;
-	completed_label: string;
 	branch: string;
 	base_branch: string;
 	hooks?: {

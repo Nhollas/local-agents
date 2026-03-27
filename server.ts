@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { createApi } from "./core/api.ts";
-import { createGitHubCodeHost } from "./core/code-hosts/github.ts";
+import { githubCodeHostAdapter } from "./core/code-hosts/github.ts";
 import { loadConfig } from "./core/config.ts";
 import { getDb } from "./core/db.ts";
 import { loadEnv } from "./core/env.ts";
@@ -9,7 +9,7 @@ import { logger } from "./core/logger.ts";
 import { migrate } from "./core/migrate.ts";
 import { createOrchestrator } from "./core/orchestrator.ts";
 import { createRunner } from "./core/runner.ts";
-import { createGitHubTracker } from "./core/trackers/github.ts";
+import { githubTrackerAdapter } from "./core/trackers/github.ts";
 import { createWorkflowCache } from "./core/workflow-cache.ts";
 
 const env = loadEnv();
@@ -21,8 +21,8 @@ migrate(db);
 
 // Create components
 const github = createGitHubClient(env.GITHUB_TOKEN);
-const tracker = createGitHubTracker(github);
-const codeHost = createGitHubCodeHost(github);
+const tracker = githubTrackerAdapter(github);
+const codeHost = githubCodeHostAdapter(github);
 
 const runner = createRunner({
 	db,

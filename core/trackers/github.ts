@@ -1,5 +1,6 @@
 import type { GitHubClient } from "../gh.ts";
 import type { Issue, TrackerAdapter } from "../types.ts";
+import { decorateTracker } from "./decorator.ts";
 
 type GitHubIssue = {
 	number: number;
@@ -16,13 +17,13 @@ type GitHubUser = {
 
 type IssueState = "open" | "closed" | "all";
 
-export function createGitHubTracker(
+export function githubTrackerAdapter(
 	client: GitHubClient,
 	activeStates: IssueState[] = ["open"],
 ): TrackerAdapter {
 	const usernamePromise = client.get<GitHubUser>("/user").then((u) => u.login);
 
-	return {
+	return decorateTracker({
 		async fetchActiveIssues(repo: string, label: string): Promise<Issue[]> {
 			const username = await usernamePromise;
 
@@ -73,5 +74,5 @@ export function createGitHubTracker(
 				}),
 			]);
 		},
-	};
+	});
 }

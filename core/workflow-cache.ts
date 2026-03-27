@@ -21,10 +21,7 @@ export function createWorkflowCache(
 
 	async function fetchWorkflow(repo: string): Promise<RepoWorkflow | null> {
 		const content = await codeHost.fetchFile(repo, WORKFLOW_PATH);
-		if (content === null) {
-			logger.warn({ repo }, `No ${WORKFLOW_PATH} found in ${repo}, skipping`);
-			return null;
-		}
+		if (content === null) return null;
 		return parseRepoWorkflow(content);
 	}
 

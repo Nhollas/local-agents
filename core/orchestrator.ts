@@ -19,6 +19,12 @@ import { ensureWorkspace } from "./workspace.ts";
 
 const exec = promisify(execFile);
 
+const LABELS = {
+	pending: "agent",
+	running: "agent:running",
+	completed: "agent:awaiting-review",
+} as const;
+
 async function runShell(script: string, cwd: string): Promise<void> {
 	await exec("sh", ["-c", script], { cwd });
 }
@@ -64,7 +70,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			const entries = [...workflows.entries()];
 			const results = await Promise.allSettled(
 				entries.map(async ([repo, workflow]) => {
-					const issues = await tracker.fetchActiveIssues(repo, workflow.label);
+					const issues = await tracker.fetchActiveIssues(repo, LABELS.pending);
 					return issues.map(
 						(issue): TaggedIssue => ({ issue, repo, workflow }),
 					);
@@ -77,11 +83,6 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				if (result.status === "fulfilled") {
 					allTagged.push(...result.value);
 					fetchedRepos.add(entries[i][0]);
-				} else {
-					logger.warn(
-						{ repo: entries[i][0], err: result.reason },
-						"orchestrator.fetch_failed",
-					);
 				}
 			}
 
@@ -90,8 +91,8 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				a.issue.createdAt.localeCompare(b.issue.createdAt),
 			);
 
-			// Single DB snapshot — only running runs needed now that the
-			// creator filter + label swap handle completed/failed dedup.
+			// Only running runs needed — the label lifecycle (agent → agent:running
+			// → awaiting-review) prevents re-dispatch without DB cross-referencing.
 			const snapshot = getRunSnapshot(db);
 			const runningByIssue = new Map<string, string[]>();
 			for (const r of snapshot) {
@@ -118,14 +119,40 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				if (runningByIssue.has(issue.key)) continue;
 				if (runningCount >= defaults.max_concurrent) break;
 
-				const cloneUrl = codeHost.cloneUrl(repo);
-				const prompt = renderPrompt(workflow.prompt, { issue });
-				const ws = await ensureWorkspace(
-					issue,
-					defaults.workspace_root,
-					cloneUrl,
-					workflow.hooks,
+				// Claim the issue so the next tick can never re-dispatch it.
+				await tracker.swapLabel(
+					repo,
+					issue.number,
+					LABELS.pending,
+					LABELS.running,
 				);
+
+				let ws: Awaited<ReturnType<typeof ensureWorkspace>>;
+				try {
+					const cloneUrl = codeHost.cloneUrl(repo);
+					ws = await ensureWorkspace(
+						issue,
+						defaults.workspace_root,
+						cloneUrl,
+						workflow.hooks,
+					);
+				} catch (err) {
+					logger.warn(
+						{ issue: issue.key, err },
+						"orchestrator.dispatch_failed",
+					);
+					await tracker
+						.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+						.catch((rollbackErr) =>
+							logger.warn(
+								{ issue: issue.key, err: rollbackErr },
+								"orchestrator.rollback_failed",
+							),
+						);
+					continue;
+				}
+
+				const prompt = renderPrompt(workflow.prompt, { issue });
 
 				if (workflow.hooks?.before_run) {
 					const script = renderPrompt(workflow.hooks.before_run, { issue });
@@ -165,31 +192,19 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					},
 					onComplete: async () => {
 						const head = renderPrompt(workflow.branch, { issue });
-						const pr = await codeHost.createPullRequest(
+						await codeHost.createChangeRequest(
 							repo,
 							head,
 							workflow.base_branch,
 							issue.title,
 							`Closes ${issue.key}`,
 						);
-						logger.info(
-							{ issue: issue.key, pr: pr.url },
-							"orchestrator.pr_created",
-						);
 
 						await tracker.swapLabel(
 							repo,
 							issue.number,
-							workflow.label,
-							workflow.completed_label,
-						);
-						logger.info(
-							{
-								issue: issue.key,
-								from: workflow.label,
-								to: workflow.completed_label,
-							},
-							"orchestrator.label_swapped",
+							LABELS.running,
+							LABELS.completed,
 						);
 					},
 				});

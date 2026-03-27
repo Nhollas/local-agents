@@ -1,5 +1,6 @@
 import type { GitHubClient } from "../gh.ts";
-import type { CodeHostAdapter, PullRequest } from "../types.ts";
+import type { ChangeRequest, CodeHostAdapter } from "../types.ts";
+import { decorateCodeHost } from "./decorator.ts";
 
 type GitHubContent = {
 	content: string;
@@ -10,8 +11,8 @@ type GitHubPullRequest = {
 	html_url: string;
 };
 
-export function createGitHubCodeHost(client: GitHubClient): CodeHostAdapter {
-	return {
+export function githubCodeHostAdapter(client: GitHubClient): CodeHostAdapter {
+	return decorateCodeHost({
 		async fetchFile(
 			repo: string,
 			path: string,
@@ -33,13 +34,13 @@ export function createGitHubCodeHost(client: GitHubClient): CodeHostAdapter {
 			return `https://github.com/${repo}.git`;
 		},
 
-		async createPullRequest(
+		async createChangeRequest(
 			repo: string,
 			head: string,
 			base: string,
 			title: string,
 			body: string,
-		): Promise<PullRequest> {
+		): Promise<ChangeRequest> {
 			const pr = await client.post<GitHubPullRequest>(`/repos/${repo}/pulls`, {
 				title,
 				body,
@@ -48,5 +49,5 @@ export function createGitHubCodeHost(client: GitHubClient): CodeHostAdapter {
 			});
 			return { number: pr.number, url: pr.html_url };
 		},
-	};
+	});
 }
