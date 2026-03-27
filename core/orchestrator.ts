@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { eq } from "drizzle-orm";
 import { logAgentMessage } from "./agent-logging.ts";
 import type { Db } from "./db.ts";
 import { logger } from "./logger.ts";
 import type { Runner } from "./runner.ts";
-import { type RunStatus, runs } from "./schema.ts";
+import { runs } from "./schema.ts";
 import type {
 	CodeHostAdapter,
 	Config,
@@ -31,16 +32,16 @@ type OrchestratorConfig = {
 	runner: Runner;
 };
 
-type RunSnapshot = { id: string; issueKey: string; status: RunStatus };
+type RunSnapshot = { id: string; issueKey: string };
 
 function getRunSnapshot(db: Db): RunSnapshot[] {
 	return db
 		.select({
 			id: runs.id,
 			issueKey: runs.issueKey,
-			status: runs.status,
 		})
 		.from(runs)
+		.where(eq(runs.status, "running"))
 		.all()
 		.filter((r): r is RunSnapshot => r.issueKey !== null);
 }
@@ -89,19 +90,16 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				a.issue.createdAt.localeCompare(b.issue.createdAt),
 			);
 
-			// Single DB snapshot for all decisions this tick
+			// Single DB snapshot — only running runs needed now that the
+			// creator filter + label swap handle completed/failed dedup.
 			const snapshot = getRunSnapshot(db);
-			const issuesWithRuns = new Set(snapshot.map((r) => r.issueKey));
 			const runningByIssue = new Map<string, string[]>();
-			let runningCount = 0;
 			for (const r of snapshot) {
-				if (r.status === "running") {
-					runningCount++;
-					const ids = runningByIssue.get(r.issueKey) ?? [];
-					ids.push(r.id);
-					runningByIssue.set(r.issueKey, ids);
-				}
+				const ids = runningByIssue.get(r.issueKey) ?? [];
+				ids.push(r.id);
+				runningByIssue.set(r.issueKey, ids);
 			}
+			let runningCount = snapshot.length;
 
 			// 3. RECONCILE: kill running agents for issues no longer in the active set
 			const activeKeys = new Set(allTagged.map((t) => t.issue.key));
@@ -117,7 +115,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 
 			// 4. DISPATCH oldest-first up to max_concurrent
 			for (const { issue, repo, workflow } of allTagged) {
-				if (issuesWithRuns.has(issue.key)) continue;
+				if (runningByIssue.has(issue.key)) continue;
 				if (runningCount >= defaults.max_concurrent) break;
 
 				const cloneUrl = codeHost.cloneUrl(repo);
@@ -197,7 +195,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				});
 
 				runningCount++;
-				issuesWithRuns.add(issue.key);
+				runningByIssue.set(issue.key, []);
 				logger.info({ issue: issue.key }, "orchestrator.dispatched");
 			}
 		} finally {
