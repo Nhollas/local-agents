@@ -31,6 +31,7 @@ await workflowCache.refresh();
 
 const orchestrator = createOrchestrator({
   tracker,
+  codeHost,
   config,
   workflows: workflowCache.workflows,
   runner,

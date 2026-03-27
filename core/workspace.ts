@@ -14,6 +14,7 @@ function sanitizeKey(key: string): string {
 export async function ensureWorkspace(
   issue: Issue,
   workspaceRoot: string,
+  cloneUrl: string,
   hooks?: { after_create?: string },
 ): Promise<{ path: string; created: boolean }> {
   const dirName = sanitizeKey(issue.key);
@@ -27,6 +28,7 @@ export async function ensureWorkspace(
   }
 
   await mkdir(wsPath, { recursive: true });
+  await exec("git", ["clone", cloneUrl, "."], { cwd: wsPath });
 
   if (hooks?.after_create) {
     const script = renderPrompt(hooks.after_create, { issue });

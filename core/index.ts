@@ -6,7 +6,7 @@ export { migrate } from "./migrate.ts";
 export { loadEnv, parseEnv } from "./env.ts";
 export { logger } from "./logger.ts";
 export { logAgentMessage } from "./agent-logging.ts";
-export { gh, cloneAndCheckout } from "./gh.ts";
+export { gh } from "./gh.ts";
 export { loadConfig } from "./config.ts";
 export { parseRepoWorkflow, renderPrompt } from "./workflow.ts";
 export { ensureWorkspace, cleanWorkspace } from "./workspace.ts";
