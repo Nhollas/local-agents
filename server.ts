@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { loadEnv } from "./core/env.ts";
-import { loadWorkflow } from "./core/workflow.ts";
+import { loadConfig } from "./core/config.ts";
 import { getDb } from "./core/db.ts";
 import { migrate } from "./core/migrate.ts";
 import { createRunner } from "./core/runner.ts";
@@ -10,19 +10,27 @@ import { createApi } from "./core/api.ts";
 import { logger } from "./core/logger.ts";
 
 const env = loadEnv();
-const workflow = loadWorkflow(env.WORKFLOW_PATH);
+const config = loadConfig(env.CONFIG_PATH);
 
 // Initialize database
 migrate(getDb());
 
 // Create components
-const tracker = createGitHubTracker(workflow.config.tracker.active_states);
+const tracker = createGitHubTracker();
 
 const runner = createRunner({
-  maxConcurrency: workflow.config.agent.max_concurrent,
+  maxConcurrency: config.defaults.max_concurrent,
 });
 
-const orchestrator = createOrchestrator({ tracker, workflow, runner });
+// TODO: #13 will fetch workflow from repo via CodeHostAdapter
+const repo = config.repos[0];
+const workflow = {
+  label: "agent",
+  prompt: "",
+  hooks: undefined,
+};
+
+const orchestrator = createOrchestrator({ tracker, config, repo, workflow, runner });
 
 runner.onComplete = (runId) => orchestrator.releaseClaim(runId);
 const app = createApi(runner);
@@ -34,9 +42,8 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   logger.info(
     {
       port: info.port,
-      repo: workflow.config.tracker.repo,
-      label: workflow.config.tracker.label,
-      interval: workflow.config.polling.interval_ms,
+      repos: config.repos,
+      interval: config.defaults.polling_interval_ms,
     },
     "orchestrator.started",
   );

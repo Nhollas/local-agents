@@ -17,33 +17,28 @@ export type CodeHostAdapter = {
   cloneUrl(repo: string): string;
 };
 
-export type WorkflowConfig = {
+export type Config = {
   tracker: {
     kind: "github";
-    repo: string;
-    label: string;
-    active_states: string[];
-    terminal_states: string[];
   };
-  polling: {
-    interval_ms: number;
+  code_host: {
+    kind: "github";
   };
-  agent: {
+  repos: string[];
+  defaults: {
+    polling_interval_ms: number;
     max_concurrent: number;
-    timeout_ms: number;
     model: string;
+    workspace_root: string;
   };
-  workspace: {
-    root: string;
-  };
+};
+
+export type RepoWorkflow = {
+  label: string;
   hooks?: {
     after_create?: string;
     before_run?: string;
     after_run?: string;
   };
-};
-
-export type WorkflowDefinition = {
-  config: WorkflowConfig;
   prompt: string;
 };

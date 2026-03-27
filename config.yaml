@@ -1,0 +1,14 @@
+tracker:
+  kind: github
+
+code_host:
+  kind: github
+
+repos:
+  - nhollas/target-dummy
+
+defaults:
+  polling_interval_ms: 30000
+  max_concurrent: 2
+  model: claude-sonnet-4-6
+  workspace_root: /tmp/local-agent-workspaces

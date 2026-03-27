@@ -7,12 +7,13 @@ export { loadEnv, parseEnv } from "./env.ts";
 export { logger } from "./logger.ts";
 export { logAgentMessage } from "./agent-logging.ts";
 export { gh, cloneAndCheckout } from "./gh.ts";
-export { loadWorkflow, renderPrompt } from "./workflow.ts";
+export { loadConfig } from "./config.ts";
+export { parseRepoWorkflow, renderPrompt } from "./workflow.ts";
 export { ensureWorkspace, cleanWorkspace } from "./workspace.ts";
 export { createGitHubTracker } from "./trackers/github.ts";
 export { createGitHubCodeHost } from "./code-hosts/github.ts";
 
-export type { Issue, TrackerAdapter, CodeHostAdapter, WorkflowConfig, WorkflowDefinition } from "./types.ts";
+export type { Issue, TrackerAdapter, CodeHostAdapter, Config, RepoWorkflow } from "./types.ts";
 export type { AgentJob, Runner, RunnerConfig } from "./runner.ts";
 export type { JobQueue, QueueConfig } from "./queue.ts";
 export type { RunEvent } from "./event-bus.ts";

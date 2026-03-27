@@ -16,7 +16,7 @@ export function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
 }
 
 const envSchema = z.object({
-  WORKFLOW_PATH: z.string().default("./workflow.yaml"),
+  CONFIG_PATH: z.string().default("./config.yaml"),
   PORT: z.coerce.number().default(3000),
   LOG_LEVEL: z.string().default("info"),
 });
