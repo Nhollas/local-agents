@@ -19,6 +19,7 @@ const envSchema = z.object({
 	CONFIG_PATH: z.string().default("./config.yaml"),
 	PORT: z.coerce.number().default(3000),
 	LOG_LEVEL: z.string().default("info"),
+	GITHUB_TOKEN: z.string().min(1, "GITHUB_TOKEN is required"),
 });
 
 export function loadEnv() {

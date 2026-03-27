@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createApi } from "./core/api.ts";
 import { createGitHubCodeHost } from "./core/code-hosts/github.ts";
 import { loadConfig } from "./core/config.ts";
+import { createGitHubClient } from "./core/gh.ts";
 import { getDb } from "./core/db.ts";
 import { loadEnv } from "./core/env.ts";
 import { logger } from "./core/logger.ts";
@@ -19,8 +20,9 @@ const db = getDb();
 migrate(db);
 
 // Create components
-const tracker = createGitHubTracker();
-const codeHost = createGitHubCodeHost();
+const github = createGitHubClient(env.GITHUB_TOKEN);
+const tracker = createGitHubTracker(github);
+const codeHost = createGitHubCodeHost(github);
 
 const runner = createRunner({
 	db,
