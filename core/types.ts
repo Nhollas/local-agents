@@ -1,17 +1,15 @@
 export type Issue = {
-  id: number;
   key: string; // "nhollas/target-dummy#42"
   number: number;
   title: string;
   description: string;
-  state: string;
   labels: string[];
   url: string;
+  createdAt: string; // ISO 8601
 };
 
 export type TrackerAdapter = {
-  fetchActiveIssues(): Promise<Issue[]>;
-  fetchIssueState(issueNumber: number): Promise<string | null>;
+  fetchActiveIssues(repo: string, label: string): Promise<Issue[]>;
 };
 
 export type WorkflowConfig = {

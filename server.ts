@@ -16,11 +16,7 @@ const workflow = loadWorkflow(env.WORKFLOW_PATH);
 migrate(getDb());
 
 // Create components
-const tracker = createGitHubTracker(
-  workflow.config.tracker.repo,
-  workflow.config.tracker.label,
-  workflow.config.tracker.active_states,
-);
+const tracker = createGitHubTracker(workflow.config.tracker.active_states);
 
 const runner = createRunner({
   maxConcurrency: workflow.config.agent.max_concurrent,

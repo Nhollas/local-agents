@@ -44,7 +44,10 @@ export function createOrchestrator(config: OrchestratorConfig) {
       const { config: wfConfig } = workflow;
 
       // 1. FETCH active issues (single API call)
-      const issues = await tracker.fetchActiveIssues();
+      const issues = await tracker.fetchActiveIssues(
+        wfConfig.tracker.repo,
+        wfConfig.tracker.label,
+      );
       const activeNumbers = new Set(issues.map((i) => i.number));
 
       // 2. RECONCILE: kill claimed issues that are no longer active
