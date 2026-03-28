@@ -199,7 +199,7 @@ describe("API integration", () => {
 
 	describe("POST /runs/:id/kill", () => {
 		it("kills a running job and returns success", async () => {
-			const runId = runner.enqueue({
+			const { runId } = runner.enqueue({
 				name: "long-job",
 				issueKey: "test/repo#1",
 				issueTitle: "Long running job",

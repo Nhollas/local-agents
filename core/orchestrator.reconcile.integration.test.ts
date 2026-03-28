@@ -68,6 +68,7 @@ describe("Orchestrator reconciliation", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const runsAfter = db.select().from(runs).all();
 		expect(runsAfter[0].status).toBe("failed");

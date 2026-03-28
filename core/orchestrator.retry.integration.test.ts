@@ -69,6 +69,7 @@ describe("Orchestrator retryRun", () => {
 		expect(result).not.toHaveProperty("error");
 
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		const retryRun = allRuns.find((r) => r.id !== "failed-1");
@@ -112,6 +113,7 @@ describe("Orchestrator retryRun", () => {
 
 		await orchestrator.retryRun("failed-2");
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		expect(capturedOptions?.resume).toBe("sess-resume-me");
 	});

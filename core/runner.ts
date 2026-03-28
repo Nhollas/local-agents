@@ -4,6 +4,7 @@ import type { Db } from "./db.ts";
 import { eventBus, type RunEvent } from "./event-bus.ts";
 import { logger } from "./logger.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
+import type { RunEventType } from "./schema.ts";
 import { runEvents, runs } from "./schema.ts";
 
 export type AgentJob = {
@@ -14,12 +15,24 @@ export type AgentJob = {
 		emitToolUse: (tool: string, target: string) => void,
 		setSessionId: (id: string) => void,
 	) => Promise<void>;
-	onComplete?: () => Promise<void>;
-	onFailed?: () => Promise<void>;
-	onFinally?: () => Promise<void>;
 	attempt?: number;
 	parentRunId?: string;
-	maxRetries?: number;
+};
+
+export type RunResult =
+	| { status: "completed"; durationMs: number }
+	| { status: "failed"; error: string; durationMs: number };
+
+export type RunHandle = {
+	runId: string;
+	/** Resolves when the handler completes. Never rejects — outcome is in the result. */
+	done: Promise<RunResult>;
+};
+
+export type Runner = {
+	enqueue(job: AgentJob): RunHandle;
+	kill(runId: string): boolean;
+	readonly queue: JobQueue;
 };
 
 type RunnerConfig = {
@@ -27,16 +40,30 @@ type RunnerConfig = {
 	maxConcurrency?: number;
 };
 
-export type Runner = {
-	enqueue(job: AgentJob): string;
-	kill(runId: string): boolean;
-	readonly queue: JobQueue;
-};
-
 export function createRunner(config: RunnerConfig): Runner {
 	const { db } = config;
 	const queue = createJobQueue({ maxConcurrency: config.maxConcurrency });
 	const activeRuns = new Map<string, AbortController>();
+
+	function emitEvent(
+		runId: string,
+		agentName: string,
+		type: RunEventType,
+		data: Record<string, unknown>,
+		createdAt = new Date().toISOString(),
+	): void {
+		const event: RunEvent = { type, runId, agentName, data, createdAt };
+		db.insert(runEvents)
+			.values({
+				id: randomUUID().slice(0, 8),
+				runId,
+				type,
+				data,
+				createdAt,
+			})
+			.run();
+		eventBus.emit(event);
+	}
 
 	function kill(runId: string): boolean {
 		const controller = activeRuns.get(runId);
@@ -45,13 +72,19 @@ export function createRunner(config: RunnerConfig): Runner {
 		return true;
 	}
 
-	function enqueue(job: AgentJob): string {
+	function enqueue(job: AgentJob): RunHandle {
 		const runId = randomUUID().slice(0, 8);
-		const startedAt = new Date().toISOString();
+		let resolveResult!: (result: RunResult) => void;
+		const done = new Promise<RunResult>((resolve) => {
+			resolveResult = resolve;
+		});
+
 		const controller = new AbortController();
 		activeRuns.set(runId, controller);
 
 		queue.enqueue(async () => {
+			const startedAt = new Date().toISOString();
+
 			db.insert(runs)
 				.values({
 					id: runId,
@@ -65,26 +98,19 @@ export function createRunner(config: RunnerConfig): Runner {
 				})
 				.run();
 
-			const startEvent: RunEvent = {
-				type: "run:started",
+			emitEvent(
 				runId,
-				agentName: job.name,
-				data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
-				createdAt: startedAt,
-			};
-			persistEvent(runId, startEvent);
-			eventBus.emit(startEvent);
+				job.name,
+				"run:started",
+				{
+					issueKey: job.issueKey,
+					issueTitle: job.issueTitle,
+				},
+				startedAt,
+			);
 
 			const emitToolUse = (tool: string, target: string) => {
-				const toolEvent: RunEvent = {
-					type: "run:tool_use",
-					runId,
-					agentName: job.name,
-					data: { tool, target },
-					createdAt: new Date().toISOString(),
-				};
-				persistEvent(runId, toolEvent);
-				eventBus.emit(toolEvent);
+				emitEvent(runId, job.name, "run:tool_use", { tool, target });
 			};
 
 			let sessionCaptured = false;
@@ -95,8 +121,6 @@ export function createRunner(config: RunnerConfig): Runner {
 			};
 
 			const startTime = Date.now();
-			let succeeded = false;
-			const retriesRemaining = (job.maxRetries ?? 0) - (job.attempt ?? 1) >= 0;
 
 			try {
 				const abortPromise = new Promise<never>((_, reject) => {
@@ -110,113 +134,51 @@ export function createRunner(config: RunnerConfig): Runner {
 					abortPromise,
 				]);
 
-				succeeded = true;
-				const completedAt = new Date().toISOString();
 				const durationMs = Date.now() - startTime;
+				const completedAt = new Date().toISOString();
 
 				db.update(runs)
 					.set({ status: "completed", completedAt, durationMs })
 					.where(eq(runs.id, runId))
 					.run();
 
-				const completeEvent: RunEvent = {
-					type: "run:completed",
+				emitEvent(
 					runId,
-					agentName: job.name,
-					data: { durationMs },
-					createdAt: completedAt,
-				};
-				persistEvent(runId, completeEvent);
-				eventBus.emit(completeEvent);
-
-				if (job.onComplete) {
-					try {
-						await job.onComplete();
-					} catch (err) {
-						logger.error(
-							{
-								agent: job.name,
-								runId,
-								err: err instanceof Error ? err.message : String(err),
-							},
-							"runner.on_complete_failed",
-						);
-					}
-				}
+					job.name,
+					"run:completed",
+					{ durationMs },
+					completedAt,
+				);
+				resolveResult({ status: "completed", durationMs });
 			} catch (err) {
-				const failedAt = new Date().toISOString();
 				const durationMs = Date.now() - startTime;
 				const error = err instanceof Error ? err.message : String(err);
+				const failedAt = new Date().toISOString();
 
 				db.update(runs)
 					.set({ status: "failed", completedAt: failedAt, durationMs, error })
 					.where(eq(runs.id, runId))
 					.run();
 
-				const failEvent: RunEvent = {
-					type: "run:failed",
+				emitEvent(
 					runId,
-					agentName: job.name,
-					data: { error, durationMs },
-					createdAt: failedAt,
-				};
-				persistEvent(runId, failEvent);
-				eventBus.emit(failEvent);
+					job.name,
+					"run:failed",
+					{ error, durationMs },
+					failedAt,
+				);
+				resolveResult({ status: "failed", error, durationMs });
 
 				logger.error(
 					{ agent: job.name, err: error, runId },
 					"runner.handler_failed",
 				);
-
-				if (retriesRemaining && job.onFailed) {
-					try {
-						await job.onFailed();
-					} catch (cbErr) {
-						logger.error(
-							{
-								agent: job.name,
-								runId,
-								err: cbErr instanceof Error ? cbErr.message : String(cbErr),
-							},
-							"runner.on_failed_failed",
-						);
-					}
-				}
 			} finally {
 				activeRuns.delete(runId);
-
-				const shouldCleanup = succeeded || !retriesRemaining;
-
-				if (shouldCleanup && job.onFinally) {
-					try {
-						await job.onFinally();
-					} catch (err) {
-						logger.error(
-							{
-								agent: job.name,
-								runId,
-								err: err instanceof Error ? err.message : String(err),
-							},
-							"runner.on_finally_failed",
-						);
-					}
-				}
 			}
 		});
 
-		return runId;
-	}
-
-	function persistEvent(runId: string, event: RunEvent): void {
-		db.insert(runEvents)
-			.values({
-				id: randomUUID().slice(0, 8),
-				runId,
-				type: event.type,
-				data: event.data,
-				createdAt: event.createdAt,
-			})
-			.run();
+		return { runId, done };
 	}
 
 	const runner: Runner = { enqueue, kill, queue };

@@ -55,6 +55,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		expect(labelOps).toContainEqual({ method: "delete", label: "agent" });
 		expect(labelOps).toContainEqual({ method: "add", label: "agent:running" });
@@ -95,6 +96,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		expect(labelOps).toContainEqual({
 			method: "delete",
@@ -264,6 +266,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		expect(labelOps).toContainEqual({ method: "add", label: "agent:running" });
 		expect(labelOps).toContainEqual({
@@ -317,6 +320,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		expect(markerExistedDuringRun).toBe(true);
 	});
@@ -358,6 +362,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		await expect(access(sentinelPath)).resolves.toBeUndefined();
 	});
@@ -395,6 +400,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(1);
@@ -437,6 +443,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(1);
@@ -477,6 +484,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		// Workspace should have been cleaned up by onFinally → removeWorkspace
 		await expect(access(wsDir)).rejects.toThrow();
@@ -577,6 +585,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(1);
@@ -651,6 +660,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(2);
@@ -685,6 +695,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(1);
@@ -720,6 +731,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns[0].status).toBe("failed");
@@ -757,6 +769,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		// Workspace should be cleaned up
 		await expect(access(wsDir)).rejects.toThrow();
@@ -795,6 +808,7 @@ describe("Orchestrator dispatch", () => {
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
+		await orchestrator.settled();
 
 		// Should have swapped agent:running → agent (back to pending)
 		expect(labelOps).toContainEqual({

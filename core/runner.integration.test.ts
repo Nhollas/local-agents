@@ -24,7 +24,7 @@ describe("Runner integration", () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 		let resolveHandler!: () => void;
 
-		const runId = runner.enqueue({
+		const { runId } = runner.enqueue({
 			name: "test-job",
 			issueKey: "owner/repo#1",
 			issueTitle: "Test issue",
@@ -47,14 +47,18 @@ describe("Runner integration", () => {
 	it("marks run as completed with duration on success", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId, done } = runner.enqueue({
 			name: "fast-job",
 			issueKey: "owner/repo#2",
 			issueTitle: "Fast issue",
 			handler: async () => {},
 		});
 
-		await runner.queue.waitForIdle();
+		const result = await done;
+		expect(result.status).toBe("completed");
+		if (result.status === "completed") {
+			expect(result.durationMs).toBeGreaterThanOrEqual(0);
+		}
 
 		const run = getRun(db, runId);
 		expect(run?.status).toBe("completed");
@@ -65,7 +69,7 @@ describe("Runner integration", () => {
 	it("marks run as failed with error message on handler failure", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId, done } = runner.enqueue({
 			name: "failing-job",
 			issueKey: "owner/repo#3",
 			issueTitle: "Failing issue",
@@ -74,18 +78,39 @@ describe("Runner integration", () => {
 			},
 		});
 
-		await runner.queue.waitForIdle();
+		const result = await done;
+		expect(result.status).toBe("failed");
+		if (result.status === "failed") {
+			expect(result.error).toBe("Something went wrong");
+			expect(result.durationMs).toBeGreaterThanOrEqual(0);
+		}
 
 		const run = getRun(db, runId);
 		expect(run?.status).toBe("failed");
 		expect(run?.error).toBe("Something went wrong");
-		expect(run?.durationMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("done promise never rejects", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const { done } = runner.enqueue({
+			name: "crash-job",
+			issueKey: "owner/repo#99",
+			issueTitle: "Crash issue",
+			handler: async () => {
+				throw new Error("catastrophic failure");
+			},
+		});
+
+		// Should resolve (not reject) with a failed result
+		const result = await done;
+		expect(result.status).toBe("failed");
 	});
 
 	it("persists lifecycle events in order", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId } = runner.enqueue({
 			name: "lifecycle-job",
 			issueKey: "owner/repo#4",
 			issueTitle: "Lifecycle issue",
@@ -103,7 +128,7 @@ describe("Runner integration", () => {
 	it("persists failure events", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId } = runner.enqueue({
 			name: "fail-event-job",
 			issueKey: "owner/repo#5",
 			issueTitle: "Fail event issue",
@@ -124,7 +149,7 @@ describe("Runner integration", () => {
 	it("records tool_use events when emitToolUse is called", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId } = runner.enqueue({
 			name: "tool-job",
 			issueKey: "owner/repo#6",
 			issueTitle: "Tool issue",
@@ -153,7 +178,7 @@ describe("Runner integration", () => {
 	it("aborts a running job when killed", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId, done } = runner.enqueue({
 			name: "killable-job",
 			issueKey: "owner/repo#7",
 			issueTitle: "Killable issue",
@@ -163,112 +188,15 @@ describe("Runner integration", () => {
 		await Promise.resolve();
 		expect(runner.kill(runId)).toBe(true);
 
-		await runner.queue.waitForIdle();
+		const result = await done;
+		expect(result.status).toBe("failed");
+		if (result.status === "failed") {
+			expect(result.error).toContain("killed");
+		}
 
 		const run = getRun(db, runId);
 		expect(run?.status).toBe("failed");
 		expect(run?.error).toContain("killed");
-	});
-
-	it("invokes onComplete callback after successful run", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onCompleteCalled = false;
-
-		runner.enqueue({
-			name: "complete-callback-job",
-			issueKey: "owner/repo#8",
-			issueTitle: "Callback issue",
-			handler: async () => {},
-			onComplete: async () => {
-				onCompleteCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onCompleteCalled).toBe(true);
-	});
-
-	it("invokes onFinally callback after failure", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onFinallyCalled = false;
-
-		runner.enqueue({
-			name: "finally-callback-job",
-			issueKey: "owner/repo#9",
-			issueTitle: "Finally issue",
-			handler: async () => {
-				throw new Error("fail");
-			},
-			onFinally: async () => {
-				onFinallyCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onFinallyCalled).toBe(true);
-	});
-
-	it("does not invoke onComplete after failure", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onCompleteCalled = false;
-
-		runner.enqueue({
-			name: "no-complete-on-fail",
-			issueKey: "owner/repo#10",
-			issueTitle: "No complete on fail",
-			handler: async () => {
-				throw new Error("fail");
-			},
-			onComplete: async () => {
-				onCompleteCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onCompleteCalled).toBe(false);
-	});
-
-	it("onComplete failure doesn't corrupt run status", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-
-		const runId = runner.enqueue({
-			name: "oncomplete-throws",
-			issueKey: "owner/repo#11",
-			issueTitle: "onComplete throws",
-			handler: async () => {},
-			onComplete: async () => {
-				throw new Error("onComplete exploded");
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		const run = getRun(db, runId);
-		expect(run?.status).toBe("completed");
-		expect(run?.durationMs).toBeGreaterThanOrEqual(0);
-	});
-
-	it("onFinally failure doesn't corrupt run status", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-
-		const runId = runner.enqueue({
-			name: "onfinally-throws",
-			issueKey: "owner/repo#12",
-			issueTitle: "onFinally throws",
-			handler: async () => {},
-			onFinally: async () => {
-				throw new Error("onFinally exploded");
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		const run = getRun(db, runId);
-		expect(run?.status).toBe("completed");
-		expect(run?.durationMs).toBeGreaterThanOrEqual(0);
 	});
 
 	it("kill returns false for unknown runId", () => {
@@ -280,7 +208,7 @@ describe("Runner integration", () => {
 	it("stores attempt and parentRunId on the run record", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId } = runner.enqueue({
 			name: "retry-job",
 			issueKey: "owner/repo#1",
 			issueTitle: "Retry issue",
@@ -299,7 +227,7 @@ describe("Runner integration", () => {
 	it("captures sessionId via setSessionId callback", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
-		const runId = runner.enqueue({
+		const { runId } = runner.enqueue({
 			name: "session-job",
 			issueKey: "owner/repo#2",
 			issueTitle: "Session issue",
@@ -312,108 +240,5 @@ describe("Runner integration", () => {
 
 		const run = getRun(db, runId);
 		expect(run?.sessionId).toBe("sess-123");
-	});
-
-	it("calls onFailed (not onFinally) when handler fails and retries remain", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onFailedCalled = false;
-		let onFinallyCalled = false;
-
-		runner.enqueue({
-			name: "fail-retry-job",
-			issueKey: "owner/repo#3",
-			issueTitle: "Fail retry issue",
-			handler: async () => {
-				throw new Error("boom");
-			},
-			maxRetries: 3,
-			attempt: 1,
-			onFailed: async () => {
-				onFailedCalled = true;
-			},
-			onFinally: async () => {
-				onFinallyCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onFailedCalled).toBe(true);
-		expect(onFinallyCalled).toBe(false);
-	});
-
-	it("calls onFinally (not onFailed) when handler fails and retries exhausted", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onFailedCalled = false;
-		let onFinallyCalled = false;
-
-		runner.enqueue({
-			name: "fail-exhausted-job",
-			issueKey: "owner/repo#4",
-			issueTitle: "Fail exhausted issue",
-			handler: async () => {
-				throw new Error("boom");
-			},
-			maxRetries: 1,
-			attempt: 2,
-			onFailed: async () => {
-				onFailedCalled = true;
-			},
-			onFinally: async () => {
-				onFinallyCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onFailedCalled).toBe(false);
-		expect(onFinallyCalled).toBe(true);
-	});
-
-	it("calls onFinally on success regardless of maxRetries", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onFailedCalled = false;
-		let onFinallyCalled = false;
-
-		runner.enqueue({
-			name: "success-retry-job",
-			issueKey: "owner/repo#5",
-			issueTitle: "Success retry issue",
-			handler: async () => {},
-			maxRetries: 3,
-			attempt: 1,
-			onFailed: async () => {
-				onFailedCalled = true;
-			},
-			onFinally: async () => {
-				onFinallyCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onFailedCalled).toBe(false);
-		expect(onFinallyCalled).toBe(true);
-	});
-
-	it("existing onFinally-on-failure behavior preserved when no retry fields set", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-		let onFinallyCalled = false;
-
-		runner.enqueue({
-			name: "compat-job",
-			issueKey: "owner/repo#6",
-			issueTitle: "Compat issue",
-			handler: async () => {
-				throw new Error("boom");
-			},
-			onFinally: async () => {
-				onFinallyCalled = true;
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		expect(onFinallyCalled).toBe(true);
 	});
 });

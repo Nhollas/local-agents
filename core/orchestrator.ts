@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { logAgentMessage } from "./agent-logging.ts";
 import type { Db } from "./db.ts";
 import { logger } from "./logger.ts";
-import type { AgentJob, Runner } from "./runner.ts";
+import type { Runner, RunResult } from "./runner.ts";
 import { runs } from "./schema.ts";
 import type {
 	CodeHostAdapter,
@@ -67,6 +67,7 @@ function getRunSnapshot(db: Db): RunSnapshot[] {
 export function createOrchestrator(opts: OrchestratorConfig) {
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
+	const pendingPostRuns = new Set<Promise<void>>();
 
 	const {
 		db,
@@ -79,35 +80,57 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	} = opts;
 	const { defaults } = config;
 
-	function buildAgentJob(jobOpts: {
+	async function prepareAndDispatch(params: {
 		issue: Issue;
 		repo: string;
 		workflow: RepoWorkflow;
-		wsPath: string;
-		prompt: string;
 		attempt: number;
 		parentRunId?: string;
 		resumeSessionId?: string;
-	}): AgentJob {
-		const { issue, repo, workflow, wsPath, prompt, attempt } = jobOpts;
+	}): Promise<string> {
+		const { issue, repo, workflow, attempt } = params;
 
-		return {
+		const cloneUrl = codeHost.cloneUrl(repo);
+		const ws = await ensureWorkspace(
+			issue,
+			defaults.workspace_root,
+			cloneUrl,
+			workflow.hooks,
+		);
+
+		if (workflow.hooks?.before_run) {
+			const script = renderPrompt(workflow.hooks.before_run, {
+				issue,
+				attempt,
+			});
+			try {
+				await runShell(script, ws.path);
+			} catch (err) {
+				logger.warn(
+					{ issue: issue.key, err },
+					"orchestrator.before_run_failed",
+				);
+			}
+		}
+
+		const prompt = renderPrompt(workflow.prompt, { issue, attempt });
+
+		const { runId, done } = runner.enqueue({
 			name: `issue-${issue.number}`,
 			issueKey: issue.key,
 			issueTitle: issue.title,
 			attempt,
-			parentRunId: jobOpts.parentRunId,
-			maxRetries: defaults.max_retries,
+			parentRunId: params.parentRunId,
 			handler: async (emitToolUse, setSessionId) => {
 				const agentOptions: Record<string, unknown> = {
-					cwd: wsPath,
+					cwd: ws.path,
 					model: defaults.model,
 					allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
 					permissionMode: "dontAsk",
 				};
 
-				if (jobOpts.resumeSessionId) {
-					agentOptions.resume = jobOpts.resumeSessionId;
+				if (params.resumeSessionId) {
+					agentOptions.resume = params.resumeSessionId;
 				}
 
 				for await (const msg of runAgent({
@@ -115,7 +138,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					options: agentOptions as Parameters<typeof query>[0]["options"],
 				})) {
 					if (msg.type === "assistant") {
-						logAgentMessage(msg, wsPath, emitToolUse);
+						logAgentMessage(msg, ws.path, emitToolUse);
 						if ("session_id" in msg && typeof msg.session_id === "string") {
 							setSessionId(msg.session_id);
 						}
@@ -127,42 +150,84 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 						issue,
 						attempt,
 					});
-					await runShell(script, wsPath);
+					await runShell(script, ws.path);
 				}
 			},
-			onComplete: async () => {
-				const head = renderPrompt(workflow.branch, { issue });
+		});
+
+		const postRun = handlePostRun(done, {
+			issue,
+			repo,
+			workflow,
+			wsPath: ws.path,
+			attempt,
+		});
+		pendingPostRuns.add(postRun);
+		postRun.finally(() => pendingPostRuns.delete(postRun));
+
+		return runId;
+	}
+
+	async function handlePostRun(
+		done: Promise<RunResult>,
+		ctx: {
+			issue: Issue;
+			repo: string;
+			workflow: RepoWorkflow;
+			wsPath: string;
+			attempt: number;
+		},
+	) {
+		const result = await done;
+
+		if (result.status === "completed") {
+			try {
+				const head = renderPrompt(ctx.workflow.branch, {
+					issue: ctx.issue,
+				});
 				await codeHost.createChangeRequest(
-					repo,
+					ctx.repo,
 					head,
-					workflow.base_branch,
-					issue.title,
-					`Closes ${issue.key}`,
+					ctx.workflow.base_branch,
+					ctx.issue.title,
+					`Closes ${ctx.issue.key}`,
 				);
 
 				await tracker.swapLabel(
-					repo,
-					issue.number,
+					ctx.repo,
+					ctx.issue.number,
 					LABELS.running,
 					LABELS.completed,
 				);
-			},
-			onFinally: async () => {
-				await removeWorkspace(wsPath);
+			} catch (err) {
+				logger.error(
+					{
+						agent: `issue-${ctx.issue.number}`,
+						runId: "unknown",
+						err: err instanceof Error ? err.message : String(err),
+					},
+					"orchestrator.on_complete_failed",
+				);
+			}
+		}
 
-				const retriesExhausted = (defaults.max_retries ?? 0) - attempt < 0;
-				if (retriesExhausted) {
-					await tracker
-						.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
-						.catch((err) =>
-							logger.warn(
-								{ issue: issue.key, err },
-								"orchestrator.label_rollback_failed",
-							),
-						);
-				}
-			},
-		};
+		const retriesExhausted = (defaults.max_retries ?? 0) - ctx.attempt < 0;
+		const shouldCleanup = result.status === "completed" || retriesExhausted;
+
+		if (shouldCleanup) {
+			await removeWorkspace(ctx.wsPath);
+		}
+
+		if (result.status === "failed" && retriesExhausted) {
+			await tracker
+				.swapLabel(ctx.repo, ctx.issue.number, LABELS.running, LABELS.pending)
+				.catch((err) =>
+					logger.warn(
+						{ issue: ctx.issue.key, err },
+						"orchestrator.label_rollback_failed",
+					),
+				);
+		}
 	}
 
 	async function tick() {
@@ -170,7 +235,6 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		ticking = true;
 
 		try {
-			// 1. FETCH pending issues + running-label check (in parallel)
 			const entries = [...workflows.entries()];
 
 			const snapshot = getRunSnapshot(db);
@@ -224,7 +288,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				a.issue.createdAt.localeCompare(b.issue.createdAt),
 			);
 
-			// 2. RECONCILE: kill agents whose issues no longer have the running label
+			// Reconcile: kill agents whose issues no longer have the running label
 			const stillRunning = new Map<string, Set<string>>();
 			for (const result of runningResults) {
 				if (result.status === "fulfilled") {
@@ -243,12 +307,11 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				}
 			}
 
-			// 3. DISPATCH oldest-first up to max_concurrent
+			// Dispatch oldest-first up to max_concurrent
 			for (const { issue, repo, workflow } of allTagged) {
 				if (runningByIssue.has(issue.key)) continue;
 				if (runningCount >= defaults.max_concurrent) break;
 
-				// Claim the issue so the next tick can never re-dispatch it.
 				await tracker.swapLabel(
 					repo,
 					issue.number,
@@ -256,15 +319,8 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					LABELS.running,
 				);
 
-				let ws: Awaited<ReturnType<typeof ensureWorkspace>>;
 				try {
-					const cloneUrl = codeHost.cloneUrl(repo);
-					ws = await ensureWorkspace(
-						issue,
-						defaults.workspace_root,
-						cloneUrl,
-						workflow.hooks,
-					);
+					await prepareAndDispatch({ issue, repo, workflow, attempt: 1 });
 				} catch (err) {
 					logger.warn(
 						{ issue: issue.key, err },
@@ -280,30 +336,6 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 						);
 					continue;
 				}
-
-				const prompt = renderPrompt(workflow.prompt, { issue });
-
-				if (workflow.hooks?.before_run) {
-					const script = renderPrompt(workflow.hooks.before_run, { issue });
-					try {
-						await runShell(script, ws.path);
-					} catch (err) {
-						logger.warn(
-							{ issue: issue.key, err },
-							"orchestrator.before_run_failed",
-						);
-					}
-				}
-
-				const job = buildAgentJob({
-					issue,
-					repo,
-					workflow,
-					wsPath: ws.path,
-					prompt,
-					attempt: 1,
-				});
-				runner.enqueue(job);
 
 				runningCount++;
 				runningByIssue.set(issue.key, []);
@@ -351,43 +383,15 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			createdAt: "",
 		};
 
-		const cloneUrl = codeHost.cloneUrl(repo);
-		const ws = await ensureWorkspace(
-			issue,
-			defaults.workspace_root,
-			cloneUrl,
-			workflow.hooks,
-		);
-
-		if (workflow.hooks?.before_run) {
-			const script = renderPrompt(workflow.hooks.before_run, {
-				issue,
-				attempt,
-			});
-			try {
-				await runShell(script, ws.path);
-			} catch (err) {
-				logger.warn(
-					{ issue: issue.key, err },
-					"orchestrator.before_run_failed",
-				);
-			}
-		}
-
-		const prompt = renderPrompt(workflow.prompt, { issue, attempt });
-
-		const job = buildAgentJob({
+		const runId = await prepareAndDispatch({
 			issue,
 			repo,
 			workflow,
-			wsPath: ws.path,
-			prompt,
 			attempt,
 			parentRunId: failedRunId,
 			resumeSessionId: failedRun.sessionId,
 		});
 
-		const runId = runner.enqueue(job);
 		logger.info(
 			{ issue: issue.key, attempt, parentRunId: failedRunId },
 			"orchestrator.retry_dispatched",
@@ -399,6 +403,10 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	return {
 		tick,
 		retryRun,
+		/** Wait for all post-run work (PR creation, label swaps, cleanup) to finish. */
+		async settled() {
+			await Promise.all(pendingPostRuns);
+		},
 		start() {
 			logger.info(
 				{ interval: opts.config.defaults.polling_interval_ms },
