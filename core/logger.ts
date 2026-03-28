@@ -2,7 +2,7 @@ import pino from "pino";
 import { z } from "zod";
 
 const level = z
-	.enum(["fatal", "error", "warn", "info", "debug", "trace"])
+	.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
 	.default("info")
 	.parse(process.env.LOG_LEVEL);
 

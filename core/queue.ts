@@ -4,6 +4,7 @@ type QueueConfig = {
 
 export type JobQueue = {
 	enqueue(execute: () => Promise<void>): void;
+	waitForIdle(): Promise<void>;
 	readonly pendingCount: number;
 	readonly runningCount: number;
 };
@@ -19,6 +20,15 @@ export function createJobQueue(config: QueueConfig = {}): JobQueue {
 	const maxConcurrency = config.maxConcurrency ?? 5;
 	const pending: Array<() => Promise<void>> = [];
 	let running = 0;
+	const idleResolvers: Array<() => void> = [];
+
+	function notifyIdle(): void {
+		if (running === 0 && pending.length === 0) {
+			for (const resolve of idleResolvers.splice(0)) {
+				resolve();
+			}
+		}
+	}
 
 	function drain(): void {
 		while (running < maxConcurrency && pending.length > 0) {
@@ -28,6 +38,7 @@ export function createJobQueue(config: QueueConfig = {}): JobQueue {
 			execute().finally(() => {
 				running--;
 				drain();
+				notifyIdle();
 			});
 		}
 	}
@@ -36,6 +47,14 @@ export function createJobQueue(config: QueueConfig = {}): JobQueue {
 		enqueue(execute: () => Promise<void>): void {
 			pending.push(execute);
 			drain();
+		},
+		waitForIdle(): Promise<void> {
+			if (running === 0 && pending.length === 0) {
+				return Promise.resolve();
+			}
+			return new Promise((resolve) => {
+				idleResolvers.push(resolve);
+			});
 		},
 		get pendingCount() {
 			return pending.length;

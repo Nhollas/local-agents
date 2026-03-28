@@ -1,9 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { getDb } from "./db.ts";
+import type { Db } from "./db.ts";
 import { eventBus, type RunEvent } from "./event-bus.ts";
 import type { Runner } from "./runner.ts";
 import { runEvents, runs } from "./schema.ts";
@@ -18,7 +18,7 @@ const runParamSchema = z.object({
 	id: z.string().min(1),
 });
 
-export function createApi(runner: Runner) {
+export function createApi({ runner, db }: { runner: Runner; db: Db }) {
 	const app = new Hono();
 
 	app.get("/events", (c) => {
@@ -46,7 +46,6 @@ export function createApi(runner: Runner) {
 	});
 
 	app.get("/runs", zValidator("query", runsQuerySchema), (c) => {
-		const db = getDb();
 		const { agent, status, limit } = c.req.valid("query");
 
 		const conditions: SQL[] = [];
@@ -68,7 +67,6 @@ export function createApi(runner: Runner) {
 	});
 
 	app.get("/runs/:id", zValidator("param", runParamSchema), (c) => {
-		const db = getDb();
 		const { id } = c.req.valid("param");
 
 		const run = db.select().from(runs).where(eq(runs.id, id)).get();
@@ -78,6 +76,7 @@ export function createApi(runner: Runner) {
 			.select()
 			.from(runEvents)
 			.where(eq(runEvents.runId, id))
+			.orderBy(asc(runEvents.createdAt))
 			.all();
 
 		return c.json({ ...run, events });

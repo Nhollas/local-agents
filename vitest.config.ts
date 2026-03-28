@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 	test: {
+		silent: "passed-only",
 		clearMocks: true,
 		restoreMocks: true,
 		projects: [
@@ -24,6 +25,7 @@ export default defineConfig({
 					name: "integration",
 					include: ["**/*.integration.test.ts"],
 					exclude: ["node_modules/**", "dashboard/**"],
+					setupFiles: ["tests/setup/integration.ts"],
 				},
 			},
 			{
@@ -47,5 +49,8 @@ export default defineConfig({
 				},
 			},
 		],
+		env: {
+			LOG_LEVEL: "silent",
+		},
 	},
 });

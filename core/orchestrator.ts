@@ -33,6 +33,12 @@ async function runShell(script: string, cwd: string): Promise<void> {
 	await exec("sh", ["-c", script], { cwd });
 }
 
+type RunAgent = (
+	params: Parameters<typeof query>[0],
+) => AsyncIterable<
+	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never
+>;
+
 type OrchestratorConfig = {
 	db: Db;
 	tracker: TrackerAdapter;
@@ -40,9 +46,11 @@ type OrchestratorConfig = {
 	config: Config;
 	workflows: Map<string, RepoWorkflow>;
 	runner: Runner;
+	runAgent?: RunAgent;
 };
 
 type RunSnapshot = { id: string; issueKey: string };
+type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
 
 function getRunSnapshot(db: Db): RunSnapshot[] {
 	return db
@@ -65,10 +73,16 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		ticking = true;
 
 		try {
-			const { db, tracker, codeHost, config, workflows, runner } = opts;
+			const {
+				db,
+				tracker,
+				codeHost,
+				config,
+				workflows,
+				runner,
+				runAgent = query,
+			} = opts;
 			const { defaults } = config;
-
-			type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
 
 			// 1. FETCH pending issues + running-label check (in parallel)
 			const entries = [...workflows.entries()];
@@ -200,7 +214,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					issueKey: issue.key,
 					issueTitle: issue.title,
 					handler: async (emitToolUse) => {
-						for await (const msg of query({
+						for await (const msg of runAgent({
 							prompt,
 							options: {
 								cwd: ws.path,
@@ -249,6 +263,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	}
 
 	return {
+		tick,
 		start() {
 			logger.info(
 				{ interval: opts.config.defaults.polling_interval_ms },
