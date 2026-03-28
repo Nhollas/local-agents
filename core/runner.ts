@@ -14,6 +14,7 @@ export type AgentJob = {
 		emitToolUse: (tool: string, target: string) => void,
 	) => Promise<void>;
 	onComplete?: () => Promise<void>;
+	onFinally?: () => Promise<void>;
 };
 
 type RunnerConfig = {
@@ -148,6 +149,21 @@ export function createRunner(config: RunnerConfig): Runner {
 				);
 			} finally {
 				activeRuns.delete(runId);
+
+				if (job.onFinally) {
+					try {
+						await job.onFinally();
+					} catch (err) {
+						logger.error(
+							{
+								agent: job.name,
+								runId,
+								err: err instanceof Error ? err.message : String(err),
+							},
+							"runner.on_finally_failed",
+						);
+					}
+				}
 			}
 		});
 

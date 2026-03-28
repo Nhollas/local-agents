@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Issue } from "./types.ts";
@@ -36,4 +36,8 @@ export async function ensureWorkspace(
 	}
 
 	return { path: wsPath, created: true };
+}
+
+export async function removeWorkspace(wsPath: string): Promise<void> {
+	await rm(wsPath, { recursive: true, force: true });
 }

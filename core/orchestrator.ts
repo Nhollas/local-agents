@@ -15,7 +15,7 @@ import type {
 	TrackerAdapter,
 } from "./types.ts";
 import { renderPrompt } from "./workflow.ts";
-import { ensureWorkspace } from "./workspace.ts";
+import { ensureWorkspace, removeWorkspace } from "./workspace.ts";
 
 const exec = promisify(execFile);
 
@@ -207,6 +207,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 							LABELS.completed,
 						);
 					},
+					onFinally: () => removeWorkspace(ws.path),
 				});
 
 				runningCount++;
