@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { killRun } from "./api.ts";
+import { killRun, retryRun } from "./api.ts";
 import { formatDuration, formatTime } from "./format.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
 import type { Run } from "./types.ts";
@@ -14,6 +14,12 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
 	const queryClient = useQueryClient();
 	const killMutation = useMutation({
 		mutationFn: killRun,
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["runs"] });
+		},
+	});
+	const retryMutation = useMutation({
+		mutationFn: retryRun,
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["runs"] });
 		},
@@ -65,6 +71,19 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
 									className="px-2 py-0.5 rounded border border-error-border bg-error-muted text-error hover:brightness-125 transition-all"
 								>
 									Kill
+								</button>
+							)}
+							{run.status === "failed" && (
+								<button
+									type="button"
+									aria-label={`Retry run ${run.id}`}
+									onClick={(e) => {
+										e.stopPropagation();
+										retryMutation.mutate(run.id);
+									}}
+									className="px-2 py-0.5 rounded border border-warning-border bg-warning-muted text-warning hover:brightness-125 transition-all"
+								>
+									Retry
 								</button>
 							)}
 						</div>

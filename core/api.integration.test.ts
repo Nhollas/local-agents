@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createTestDb } from "../tests/support/test-db.ts";
-import { createApi } from "./api.ts";
+import { createApi, type RetryFn } from "./api.ts";
 import type { Db } from "./db.ts";
 import type { Runner } from "./runner.ts";
 import { createRunner } from "./runner.ts";
@@ -38,6 +38,8 @@ function seedEvent(
 		.run();
 }
 
+const noopRetry: RetryFn = async () => ({ error: "not implemented" });
+
 describe("API integration", () => {
 	let db: Db;
 	let app: Hono;
@@ -46,7 +48,7 @@ describe("API integration", () => {
 	beforeEach(() => {
 		db = createTestDb();
 		runner = createRunner({ db, maxConcurrency: 2 });
-		app = createApi({ runner, db });
+		app = createApi({ runner, db, retryRun: noopRetry });
 	});
 
 	describe("GET /health", () => {
@@ -218,6 +220,49 @@ describe("API integration", () => {
 			});
 
 			expect(res.status).toBe(404);
+		});
+	});
+
+	describe("POST /runs/:id/retry", () => {
+		it("returns 201 with new runId on successful retry", async () => {
+			const retryFn: RetryFn = async () => ({ runId: "new-run-1" });
+			const retryApp = createApi({ runner, db, retryRun: retryFn });
+
+			seedRun(db, { id: "failed-1", status: "failed" });
+
+			const res = await retryApp.request("/runs/failed-1/retry", {
+				method: "POST",
+			});
+
+			expect(res.status).toBe(201);
+			expect(await res.json()).toEqual({ runId: "new-run-1" });
+		});
+
+		it("returns 400 when retryRun returns an error", async () => {
+			const retryFn: RetryFn = async () => ({
+				error: "Run is not failed",
+			});
+			const retryApp = createApi({ runner, db, retryRun: retryFn });
+
+			seedRun(db, { id: "completed-1", status: "completed" });
+
+			const res = await retryApp.request("/runs/completed-1/retry", {
+				method: "POST",
+			});
+
+			expect(res.status).toBe(400);
+			expect(await res.json()).toEqual({ error: "Run is not failed" });
+		});
+
+		it("returns 400 when run not found", async () => {
+			const retryFn: RetryFn = async () => ({ error: "Run not found" });
+			const retryApp = createApi({ runner, db, retryRun: retryFn });
+
+			const res = await retryApp.request("/runs/nonexistent/retry", {
+				method: "POST",
+			});
+
+			expect(res.status).toBe(400);
 		});
 	});
 });

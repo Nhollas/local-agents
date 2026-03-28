@@ -1,4 +1,10 @@
-import { index, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+	index,
+	integer,
+	real,
+	sqliteTable,
+	text,
+} from "drizzle-orm/sqlite-core";
 
 export const runs = sqliteTable("runs", {
 	id: text("id").primaryKey(),
@@ -10,6 +16,9 @@ export const runs = sqliteTable("runs", {
 	startedAt: text("started_at").notNull(),
 	completedAt: text("completed_at"),
 	durationMs: real("duration_ms"),
+	sessionId: text("session_id"),
+	attempt: integer("attempt").notNull().default(1),
+	parentRunId: text("parent_run_id"),
 });
 
 export const runEvents = sqliteTable(

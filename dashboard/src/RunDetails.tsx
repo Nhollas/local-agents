@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { fetchRunDetail } from "./api.ts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchRunDetail, retryRun } from "./api.ts";
 import { formatDuration } from "./format.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
 import type { Run } from "./types.ts";
@@ -10,9 +10,17 @@ type Props = {
 };
 
 export function RunDetails({ run, onBack }: Props) {
+	const queryClient = useQueryClient();
 	const { data: detail } = useQuery({
 		queryKey: ["runs", run.id],
 		queryFn: () => fetchRunDetail(run.id),
+	});
+	const retryMutation = useMutation({
+		mutationFn: retryRun,
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["runs"] });
+			onBack();
+		},
 	});
 	const events = detail?.events ?? [];
 
@@ -29,7 +37,19 @@ export function RunDetails({ run, onBack }: Props) {
 			<div className="rounded-lg border border-border bg-surface-1 p-4 space-y-4">
 				<div className="flex items-center justify-between">
 					<h2 className="font-medium">{run.agentName}</h2>
-					<StatusBadge status={run.status} />
+					<div className="flex items-center gap-2">
+						{run.status === "failed" && (
+							<button
+								type="button"
+								aria-label={`Retry run ${run.id}`}
+								onClick={() => retryMutation.mutate(run.id)}
+								className="px-2 py-0.5 rounded border border-warning-border bg-warning-muted text-warning text-xs hover:brightness-125 transition-all"
+							>
+								Retry
+							</button>
+						)}
+						<StatusBadge status={run.status} />
+					</div>
 				</div>
 
 				<dl className="grid grid-cols-2 gap-2 text-sm">
@@ -45,6 +65,12 @@ export function RunDetails({ run, onBack }: Props) {
 					)}
 					<dt className="text-text-muted">Duration</dt>
 					<dd>{formatDuration(run.durationMs)}</dd>
+					{run.attempt != null && run.attempt > 1 && (
+						<>
+							<dt className="text-text-muted">Attempt</dt>
+							<dd>{run.attempt}</dd>
+						</>
+					)}
 				</dl>
 
 				{run.error && (

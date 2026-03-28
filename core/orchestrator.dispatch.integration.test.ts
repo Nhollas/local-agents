@@ -4,7 +4,9 @@ import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import {
 	createGitHubIssue,
+	createSessionAgent,
 	createTestWorkflow,
+	failingAgent,
 	GITHUB_API,
 	hangingAgent,
 	noopAgent,
@@ -655,5 +657,150 @@ describe("Orchestrator dispatch", () => {
 
 		const names = allRuns.map((r) => r.agentName).sort();
 		expect(names).toEqual(["issue-1", "issue-2"]);
+	});
+
+	it("stores sessionId when agent emits messages with session_id", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({ workspace_root: workspace.root }),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: createSessionAgent("test-sess-abc"),
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toHaveLength(1);
+		expect(allRuns[0].sessionId).toBe("test-sess-abc");
+	});
+
+	it("preserves workspace on agent failure when retries remain", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		const wsDir = await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({
+				workspace_root: workspace.root,
+				max_retries: 3,
+			}),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: failingAgent,
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns[0].status).toBe("failed");
+
+		// Workspace should still exist (not cleaned up)
+		await expect(access(wsDir)).resolves.toBeUndefined();
+	});
+
+	it("cleans up workspace on agent failure when retries exhausted", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		const wsDir = await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({
+				workspace_root: workspace.root,
+				max_retries: 0,
+			}),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: failingAgent,
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+
+		// Workspace should be cleaned up
+		await expect(access(wsDir)).rejects.toThrow();
+	});
+
+	it("swaps label back to pending when retries exhausted", async () => {
+		const labelOps: { method: string; label: string }[] = [];
+
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
+				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({
+				workspace_root: workspace.root,
+				max_retries: 0,
+			}),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: failingAgent,
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+
+		// Should have swapped agent:running → agent (back to pending)
+		expect(labelOps).toContainEqual({
+			method: "delete",
+			label: "agent:running",
+		});
+		expect(labelOps).toContainEqual({ method: "add", label: "agent" });
 	});
 });

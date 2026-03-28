@@ -10,6 +10,9 @@ export type RunFromApi = {
 	startedAt: string;
 	completedAt: string | null;
 	durationMs: number | null;
+	sessionId: string | null;
+	attempt: number;
+	parentRunId: string | null;
 };
 
 export type RunEventFromApi = {
@@ -35,6 +38,8 @@ function mapApiRun(r: RunFromApi): Run {
 		startedAt: r.startedAt,
 		completedAt: r.completedAt ?? undefined,
 		durationMs: r.durationMs ?? undefined,
+		attempt: r.attempt,
+		parentRunId: r.parentRunId ?? undefined,
 	};
 }
 
@@ -51,4 +56,12 @@ export async function fetchRunDetail(runId: string): Promise<RunDetailFromApi> {
 
 export async function killRun(runId: string): Promise<void> {
 	await fetch(`/runs/${runId}/kill`, { method: "POST" });
+}
+
+export async function retryRun(runId: string): Promise<void> {
+	const res = await fetch(`/runs/${runId}/retry`, { method: "POST" });
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({ error: "Retry failed" }));
+		throw new Error(body.error ?? "Retry failed");
+	}
 }

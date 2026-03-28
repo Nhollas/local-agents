@@ -15,6 +15,13 @@
 			"when": 1774642648647,
 			"tag": "0001_add-run-events-index",
 			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "6",
+			"when": 1774701011961,
+			"tag": "0002_happy_echo",
+			"breakpoints": true
 		}
 	]
 }

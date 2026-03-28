@@ -12,9 +12,14 @@ export type AgentJob = {
 	issueTitle: string;
 	handler: (
 		emitToolUse: (tool: string, target: string) => void,
+		setSessionId: (id: string) => void,
 	) => Promise<void>;
 	onComplete?: () => Promise<void>;
+	onFailed?: () => Promise<void>;
 	onFinally?: () => Promise<void>;
+	attempt?: number;
+	parentRunId?: string;
+	maxRetries?: number;
 };
 
 type RunnerConfig = {
@@ -55,6 +60,8 @@ export function createRunner(config: RunnerConfig): Runner {
 					issueKey: job.issueKey,
 					issueTitle: job.issueTitle,
 					startedAt,
+					attempt: job.attempt ?? 1,
+					parentRunId: job.parentRunId ?? null,
 				})
 				.run();
 
@@ -80,7 +87,16 @@ export function createRunner(config: RunnerConfig): Runner {
 				eventBus.emit(toolEvent);
 			};
 
+			let sessionCaptured = false;
+			const setSessionId = (id: string) => {
+				if (sessionCaptured) return;
+				sessionCaptured = true;
+				db.update(runs).set({ sessionId: id }).where(eq(runs.id, runId)).run();
+			};
+
 			const startTime = Date.now();
+			let succeeded = false;
+			const retriesRemaining = (job.maxRetries ?? 0) - (job.attempt ?? 1) >= 0;
 
 			try {
 				const abortPromise = new Promise<never>((_, reject) => {
@@ -89,8 +105,12 @@ export function createRunner(config: RunnerConfig): Runner {
 					});
 				});
 
-				await Promise.race([job.handler(emitToolUse), abortPromise]);
+				await Promise.race([
+					job.handler(emitToolUse, setSessionId),
+					abortPromise,
+				]);
 
+				succeeded = true;
 				const completedAt = new Date().toISOString();
 				const durationMs = Date.now() - startTime;
 
@@ -147,10 +167,27 @@ export function createRunner(config: RunnerConfig): Runner {
 					{ agent: job.name, err: error, runId },
 					"runner.handler_failed",
 				);
+
+				if (retriesRemaining && job.onFailed) {
+					try {
+						await job.onFailed();
+					} catch (cbErr) {
+						logger.error(
+							{
+								agent: job.name,
+								runId,
+								err: cbErr instanceof Error ? cbErr.message : String(cbErr),
+							},
+							"runner.on_failed_failed",
+						);
+					}
+				}
 			} finally {
 				activeRuns.delete(runId);
 
-				if (job.onFinally) {
+				const shouldCleanup = succeeded || !retriesRemaining;
+
+				if (shouldCleanup && job.onFinally) {
 					try {
 						await job.onFinally();
 					} catch (err) {

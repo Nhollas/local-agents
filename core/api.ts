@@ -18,7 +18,19 @@ const runParamSchema = z.object({
 	id: z.string().min(1),
 });
 
-export function createApi({ runner, db }: { runner: Runner; db: Db }) {
+export type RetryFn = (
+	failedRunId: string,
+) => Promise<{ runId: string } | { error: string }>;
+
+export function createApi({
+	runner,
+	db,
+	retryRun,
+}: {
+	runner: Runner;
+	db: Db;
+	retryRun: RetryFn;
+}) {
 	const app = new Hono();
 
 	app.get("/events", (c) => {
@@ -88,6 +100,17 @@ export function createApi({ runner, db }: { runner: Runner; db: Db }) {
 		if (!killed) return c.json({ error: "Run not found or not running" }, 404);
 		return c.json({ killed: true });
 	});
+
+	app.post(
+		"/runs/:id/retry",
+		zValidator("param", runParamSchema),
+		async (c) => {
+			const { id } = c.req.valid("param");
+			const result = await retryRun(id);
+			if ("error" in result) return c.json({ error: result.error }, 400);
+			return c.json({ runId: result.runId }, 201);
+		},
+	);
 
 	app.get("/health", (c) => c.text("OK"));
 

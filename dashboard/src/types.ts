@@ -25,4 +25,6 @@ export type Run = {
 	startedAt: string;
 	completedAt?: string;
 	durationMs?: number;
+	attempt?: number;
+	parentRunId?: string;
 };

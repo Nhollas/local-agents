@@ -42,7 +42,11 @@ const orchestrator = createOrchestrator({
 	runner,
 });
 
-const app = createApi({ runner, db });
+const app = createApi({
+	runner,
+	db,
+	retryRun: orchestrator.retryRun,
+});
 
 // Start polling + workflow refresh
 workflowCache.start();

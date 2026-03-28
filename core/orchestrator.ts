@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { logAgentMessage } from "./agent-logging.ts";
 import type { Db } from "./db.ts";
 import { logger } from "./logger.ts";
-import type { Runner } from "./runner.ts";
+import type { AgentJob, Runner } from "./runner.ts";
 import { runs } from "./schema.ts";
 import type {
 	CodeHostAdapter,
@@ -68,22 +68,108 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
 
+	const {
+		db,
+		tracker,
+		codeHost,
+		config,
+		workflows,
+		runner,
+		runAgent = query,
+	} = opts;
+	const { defaults } = config;
+
+	function buildAgentJob(jobOpts: {
+		issue: Issue;
+		repo: string;
+		workflow: RepoWorkflow;
+		wsPath: string;
+		prompt: string;
+		attempt: number;
+		parentRunId?: string;
+		resumeSessionId?: string;
+	}): AgentJob {
+		const { issue, repo, workflow, wsPath, prompt, attempt } = jobOpts;
+
+		return {
+			name: `issue-${issue.number}`,
+			issueKey: issue.key,
+			issueTitle: issue.title,
+			attempt,
+			parentRunId: jobOpts.parentRunId,
+			maxRetries: defaults.max_retries,
+			handler: async (emitToolUse, setSessionId) => {
+				const agentOptions: Record<string, unknown> = {
+					cwd: wsPath,
+					model: defaults.model,
+					allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+					permissionMode: "dontAsk",
+				};
+
+				if (jobOpts.resumeSessionId) {
+					agentOptions.resume = jobOpts.resumeSessionId;
+				}
+
+				for await (const msg of runAgent({
+					prompt,
+					options: agentOptions as Parameters<typeof query>[0]["options"],
+				})) {
+					if (msg.type === "assistant") {
+						logAgentMessage(msg, wsPath, emitToolUse);
+						if ("session_id" in msg && typeof msg.session_id === "string") {
+							setSessionId(msg.session_id);
+						}
+					}
+				}
+
+				if (workflow.hooks?.after_run) {
+					const script = renderPrompt(workflow.hooks.after_run, {
+						issue,
+						attempt,
+					});
+					await runShell(script, wsPath);
+				}
+			},
+			onComplete: async () => {
+				const head = renderPrompt(workflow.branch, { issue });
+				await codeHost.createChangeRequest(
+					repo,
+					head,
+					workflow.base_branch,
+					issue.title,
+					`Closes ${issue.key}`,
+				);
+
+				await tracker.swapLabel(
+					repo,
+					issue.number,
+					LABELS.running,
+					LABELS.completed,
+				);
+			},
+			onFinally: async () => {
+				await removeWorkspace(wsPath);
+
+				const retriesExhausted = (defaults.max_retries ?? 0) - attempt < 0;
+				if (retriesExhausted) {
+					await tracker
+						.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+						.catch((err) =>
+							logger.warn(
+								{ issue: issue.key, err },
+								"orchestrator.label_rollback_failed",
+							),
+						);
+				}
+			},
+		};
+	}
+
 	async function tick() {
 		if (ticking) return;
 		ticking = true;
 
 		try {
-			const {
-				db,
-				tracker,
-				codeHost,
-				config,
-				workflows,
-				runner,
-				runAgent = query,
-			} = opts;
-			const { defaults } = config;
-
 			// 1. FETCH pending issues + running-label check (in parallel)
 			const entries = [...workflows.entries()];
 
@@ -209,49 +295,15 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					}
 				}
 
-				runner.enqueue({
-					name: `issue-${issue.number}`,
-					issueKey: issue.key,
-					issueTitle: issue.title,
-					handler: async (emitToolUse) => {
-						for await (const msg of runAgent({
-							prompt,
-							options: {
-								cwd: ws.path,
-								model: defaults.model,
-								allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-								permissionMode: "dontAsk",
-							},
-						})) {
-							if (msg.type === "assistant") {
-								logAgentMessage(msg, ws.path, emitToolUse);
-							}
-						}
-
-						if (workflow.hooks?.after_run) {
-							const script = renderPrompt(workflow.hooks.after_run, { issue });
-							await runShell(script, ws.path);
-						}
-					},
-					onComplete: async () => {
-						const head = renderPrompt(workflow.branch, { issue });
-						await codeHost.createChangeRequest(
-							repo,
-							head,
-							workflow.base_branch,
-							issue.title,
-							`Closes ${issue.key}`,
-						);
-
-						await tracker.swapLabel(
-							repo,
-							issue.number,
-							LABELS.running,
-							LABELS.completed,
-						);
-					},
-					onFinally: () => removeWorkspace(ws.path),
+				const job = buildAgentJob({
+					issue,
+					repo,
+					workflow,
+					wsPath: ws.path,
+					prompt,
+					attempt: 1,
 				});
+				runner.enqueue(job);
 
 				runningCount++;
 				runningByIssue.set(issue.key, []);
@@ -262,8 +314,91 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		}
 	}
 
+	async function retryRun(
+		failedRunId: string,
+	): Promise<{ runId: string } | { error: string }> {
+		const failedRun = db
+			.select()
+			.from(runs)
+			.where(eq(runs.id, failedRunId))
+			.get();
+		if (!failedRun) return { error: "Run not found" };
+		if (failedRun.status !== "failed") return { error: "Run is not failed" };
+		if (!failedRun.sessionId) return { error: "No session to resume" };
+		if (!failedRun.issueKey) return { error: "No issue key" };
+
+		const attempt = (failedRun.attempt ?? 1) + 1;
+		if (attempt > defaults.max_retries + 1)
+			return { error: "Max retries exceeded" };
+
+		const snapshot = getRunSnapshot(db);
+		if (snapshot.some((r) => r.issueKey === failedRun.issueKey)) {
+			return { error: "Issue already has a running agent" };
+		}
+
+		const repo = repoFromKey(failedRun.issueKey);
+		const workflow = workflows.get(repo);
+		if (!workflow) return { error: "No workflow for repo" };
+
+		const issueNumber = Number.parseInt(failedRun.issueKey.split("#")[1], 10);
+		const issue: Issue = {
+			key: failedRun.issueKey,
+			number: issueNumber,
+			title: failedRun.issueTitle ?? "",
+			description: "",
+			labels: [],
+			url: "",
+			createdAt: "",
+		};
+
+		const cloneUrl = codeHost.cloneUrl(repo);
+		const ws = await ensureWorkspace(
+			issue,
+			defaults.workspace_root,
+			cloneUrl,
+			workflow.hooks,
+		);
+
+		if (workflow.hooks?.before_run) {
+			const script = renderPrompt(workflow.hooks.before_run, {
+				issue,
+				attempt,
+			});
+			try {
+				await runShell(script, ws.path);
+			} catch (err) {
+				logger.warn(
+					{ issue: issue.key, err },
+					"orchestrator.before_run_failed",
+				);
+			}
+		}
+
+		const prompt = renderPrompt(workflow.prompt, { issue, attempt });
+
+		const job = buildAgentJob({
+			issue,
+			repo,
+			workflow,
+			wsPath: ws.path,
+			prompt,
+			attempt,
+			parentRunId: failedRunId,
+			resumeSessionId: failedRun.sessionId,
+		});
+
+		const runId = runner.enqueue(job);
+		logger.info(
+			{ issue: issue.key, attempt, parentRunId: failedRunId },
+			"orchestrator.retry_dispatched",
+		);
+
+		return { runId };
+	}
+
 	return {
 		tick,
+		retryRun,
 		start() {
 			logger.info(
 				{ interval: opts.config.defaults.polling_interval_ms },

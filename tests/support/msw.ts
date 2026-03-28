@@ -44,6 +44,7 @@ export function githubHandlers({
 				return HttpResponse.json([]);
 			},
 		),
+		http.get(`${GITHUB_API}/repos/${REPO}/pulls`, () => HttpResponse.json([])),
 		http.post(`${GITHUB_API}/repos/${REPO}/pulls`, () =>
 			HttpResponse.json({
 				number: 1,

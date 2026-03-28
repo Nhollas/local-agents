@@ -24,6 +24,23 @@ export async function* hangingAgent() {
 	await new Promise(() => {});
 }
 
+// biome-ignore lint/correctness/useYield: throws before yielding
+export async function* failingAgent() {
+	throw new Error("agent exploded");
+}
+
+export function createSessionAgent(sessionId: string) {
+	return async function* sessionAgent() {
+		yield {
+			type: "assistant" as const,
+			session_id: sessionId,
+			message: { content: [] },
+			parent_tool_use_id: null,
+			uuid: "00000000-0000-0000-0000-000000000001" as const,
+		};
+	};
+}
+
 export function createTestWorkflow(
 	overrides: Partial<RepoWorkflow> = {},
 ): RepoWorkflow {

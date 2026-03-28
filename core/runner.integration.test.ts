@@ -276,4 +276,144 @@ describe("Runner integration", () => {
 
 		expect(runner.kill("nonexistent-id")).toBe(false);
 	});
+
+	it("stores attempt and parentRunId on the run record", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const runId = runner.enqueue({
+			name: "retry-job",
+			issueKey: "owner/repo#1",
+			issueTitle: "Retry issue",
+			handler: async () => {},
+			attempt: 2,
+			parentRunId: "prev-id",
+		});
+
+		await runner.queue.waitForIdle();
+
+		const run = getRun(db, runId);
+		expect(run?.attempt).toBe(2);
+		expect(run?.parentRunId).toBe("prev-id");
+	});
+
+	it("captures sessionId via setSessionId callback", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const runId = runner.enqueue({
+			name: "session-job",
+			issueKey: "owner/repo#2",
+			issueTitle: "Session issue",
+			handler: async (_emitToolUse, setSessionId) => {
+				setSessionId("sess-123");
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		const run = getRun(db, runId);
+		expect(run?.sessionId).toBe("sess-123");
+	});
+
+	it("calls onFailed (not onFinally) when handler fails and retries remain", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+		let onFailedCalled = false;
+		let onFinallyCalled = false;
+
+		runner.enqueue({
+			name: "fail-retry-job",
+			issueKey: "owner/repo#3",
+			issueTitle: "Fail retry issue",
+			handler: async () => {
+				throw new Error("boom");
+			},
+			maxRetries: 3,
+			attempt: 1,
+			onFailed: async () => {
+				onFailedCalled = true;
+			},
+			onFinally: async () => {
+				onFinallyCalled = true;
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		expect(onFailedCalled).toBe(true);
+		expect(onFinallyCalled).toBe(false);
+	});
+
+	it("calls onFinally (not onFailed) when handler fails and retries exhausted", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+		let onFailedCalled = false;
+		let onFinallyCalled = false;
+
+		runner.enqueue({
+			name: "fail-exhausted-job",
+			issueKey: "owner/repo#4",
+			issueTitle: "Fail exhausted issue",
+			handler: async () => {
+				throw new Error("boom");
+			},
+			maxRetries: 1,
+			attempt: 2,
+			onFailed: async () => {
+				onFailedCalled = true;
+			},
+			onFinally: async () => {
+				onFinallyCalled = true;
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		expect(onFailedCalled).toBe(false);
+		expect(onFinallyCalled).toBe(true);
+	});
+
+	it("calls onFinally on success regardless of maxRetries", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+		let onFailedCalled = false;
+		let onFinallyCalled = false;
+
+		runner.enqueue({
+			name: "success-retry-job",
+			issueKey: "owner/repo#5",
+			issueTitle: "Success retry issue",
+			handler: async () => {},
+			maxRetries: 3,
+			attempt: 1,
+			onFailed: async () => {
+				onFailedCalled = true;
+			},
+			onFinally: async () => {
+				onFinallyCalled = true;
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		expect(onFailedCalled).toBe(false);
+		expect(onFinallyCalled).toBe(true);
+	});
+
+	it("existing onFinally-on-failure behavior preserved when no retry fields set", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+		let onFinallyCalled = false;
+
+		runner.enqueue({
+			name: "compat-job",
+			issueKey: "owner/repo#6",
+			issueTitle: "Compat issue",
+			handler: async () => {
+				throw new Error("boom");
+			},
+			onFinally: async () => {
+				onFinallyCalled = true;
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		expect(onFinallyCalled).toBe(true);
+	});
 });

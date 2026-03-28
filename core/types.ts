@@ -46,6 +46,7 @@ export type Config = {
 	defaults: {
 		polling_interval_ms: number;
 		max_concurrent: number;
+		max_retries: number;
 		model: string;
 		workspace_root: string;
 	};

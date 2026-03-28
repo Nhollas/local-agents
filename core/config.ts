@@ -15,6 +15,7 @@ const configSchema = z.object({
 		.object({
 			polling_interval_ms: z.number().default(30000),
 			max_concurrent: z.number().default(2),
+			max_retries: z.number().default(3),
 			model: z.string().default("claude-sonnet-4-6"),
 			workspace_root: z.string().default("/tmp/local-agent-workspaces"),
 		})
@@ -24,6 +25,7 @@ const configSchema = z.object({
 				v ?? {
 					polling_interval_ms: 30000,
 					max_concurrent: 2,
+					max_retries: 3,
 					model: "claude-sonnet-4-6",
 					workspace_root: "/tmp/local-agent-workspaces",
 				},

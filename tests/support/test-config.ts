@@ -10,6 +10,7 @@ export function createTestConfig(
 		defaults: {
 			polling_interval_ms: 100,
 			max_concurrent: 2,
+			max_retries: 3,
 			model: "claude-sonnet-4-6",
 			workspace_root: "/tmp/test-workspaces",
 			...overrides,

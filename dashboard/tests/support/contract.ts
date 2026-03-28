@@ -10,6 +10,9 @@ type RunFromApi = {
 	startedAt: string;
 	completedAt: string | null;
 	durationMs: number | null;
+	sessionId: string | null;
+	attempt: number;
+	parentRunId: string | null;
 };
 
 type RunDetailFromApi = RunFromApi & {
@@ -47,6 +50,9 @@ export function createRunFromApi(overrides?: Partial<RunFromApi>): RunFromApi {
 		startedAt: "2026-03-20T12:00:00.000Z",
 		completedAt: "2026-03-20T12:00:01.500Z",
 		durationMs: 1500,
+		sessionId: null,
+		attempt: 1,
+		parentRunId: null,
 		...overrides,
 	};
 }
@@ -64,6 +70,9 @@ export function createRunDetailFromApi(
 		startedAt: "2026-03-20T12:00:00.000Z",
 		completedAt: "2026-03-20T12:00:01.500Z",
 		durationMs: 1500,
+		sessionId: null,
+		attempt: 1,
+		parentRunId: null,
 		events: [],
 		...overrides,
 	};
