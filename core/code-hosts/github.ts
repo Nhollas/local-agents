@@ -41,6 +41,15 @@ export function githubCodeHostAdapter(client: GitHubClient): CodeHostAdapter {
 			title: string,
 			body: string,
 		): Promise<ChangeRequest> {
+			const owner = repo.split("/")[0];
+			const [existing] = await client.get<GitHubPullRequest[]>(
+				`/repos/${repo}/pulls?head=${encodeURIComponent(`${owner}:${head}`)}&base=${encodeURIComponent(base)}&state=open`,
+			);
+
+			if (existing) {
+				return { number: existing.number, url: existing.html_url };
+			}
+
 			const pr = await client.post<GitHubPullRequest>(`/repos/${repo}/pulls`, {
 				title,
 				body,
