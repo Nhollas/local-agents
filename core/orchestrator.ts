@@ -25,6 +25,10 @@ const LABELS = {
 	completed: "agent:awaiting-review",
 } as const;
 
+function repoFromKey(key: string): string {
+	return key.slice(0, key.lastIndexOf("#"));
+}
+
 async function runShell(script: string, cwd: string): Promise<void> {
 	await exec("sh", ["-c", script], { cwd });
 }
@@ -66,33 +70,9 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 
 			type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
 
-			// 1. FETCH issues from all repos with cached workflows
+			// 1. FETCH pending issues + running-label check (in parallel)
 			const entries = [...workflows.entries()];
-			const results = await Promise.allSettled(
-				entries.map(async ([repo, workflow]) => {
-					const issues = await tracker.fetchActiveIssues(repo, LABELS.pending);
-					return issues.map(
-						(issue): TaggedIssue => ({ issue, repo, workflow }),
-					);
-				}),
-			);
 
-			const allTagged: TaggedIssue[] = [];
-			const fetchedRepos = new Set<string>();
-			for (const [i, result] of results.entries()) {
-				if (result.status === "fulfilled") {
-					allTagged.push(...result.value);
-					fetchedRepos.add(entries[i][0]);
-				}
-			}
-
-			// 2. SORT by createdAt ascending (oldest first)
-			allTagged.sort((a, b) =>
-				a.issue.createdAt.localeCompare(b.issue.createdAt),
-			);
-
-			// Only running runs needed — the label lifecycle (agent → agent:running
-			// → awaiting-review) prevents re-dispatch without DB cross-referencing.
 			const snapshot = getRunSnapshot(db);
 			const runningByIssue = new Map<string, string[]>();
 			for (const r of snapshot) {
@@ -102,11 +82,60 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			}
 			let runningCount = snapshot.length;
 
-			// 3. RECONCILE: kill running agents for issues no longer in the active set
-			const activeKeys = new Set(allTagged.map((t) => t.issue.key));
+			const reposWithRunning = new Set(
+				[...runningByIssue.keys()].map((k) => repoFromKey(k)),
+			);
+
+			const [pendingResults, runningResults] = await Promise.all([
+				Promise.allSettled(
+					entries.map(async ([repo, workflow]) => {
+						const issues = await tracker.fetchActiveIssues(
+							repo,
+							LABELS.pending,
+						);
+						return issues.map(
+							(issue): TaggedIssue => ({ issue, repo, workflow }),
+						);
+					}),
+				),
+				runningByIssue.size > 0
+					? Promise.allSettled(
+							entries
+								.filter(([repo]) => reposWithRunning.has(repo))
+								.map(async ([repo]) => {
+									const issues = await tracker.fetchActiveIssues(
+										repo,
+										LABELS.running,
+									);
+									return { repo, keys: new Set(issues.map((i) => i.key)) };
+								}),
+						)
+					: Promise.resolve([]),
+			]);
+
+			const allTagged: TaggedIssue[] = [];
+			for (const result of pendingResults) {
+				if (result.status === "fulfilled") {
+					allTagged.push(...result.value);
+				}
+			}
+
+			allTagged.sort((a, b) =>
+				a.issue.createdAt.localeCompare(b.issue.createdAt),
+			);
+
+			// 2. RECONCILE: kill agents whose issues no longer have the running label
+			const stillRunning = new Map<string, Set<string>>();
+			for (const result of runningResults) {
+				if (result.status === "fulfilled") {
+					stillRunning.set(result.value.repo, result.value.keys);
+				}
+			}
+
 			for (const [key, runIds] of runningByIssue) {
-				const repo = key.slice(0, key.lastIndexOf("#"));
-				if (fetchedRepos.has(repo) && !activeKeys.has(key)) {
+				const repo = repoFromKey(key);
+				const repoKeys = stillRunning.get(repo);
+				if (repoKeys && !repoKeys.has(key)) {
 					logger.info({ key }, "orchestrator.reconcile_terminal");
 					for (const id of runIds) {
 						runner.kill(id);
@@ -114,7 +143,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				}
 			}
 
-			// 4. DISPATCH oldest-first up to max_concurrent
+			// 3. DISPATCH oldest-first up to max_concurrent
 			for (const { issue, repo, workflow } of allTagged) {
 				if (runningByIssue.has(issue.key)) continue;
 				if (runningCount >= defaults.max_concurrent) break;
