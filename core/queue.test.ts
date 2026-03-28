@@ -137,4 +137,58 @@ describe("createJobQueue", () => {
 		expect(job2.started).toBe(true);
 		expect(queue.runningCount).toBe(1);
 	});
+
+	it("waitForIdle() resolves when already idle", async () => {
+		const queue = createJobQueue({ maxConcurrency: 2 });
+
+		await queue.waitForIdle();
+
+		expect(queue.runningCount).toBe(0);
+		expect(queue.pendingCount).toBe(0);
+	});
+
+	it("waitForIdle() resolves after last job completes", async () => {
+		const queue = createJobQueue({ maxConcurrency: 1 });
+		const job1 = createControllableJob();
+		const job2 = createControllableJob();
+
+		queue.enqueue(job1.execute);
+		queue.enqueue(job2.execute);
+
+		const idle = queue.waitForIdle();
+		let idleResolved = false;
+		idle.then(() => {
+			idleResolved = true;
+		});
+
+		job1.complete();
+		await Promise.resolve();
+
+		expect(idleResolved).toBe(false);
+		expect(queue.runningCount).toBe(1);
+
+		job2.complete();
+		await idle;
+
+		expect(queue.runningCount).toBe(0);
+		expect(queue.pendingCount).toBe(0);
+	});
+
+	it("waitForIdle() with multiple waiters", async () => {
+		const queue = createJobQueue({ maxConcurrency: 1 });
+		const job = createControllableJob();
+
+		queue.enqueue(job.execute);
+
+		const results: string[] = [];
+		const waiter1 = queue.waitForIdle().then(() => results.push("waiter1"));
+		const waiter2 = queue.waitForIdle().then(() => results.push("waiter2"));
+
+		job.complete();
+		await Promise.all([waiter1, waiter2]);
+
+		expect(results).toContain("waiter1");
+		expect(results).toContain("waiter2");
+		expect(results).toHaveLength(2);
+	});
 });

@@ -230,4 +230,50 @@ describe("Runner integration", () => {
 
 		expect(onCompleteCalled).toBe(false);
 	});
+
+	it("onComplete failure doesn't corrupt run status", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const runId = runner.enqueue({
+			name: "oncomplete-throws",
+			issueKey: "owner/repo#11",
+			issueTitle: "onComplete throws",
+			handler: async () => {},
+			onComplete: async () => {
+				throw new Error("onComplete exploded");
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		const run = getRun(db, runId);
+		expect(run?.status).toBe("completed");
+		expect(run?.durationMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("onFinally failure doesn't corrupt run status", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const runId = runner.enqueue({
+			name: "onfinally-throws",
+			issueKey: "owner/repo#12",
+			issueTitle: "onFinally throws",
+			handler: async () => {},
+			onFinally: async () => {
+				throw new Error("onFinally exploded");
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		const run = getRun(db, runId);
+		expect(run?.status).toBe("completed");
+		expect(run?.durationMs).toBeGreaterThanOrEqual(0);
+	});
+
+	it("kill returns false for unknown runId", () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		expect(runner.kill("nonexistent-id")).toBe(false);
+	});
 });

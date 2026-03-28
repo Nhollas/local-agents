@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createTestDb } from "../tests/support/test-db.ts";
 import { createApi } from "./api.ts";
 import type { Db } from "./db.ts";
+import type { Runner } from "./runner.ts";
 import { createRunner } from "./runner.ts";
 import { runEvents, runs } from "./schema.ts";
 
@@ -40,10 +41,11 @@ function seedEvent(
 describe("API integration", () => {
 	let db: Db;
 	let app: Hono;
+	let runner: Runner;
 
 	beforeEach(() => {
 		db = createTestDb();
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		runner = createRunner({ db, maxConcurrency: 2 });
 		app = createApi({ runner, db });
 	});
 
@@ -151,11 +153,50 @@ describe("API integration", () => {
 		});
 	});
 
+	describe("GET /events", () => {
+		it("SSE stream delivers run events", async () => {
+			const res = await app.request("/events");
+			const body = res.body;
+			if (!body)
+				throw new Error("Expected response body to be a ReadableStream");
+			const reader = body.getReader();
+			const decoder = new TextDecoder();
+
+			// Read the initial heartbeat to confirm the stream is active
+			await reader.read();
+
+			runner.enqueue({
+				name: "sse-agent",
+				issueKey: "test/repo#42",
+				issueTitle: "SSE test issue",
+				handler: async () => {},
+			});
+
+			await runner.queue.waitForIdle();
+
+			let collected = "";
+			for (let i = 0; i < 20; i++) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				collected += decoder.decode(value, { stream: true });
+				if (
+					collected.includes("run:started") &&
+					collected.includes("run:completed")
+				)
+					break;
+			}
+
+			reader.cancel();
+
+			expect(collected).toContain("event: run:started");
+			expect(collected).toContain("event: run:completed");
+			expect(collected).toContain("sse-agent");
+			expect(collected).toContain("test/repo#42");
+		});
+	});
+
 	describe("POST /runs/:id/kill", () => {
 		it("kills a running job and returns success", async () => {
-			const runner = createRunner({ db, maxConcurrency: 2 });
-			const killingApp = createApi({ runner, db });
-
 			const runId = runner.enqueue({
 				name: "long-job",
 				issueKey: "test/repo#1",
@@ -163,7 +204,7 @@ describe("API integration", () => {
 				handler: () => new Promise(() => {}), // never resolves
 			});
 
-			const res = await killingApp.request(`/runs/${runId}/kill`, {
+			const res = await app.request(`/runs/${runId}/kill`, {
 				method: "POST",
 			});
 
