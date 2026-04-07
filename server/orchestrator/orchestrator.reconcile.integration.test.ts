@@ -59,8 +59,22 @@ describe("Orchestrator reconciliation", () => {
 		await orchestrator.tick();
 
 		const runsBefore = db.select().from(runs).all();
-		expect(runsBefore).toHaveLength(1);
-		expect(runsBefore[0].status).toBe("running");
+		expect(runsBefore).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 
 		// Second tick: label was removed → reconcile kills it
 		pendingIssues = [];
@@ -71,8 +85,22 @@ describe("Orchestrator reconciliation", () => {
 		await orchestrator.settled();
 
 		const runsAfter = db.select().from(runs).all();
-		expect(runsAfter[0].status).toBe("failed");
-		expect(runsAfter[0].error).toContain("killed");
+		expect(runsAfter).toEqual([
+			{
+				id: runsBefore[0].id,
+				agentName: "issue-1",
+				status: "failed",
+				error: "Run killed by user",
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: runsBefore[0].startedAt,
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("keeps agent running when label is still present", async () => {
@@ -117,7 +145,22 @@ describe("Orchestrator reconciliation", () => {
 		await orchestrator.tick();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns[0].status).toBe("running");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-2",
+				status: "running",
+				error: null,
+				issueKey: `${REPO}#2`,
+				issueTitle: "Issue 2",
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("skips repos with no running agents (avoids unnecessary API call)", async () => {
@@ -213,7 +256,23 @@ describe("Orchestrator reconciliation", () => {
 
 		// First tick: dispatches the agent
 		await orchestrator.tick();
-		expect(db.select().from(runs).all()).toHaveLength(1);
+		const runsBefore = db.select().from(runs).all();
+		expect(runsBefore).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 
 		// Second tick: running-label fetch fails — agent should NOT be killed
 		pendingIssues = [];
@@ -221,7 +280,7 @@ describe("Orchestrator reconciliation", () => {
 
 		await orchestrator.tick();
 
-		const allRuns = db.select().from(runs).all();
-		expect(allRuns[0].status).toBe("running");
+		const runsAfter = db.select().from(runs).all();
+		expect(runsAfter).toEqual(runsBefore);
 	});
 });

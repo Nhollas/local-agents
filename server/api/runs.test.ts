@@ -21,36 +21,126 @@ describe("GET /runs", () => {
 		const res = await app.request("/runs");
 		const body = await res.json();
 
-		expect(body.map((r: { id: string }) => r.id)).toEqual([
-			"newest",
-			"middle",
-			"oldest",
+		expect(res.status).toBe(200);
+		expect(body).toEqual([
+			{
+				id: "newest",
+				agentName: "test-agent",
+				status: "completed",
+				error: null,
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-03T00:00:00Z",
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+			{
+				id: "middle",
+				agentName: "test-agent",
+				status: "completed",
+				error: null,
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-02T00:00:00Z",
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+			{
+				id: "oldest",
+				agentName: "test-agent",
+				status: "completed",
+				error: null,
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-01T00:00:00Z",
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
 		]);
 	});
 
 	it("filters by agent name", async () => {
 		const { app, db } = createTestApi();
-		seedRun(db, { id: "a", agentName: "agent-alpha" });
-		seedRun(db, { id: "b", agentName: "agent-beta" });
+		seedRun(db, {
+			id: "a",
+			agentName: "agent-alpha",
+			startedAt: "2025-01-01T00:00:00Z",
+		});
+		seedRun(db, {
+			id: "b",
+			agentName: "agent-beta",
+			startedAt: "2025-01-02T00:00:00Z",
+		});
 
 		const res = await app.request("/runs?agent=agent-alpha");
 		const body = await res.json();
 
-		expect(body).toHaveLength(1);
-		expect(body[0].id).toBe("a");
+		expect(res.status).toBe(200);
+		expect(body).toEqual([
+			{
+				id: "a",
+				agentName: "agent-alpha",
+				status: "completed",
+				error: null,
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-01T00:00:00Z",
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("filters by status", async () => {
 		const { app, db } = createTestApi();
-		seedRun(db, { id: "running-1", status: "running" });
-		seedRun(db, { id: "done-1", status: "completed" });
-		seedRun(db, { id: "fail-1", status: "failed" });
+		seedRun(db, {
+			id: "running-1",
+			status: "running",
+			startedAt: "2025-01-01T00:00:00Z",
+		});
+		seedRun(db, {
+			id: "done-1",
+			status: "completed",
+			startedAt: "2025-01-02T00:00:00Z",
+		});
+		seedRun(db, {
+			id: "fail-1",
+			status: "failed",
+			startedAt: "2025-01-03T00:00:00Z",
+		});
 
 		const res = await app.request("/runs?status=running");
 		const body = await res.json();
 
-		expect(body).toHaveLength(1);
-		expect(body[0].id).toBe("running-1");
+		expect(res.status).toBe(200);
+		expect(body).toEqual([
+			{
+				id: "running-1",
+				agentName: "test-agent",
+				status: "running",
+				error: null,
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-01T00:00:00Z",
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("respects limit parameter", async () => {
@@ -62,15 +152,35 @@ describe("GET /runs", () => {
 		const res = await app.request("/runs?limit=1");
 		const body = await res.json();
 
-		expect(body).toHaveLength(1);
-		expect(body[0].id).toBe("r3");
+		expect(res.status).toBe(200);
+		expect(body).toEqual([
+			{
+				id: "r3",
+				agentName: "test-agent",
+				status: "completed",
+				error: null,
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-03T00:00:00Z",
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 });
 
 describe("GET /runs/:id", () => {
 	it("returns run with its events ordered by createdAt", async () => {
 		const { app, db } = createTestApi();
-		seedRun(db, { id: "run-1", agentName: "my-agent", status: "completed" });
+		seedRun(db, {
+			id: "run-1",
+			agentName: "my-agent",
+			status: "completed",
+			startedAt: "2025-01-01T00:00:00Z",
+		});
 		seedEvent(db, {
 			id: "evt-1",
 			runId: "run-1",
@@ -90,11 +200,36 @@ describe("GET /runs/:id", () => {
 		const body = await res.json();
 
 		expect(res.status).toBe(200);
-		expect(body.id).toBe("run-1");
-		expect(body.agentName).toBe("my-agent");
-		expect(body.events).toHaveLength(2);
-		expect(body.events[0].type).toBe("run:started");
-		expect(body.events[1].type).toBe("run:completed");
+		expect(body).toEqual({
+			id: "run-1",
+			agentName: "my-agent",
+			status: "completed",
+			error: null,
+			issueKey: null,
+			issueTitle: null,
+			startedAt: "2025-01-01T00:00:00Z",
+			completedAt: null,
+			durationMs: null,
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+			events: [
+				{
+					id: "evt-1",
+					runId: "run-1",
+					type: "run:started",
+					data: { issueKey: "test/repo#1" },
+					createdAt: "2025-01-01T00:00:00Z",
+				},
+				{
+					id: "evt-2",
+					runId: "run-1",
+					type: "run:completed",
+					data: { durationMs: 5000 },
+					createdAt: "2025-01-01T00:01:00Z",
+				},
+			],
+		});
 	});
 
 	it("returns 404 for unknown run", async () => {
@@ -103,6 +238,7 @@ describe("GET /runs/:id", () => {
 		const res = await app.request("/runs/nonexistent");
 
 		expect(res.status).toBe(404);
+		expect(await res.json()).toEqual({ error: "Not found" });
 	});
 });
 
@@ -130,6 +266,7 @@ describe("POST /runs/:id/kill", () => {
 		});
 
 		expect(res.status).toBe(404);
+		expect(await res.json()).toEqual({ error: "Run not found or not running" });
 	});
 });
 
@@ -166,5 +303,6 @@ describe("POST /runs/:id/retry", () => {
 		});
 
 		expect(res.status).toBe(400);
+		expect(await res.json()).toEqual({ error: "Run not found" });
 	});
 });

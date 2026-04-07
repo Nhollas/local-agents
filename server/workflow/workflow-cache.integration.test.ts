@@ -32,11 +32,11 @@ describe("Workflow cache integration", () => {
 
 		await cache.refresh();
 
-		const workflow = cache.workflows.get(REPO);
-		expect(workflow).toBeDefined();
-		expect(workflow?.prompt).toBe("Fix the issue");
-		expect(workflow?.branch).toBe("agent/issue-{{ issue.number }}");
-		expect(workflow?.base_branch).toBe("main");
+		expect(cache.workflows.get(REPO)).toEqual({
+			prompt: "Fix the issue",
+			branch: "agent/issue-{{ issue.number }}",
+			base_branch: "main",
+		});
 	});
 
 	it("handles repo with no workflow file", async () => {
@@ -74,7 +74,11 @@ describe("Workflow cache integration", () => {
 		expect(cache.workflows.has(REPO)).toBe(true);
 
 		await cache.refresh();
-		expect(cache.workflows.get(REPO)?.prompt).toBe("Fix the issue");
+		expect(cache.workflows.get(REPO)).toEqual({
+			prompt: "Fix the issue",
+			branch: "agent/issue-{{ issue.number }}",
+			base_branch: "main",
+		});
 	});
 
 	it("refreshes workflows across multiple repos", async () => {
@@ -105,14 +109,16 @@ base_branch: "develop"
 
 		await cache.refresh();
 
-		const workflow1 = cache.workflows.get(REPO);
-		expect(workflow1).toBeDefined();
-		expect(workflow1?.prompt).toBe("Fix the issue");
-
-		const workflow2 = cache.workflows.get(REPO2);
-		expect(workflow2).toBeDefined();
-		expect(workflow2?.prompt).toBe("Review the PR");
-		expect(workflow2?.base_branch).toBe("develop");
+		expect(cache.workflows.get(REPO)).toEqual({
+			prompt: "Fix the issue",
+			branch: "agent/issue-{{ issue.number }}",
+			base_branch: "main",
+		});
+		expect(cache.workflows.get(REPO2)).toEqual({
+			prompt: "Review the PR",
+			branch: "agent/pr-{{ issue.number }}",
+			base_branch: "develop",
+		});
 	});
 
 	it("start() triggers periodic refresh and stop() halts it", async () => {
@@ -165,10 +171,18 @@ base_branch: "develop"
 
 		// First refresh: valid YAML
 		await cache.refresh();
-		expect(cache.workflows.get(REPO)?.prompt).toBe("Fix the issue");
+		expect(cache.workflows.get(REPO)).toEqual({
+			prompt: "Fix the issue",
+			branch: "agent/issue-{{ issue.number }}",
+			base_branch: "main",
+		});
 
 		// Second refresh: invalid YAML (missing prompt field) — should keep last-known-good
 		await cache.refresh();
-		expect(cache.workflows.get(REPO)?.prompt).toBe("Fix the issue");
+		expect(cache.workflows.get(REPO)).toEqual({
+			prompt: "Fix the issue",
+			branch: "agent/issue-{{ issue.number }}",
+			base_branch: "main",
+		});
 	});
 });

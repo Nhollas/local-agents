@@ -31,8 +31,17 @@ describe("githubTrackerAdapter", () => {
 			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
 
 			const issues = await tracker.fetchActiveIssues(REPO, "agent");
-			expect(issues).toHaveLength(1);
-			expect(issues[0].number).toBe(10);
+			expect(issues).toEqual([
+				{
+					key: `${REPO}#10`,
+					number: 10,
+					title: "Issue 10",
+					description: "Description for issue 10",
+					labels: ["agent"],
+					url: `https://github.com/${REPO}/issues/10`,
+					createdAt: "2025-01-01T00:00:00Z",
+				},
+			]);
 		});
 
 		it("returns issues from multiple states when they differ", async () => {
@@ -59,8 +68,26 @@ describe("githubTrackerAdapter", () => {
 			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
 
 			const issues = await tracker.fetchActiveIssues(REPO, "agent");
-			expect(issues).toHaveLength(2);
-			expect(issues.map((i) => i.number).sort()).toEqual([1, 2]);
+			expect(issues).toEqual([
+				{
+					key: `${REPO}#1`,
+					number: 1,
+					title: "Issue 1",
+					description: "Description for issue 1",
+					labels: ["agent"],
+					url: `https://github.com/${REPO}/issues/1`,
+					createdAt: "2025-01-01T00:00:00Z",
+				},
+				{
+					key: `${REPO}#2`,
+					number: 2,
+					title: "Issue 2",
+					description: "Description for issue 2",
+					labels: ["agent"],
+					url: `https://github.com/${REPO}/issues/2`,
+					createdAt: "2025-01-02T00:00:00Z",
+				},
+			]);
 		});
 
 		it("maps null body to empty string", async () => {
@@ -82,7 +109,17 @@ describe("githubTrackerAdapter", () => {
 			const tracker = githubTrackerAdapter(github);
 
 			const issues = await tracker.fetchActiveIssues(REPO, "agent");
-			expect(issues[0].description).toBe("");
+			expect(issues).toEqual([
+				{
+					key: `${REPO}#5`,
+					number: 5,
+					title: "Issue 5",
+					description: "",
+					labels: ["agent"],
+					url: `https://github.com/${REPO}/issues/5`,
+					createdAt: "2025-01-01T00:00:00Z",
+				},
+			]);
 		});
 	});
 });

@@ -56,18 +56,27 @@ describe("Orchestrator retryRun", () => {
 		});
 
 		const result = await orchestrator.retryRun("failed-1");
-		expect(result).toHaveProperty("runId");
-		expect(result).not.toHaveProperty("error");
+		expect(result).toEqual({ runId: expect.any(String) });
 
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		const retryRun = allRuns.find((r) => r.id !== "failed-1");
-		expect(retryRun).toBeDefined();
-		expect(retryRun?.attempt).toBe(2);
-		expect(retryRun?.parentRunId).toBe("failed-1");
-		expect(retryRun?.status).toBe("completed");
+		expect(retryRun).toEqual({
+			id: expect.any(String),
+			agentName: "issue-1",
+			status: "completed",
+			error: null,
+			issueKey: `${REPO}#1`,
+			issueTitle: "Test issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 2,
+			parentRunId: "failed-1",
+		});
 	});
 
 	it("passes resume option to runAgent with the previous sessionId", async () => {
@@ -110,7 +119,13 @@ describe("Orchestrator retryRun", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
-		expect(capturedOptions?.resume).toBe("sess-resume-me");
+		expect(capturedOptions).toEqual({
+			cwd: expect.stringContaining("test-owner_test-repo_1"),
+			model: "claude-sonnet-4-6",
+			allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+			permissionMode: "dontAsk",
+			resume: "sess-resume-me",
+		});
 	});
 
 	it("rejects retry when run does not exist", async () => {
@@ -165,14 +180,27 @@ describe("Orchestrator retryRun", () => {
 		});
 
 		const result = await orchestrator.retryRun("no-title");
-		expect(result).toHaveProperty("runId");
+		expect(result).toEqual({ runId: expect.any(String) });
 
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
 		const retryRun = allRuns.find((r) => r.id !== "no-title");
-		expect(retryRun?.issueTitle).toBe("");
+		expect(retryRun).toEqual({
+			id: expect.any(String),
+			agentName: "issue-1",
+			status: "completed",
+			error: null,
+			issueKey: `${REPO}#1`,
+			issueTitle: "",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 2,
+			parentRunId: "no-title",
+		});
 	});
 
 	it("rejects retry when run is not failed", async () => {

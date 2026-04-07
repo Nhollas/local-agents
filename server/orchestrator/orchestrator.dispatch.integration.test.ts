@@ -61,9 +61,22 @@ describe("Orchestrator dispatch", () => {
 		expect(labelOps).toContainEqual({ method: "add", label: "agent:running" });
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].agentName).toBe("issue-1");
-		expect(allRuns[0].issueKey).toBe(`${REPO}#1`);
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("creates PR and swaps to awaiting-review on successful completion", async () => {
@@ -144,8 +157,22 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.tick();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].agentName).toBe("issue-1");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("dispatches oldest issues first", async () => {
@@ -184,8 +211,36 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.tick();
 
 		const allRuns = db.select().from(runs).all();
-		const dispatched = allRuns.map((r) => r.agentName);
-		expect(dispatched).toEqual(["issue-42", "issue-77"]);
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-42",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#42`,
+				issueTitle: "Issue 42",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+			{
+				id: expect.any(String),
+				agentName: "issue-77",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#77`,
+				issueTitle: "Issue 77",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("skips issues that already have a running agent", async () => {
@@ -223,13 +278,28 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.tick();
 
 		const runsBefore = db.select().from(runs).all();
-		expect(runsBefore).toHaveLength(1);
+		expect(runsBefore).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 
 		// Second tick: same issue still has `agent` label — should not dispatch again
 		await orchestrator.tick();
 
 		const runsAfter = db.select().from(runs).all();
-		expect(runsAfter).toHaveLength(1);
+		expect(runsAfter).toEqual(runsBefore);
 	});
 
 	it("rolls back label (running → pending) when workspace creation fails", async () => {
@@ -445,8 +515,22 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].status).toBe("completed");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 
 		// PR creation failed, so swapLabel to awaiting-review never happened
 		expect(labelOps).not.toContainEqual({
@@ -587,8 +671,22 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].agentName).toBe("issue-10");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-10",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO2}#10`,
+				issueTitle: "Issue 10",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("dispatches issues across multiple repos", async () => {
@@ -662,10 +760,39 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual(
+			expect.arrayContaining([
+				{
+					id: expect.any(String),
+					agentName: "issue-1",
+					status: "completed",
+					error: null,
+					issueKey: `${REPO}#1`,
+					issueTitle: "Issue 1",
+					startedAt: expect.any(String),
+					completedAt: expect.any(String),
+					durationMs: expect.any(Number),
+					sessionId: null,
+					attempt: 1,
+					parentRunId: null,
+				},
+				{
+					id: expect.any(String),
+					agentName: "issue-2",
+					status: "completed",
+					error: null,
+					issueKey: `${REPO2}#2`,
+					issueTitle: "Issue 2",
+					startedAt: expect.any(String),
+					completedAt: expect.any(String),
+					durationMs: expect.any(Number),
+					sessionId: null,
+					attempt: 1,
+					parentRunId: null,
+				},
+			]),
+		);
 		expect(allRuns).toHaveLength(2);
-
-		const names = allRuns.map((r) => r.agentName).sort();
-		expect(names).toEqual(["issue-1", "issue-2"]);
 	});
 
 	it("stores sessionId when agent emits assistant messages", async () => {
@@ -699,8 +826,22 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].sessionId).toBe("test-sess-abc");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: "test-sess-abc",
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("preserves workspace on agent failure when retries remain", async () => {
@@ -735,7 +876,22 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns[0].status).toBe("failed");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "failed",
+				error: "agent exploded",
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 
 		// Workspace should still exist (not cleaned up)
 		await expect(access(wsDir)).resolves.toBeUndefined();
@@ -861,8 +1017,22 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].status).toBe("failed");
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "failed",
+				error: "agent exploded",
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
 	});
 
 	it("continues processing when dispatch rollback label swap fails", async () => {

@@ -26,9 +26,20 @@ describe("Runner integration", () => {
 
 		// DB insert is synchronous — status is already "running"
 		const run = getRun(db, runId);
-		expect(run?.status).toBe("running");
-		expect(run?.agentName).toBe("test-job");
-		expect(run?.issueKey).toBe("owner/repo#1");
+		expect(run).toEqual({
+			id: runId,
+			agentName: "test-job",
+			status: "running",
+			error: null,
+			issueKey: "owner/repo#1",
+			issueTitle: "Test issue",
+			startedAt: expect.any(String),
+			completedAt: null,
+			durationMs: null,
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+		});
 
 		resolveHandler();
 		await runner.queue.waitForIdle();
@@ -45,15 +56,26 @@ describe("Runner integration", () => {
 		});
 
 		const result = await done;
-		expect(result.status).toBe("completed");
-		if (result.status === "completed") {
-			expect(result.durationMs).toBeGreaterThanOrEqual(0);
-		}
+		expect(result).toEqual({
+			status: "completed",
+			durationMs: expect.any(Number),
+		});
 
 		const run = getRun(db, runId);
-		expect(run?.status).toBe("completed");
-		expect(run?.completedAt).toBeTruthy();
-		expect(run?.durationMs).toBeGreaterThanOrEqual(0);
+		expect(run).toEqual({
+			id: runId,
+			agentName: "fast-job",
+			status: "completed",
+			error: null,
+			issueKey: "owner/repo#2",
+			issueTitle: "Fast issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+		});
 	});
 
 	it("marks run as failed with error message on handler failure", async () => {
@@ -69,15 +91,27 @@ describe("Runner integration", () => {
 		});
 
 		const result = await done;
-		expect(result.status).toBe("failed");
-		if (result.status === "failed") {
-			expect(result.error).toBe("Something went wrong");
-			expect(result.durationMs).toBeGreaterThanOrEqual(0);
-		}
+		expect(result).toEqual({
+			status: "failed",
+			error: "Something went wrong",
+			durationMs: expect.any(Number),
+		});
 
 		const run = getRun(db, runId);
-		expect(run?.status).toBe("failed");
-		expect(run?.error).toBe("Something went wrong");
+		expect(run).toEqual({
+			id: runId,
+			agentName: "failing-job",
+			status: "failed",
+			error: "Something went wrong",
+			issueKey: "owner/repo#3",
+			issueTitle: "Failing issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+		});
 	});
 
 	it("done promise never rejects", async () => {
@@ -94,7 +128,11 @@ describe("Runner integration", () => {
 
 		// Should resolve (not reject) with a failed result
 		const result = await done;
-		expect(result.status).toBe("failed");
+		expect(result).toEqual({
+			status: "failed",
+			error: "catastrophic failure",
+			durationMs: expect.any(Number),
+		});
 	});
 
 	it("persists lifecycle events in order", async () => {
@@ -110,9 +148,22 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 
 		const events = getEvents(db, runId);
-		const types = events.map((e) => e.type);
-
-		expect(types).toEqual(["run:started", "run:completed"]);
+		expect(events).toEqual([
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:started",
+				data: { issueKey: "owner/repo#4", issueTitle: "Lifecycle issue" },
+				createdAt: expect.any(String),
+			},
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:completed",
+				data: { durationMs: expect.any(Number) },
+				createdAt: expect.any(String),
+			},
+		]);
 	});
 
 	it("persists failure events", async () => {
@@ -130,10 +181,22 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 
 		const events = getEvents(db, runId);
-		const types = events.map((e) => e.type);
-
-		expect(types).toEqual(["run:started", "run:failed"]);
-		expect(events[1].data).toEqual(expect.objectContaining({ error: "boom" }));
+		expect(events).toEqual([
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:started",
+				data: { issueKey: "owner/repo#5", issueTitle: "Fail event issue" },
+				createdAt: expect.any(String),
+			},
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:failed",
+				data: { error: "boom", durationMs: expect.any(Number) },
+				createdAt: expect.any(String),
+			},
+		]);
 	});
 
 	it("records tool_use events when emitToolUse is called", async () => {
@@ -152,17 +215,36 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 
 		const events = getEvents(db, runId);
-		const toolEvents = events.filter((e) => e.type === "run:tool_use");
-
-		expect(toolEvents).toHaveLength(2);
-		expect(toolEvents[0].data).toEqual({
-			tool: "Read",
-			target: "/src/index.ts",
-		});
-		expect(toolEvents[1].data).toEqual({
-			tool: "Edit",
-			target: "/src/index.ts",
-		});
+		expect(events).toEqual([
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:started",
+				data: { issueKey: "owner/repo#6", issueTitle: "Tool issue" },
+				createdAt: expect.any(String),
+			},
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:tool_use",
+				data: { tool: "Read", target: "/src/index.ts" },
+				createdAt: expect.any(String),
+			},
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:tool_use",
+				data: { tool: "Edit", target: "/src/index.ts" },
+				createdAt: expect.any(String),
+			},
+			{
+				id: expect.any(String),
+				runId,
+				type: "run:completed",
+				data: { durationMs: expect.any(Number) },
+				createdAt: expect.any(String),
+			},
+		]);
 	});
 
 	it("aborts a running job when killed", async () => {
@@ -179,14 +261,27 @@ describe("Runner integration", () => {
 		expect(runner.kill(runId)).toBe(true);
 
 		const result = await done;
-		expect(result.status).toBe("failed");
-		if (result.status === "failed") {
-			expect(result.error).toContain("killed");
-		}
+		expect(result).toEqual({
+			status: "failed",
+			error: "Run killed by user",
+			durationMs: expect.any(Number),
+		});
 
 		const run = getRun(db, runId);
-		expect(run?.status).toBe("failed");
-		expect(run?.error).toContain("killed");
+		expect(run).toEqual({
+			id: runId,
+			agentName: "killable-job",
+			status: "failed",
+			error: "Run killed by user",
+			issueKey: "owner/repo#7",
+			issueTitle: "Killable issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+		});
 	});
 
 	it("kill returns false for unknown runId", () => {
@@ -210,8 +305,20 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 
 		const run = getRun(db, runId);
-		expect(run?.attempt).toBe(2);
-		expect(run?.parentRunId).toBe("prev-id");
+		expect(run).toEqual({
+			id: runId,
+			agentName: "retry-job",
+			status: "completed",
+			error: null,
+			issueKey: "owner/repo#1",
+			issueTitle: "Retry issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 2,
+			parentRunId: "prev-id",
+		});
 	});
 
 	it("only persists the first sessionId when handler calls setSessionId multiple times", async () => {
@@ -231,7 +338,20 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 
 		const run = getRun(db, runId);
-		expect(run?.sessionId).toBe("first-session");
+		expect(run).toEqual({
+			id: runId,
+			agentName: "multi-session-job",
+			status: "completed",
+			error: null,
+			issueKey: "owner/repo#8",
+			issueTitle: "Multi session issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: "first-session",
+			attempt: 1,
+			parentRunId: null,
+		});
 	});
 
 	it("captures sessionId via setSessionId callback", async () => {
@@ -249,6 +369,19 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 
 		const run = getRun(db, runId);
-		expect(run?.sessionId).toBe("sess-123");
+		expect(run).toEqual({
+			id: runId,
+			agentName: "session-job",
+			status: "completed",
+			error: null,
+			issueKey: "owner/repo#2",
+			issueTitle: "Session issue",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: "sess-123",
+			attempt: 1,
+			parentRunId: null,
+		});
 	});
 });
