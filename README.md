@@ -63,6 +63,7 @@ pnpm dev
 ```
 
 This starts:
+
 - **Orchestrator** on `http://localhost:3000` — polls for issues, runs agents, serves API
 - **Dashboard** on `http://localhost:5173` — live monitoring via SSE
 
@@ -79,6 +80,7 @@ This starts:
 ### Creating Work
 
 1. Open an issue with the configured label:
+
    ```bash
    gh issue create --repo your-org/your-repo --title "Add feature X" --label agent
    ```
@@ -90,6 +92,7 @@ This starts:
 ## Dashboard
 
 The dashboard shows all agent runs in real-time:
+
 - Live connection status via SSE
 - Runs grouped by agent with repo-qualified issue key and title
 - Drill into run details to see tool use activity
@@ -116,23 +119,23 @@ config.yaml → Orchestrator → GitHub Issues (poll all repos)
 
 ### Key Components
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Orchestrator | `core/orchestrator.ts` | Multi-repo polling with oldest-first dispatch |
-| Tracker | `core/trackers/github.ts` | GitHub Issues adapter via `gh` CLI |
-| Code Host | `core/code-hosts/github.ts` | GitHub file fetching and clone URLs |
-| Config | `core/config.ts` | Central `config.yaml` parser |
-| Workflow | `core/workflow.ts` | Per-repo workflow parser with template rendering |
-| Workflow Cache | `core/workflow-cache.ts` | Fetches and caches `.agents/workflow.yaml` from repos |
-| Workspace | `core/workspace.ts` | Isolated workspace management with git clone and hooks |
-| Runner | `core/runner.ts` | Job queue with persistence and SSE events |
-| API | `core/api.ts` | Hono server for dashboard endpoints |
+| Component      | File                        | Purpose                                                |
+| -------------- | --------------------------- | ------------------------------------------------------ |
+| Orchestrator   | `core/orchestrator.ts`      | Multi-repo polling with oldest-first dispatch          |
+| Tracker        | `core/trackers/github.ts`   | GitHub Issues adapter via `gh` CLI                     |
+| Code Host      | `core/code-hosts/github.ts` | GitHub file fetching and clone URLs                    |
+| Config         | `core/config.ts`            | Central `config.yaml` parser                           |
+| Workflow       | `core/workflow.ts`          | Per-repo workflow parser with template rendering       |
+| Workflow Cache | `core/workflow-cache.ts`    | Fetches and caches `.agents/workflow.yaml` from repos  |
+| Workspace      | `core/workspace.ts`         | Isolated workspace management with git clone and hooks |
+| Runner         | `core/runner.ts`            | Job queue with persistence and SSE events              |
+| API            | `core/api.ts`               | Hono server for dashboard endpoints                    |
 
 ### Adapter Interfaces
 
-| Interface | Purpose | Implementations |
-|-----------|---------|----------------|
-| `TrackerAdapter` | Fetch active issues from a tracker | GitHub (`gh` CLI) |
+| Interface         | Purpose                               | Implementations   |
+| ----------------- | ------------------------------------- | ----------------- |
+| `TrackerAdapter`  | Fetch active issues from a tracker    | GitHub (`gh` CLI) |
 | `CodeHostAdapter` | Fetch files and clone URLs from repos | GitHub (`gh` API) |
 
 ## Requirements

@@ -1,16 +1,16 @@
 import { serve } from "@hono/node-server";
-import { createApi } from "./core/api.ts";
+import { createApi } from "./core/api/api.ts";
 import { githubCodeHostAdapter } from "./core/code-hosts/github.ts";
 import { loadConfig } from "./core/config.ts";
-import { getDb } from "./core/db.ts";
+import { getDb } from "./core/db/db.ts";
+import { migrate } from "./core/db/migrate.ts";
 import { loadEnv } from "./core/env.ts";
-import { createGitHubClient } from "./core/gh.ts";
+import { createGitHubClient } from "./core/github-client.ts";
 import { logger } from "./core/logger.ts";
-import { migrate } from "./core/migrate.ts";
-import { createOrchestrator } from "./core/orchestrator.ts";
-import { createRunner } from "./core/runner.ts";
+import { createOrchestrator } from "./core/orchestrator/orchestrator.ts";
+import { createRunner } from "./core/runner/runner.ts";
 import { githubTrackerAdapter } from "./core/trackers/github.ts";
-import { createWorkflowCache } from "./core/workflow-cache.ts";
+import { createWorkflowCache } from "./core/workflow/workflow-cache.ts";
 
 const env = loadEnv();
 const config = loadConfig(env.CONFIG_PATH);

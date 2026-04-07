@@ -1,7 +1,22 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
-import type { Config } from "./types.ts";
+export type Config = {
+	tracker: {
+		kind: "github";
+	};
+	code_host: {
+		kind: "github";
+	};
+	repos: string[];
+	defaults: {
+		polling_interval_ms: number;
+		max_concurrent: number;
+		max_retries: number;
+		model: string;
+		workspace_root: string;
+	};
+};
 
 const configSchema = z.object({
 	tracker: z.object({

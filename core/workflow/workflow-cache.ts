@@ -1,5 +1,6 @@
-import { logger } from "./logger.ts";
-import type { CodeHostAdapter, RepoWorkflow } from "./types.ts";
+import type { CodeHostAdapter } from "../code-hosts/types.ts";
+import { logger } from "../logger.ts";
+import type { RepoWorkflow } from "./workflow.ts";
 import { parseRepoWorkflow } from "./workflow.ts";
 
 const WORKFLOW_PATH = ".agents/workflow.yaml";

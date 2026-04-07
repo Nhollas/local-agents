@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createTestDb } from "../tests/support/test-db.ts";
-import type { Db } from "./db.ts";
+import { createTestDb } from "../../tests/support/test-db.ts";
+import type { Db } from "../db/db.ts";
+import { runEvents, runs } from "../db/schema.ts";
 import { createRunner } from "./runner.ts";
-import { runEvents, runs } from "./schema.ts";
 
 function getRun(db: Db, runId: string) {
 	return db.select().from(runs).where(eq(runs.id, runId)).get();

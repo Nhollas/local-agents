@@ -1,5 +1,5 @@
 import { logger } from "../logger.ts";
-import type { TrackerAdapter } from "../types.ts";
+import type { TrackerAdapter } from "./types.ts";
 
 export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 	return {

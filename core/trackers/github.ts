@@ -1,6 +1,6 @@
-import type { GitHubClient } from "../gh.ts";
-import type { Issue, TrackerAdapter } from "../types.ts";
+import type { GitHubClient } from "../github-client.ts";
 import { decorateTracker } from "./decorator.ts";
+import type { Issue, TrackerAdapter } from "./types.ts";
 
 type GitHubIssue = {
 	number: number;

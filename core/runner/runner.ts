@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import type { Db } from "./db.ts";
-import { eventBus, type RunEvent } from "./event-bus.ts";
-import { logger } from "./logger.ts";
+import type { Db } from "../db/db.ts";
+import type { RunEventType } from "../db/schema.ts";
+import { runEvents, runs } from "../db/schema.ts";
+import { eventBus, type RunEvent } from "../event-bus.ts";
+import { logger } from "../logger.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
-import type { RunEventType } from "./schema.ts";
-import { runEvents, runs } from "./schema.ts";
 
 export type AgentJob = {
 	name: string;

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { RunEventType } from "./schema.ts";
+import type { RunEventType } from "./db/schema.ts";
 
 export type RunEvent = {
 	type: RunEventType;

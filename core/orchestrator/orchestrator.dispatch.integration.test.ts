@@ -11,18 +11,18 @@ import {
 	hangingAgent,
 	noopAgent,
 	REPO,
-} from "../tests/support/fixtures.ts";
-import { githubHandlers, server } from "../tests/support/msw.ts";
-import { createTestConfig } from "../tests/support/test-config.ts";
-import { createTestDb } from "../tests/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../tests/support/test-workspace.ts";
-import { githubCodeHostAdapter } from "./code-hosts/github.ts";
-import { createGitHubClient } from "./gh.ts";
+} from "../../tests/support/fixtures.ts";
+import { githubHandlers, server } from "../../tests/support/msw.ts";
+import { createTestConfig } from "../../tests/support/test-config.ts";
+import { createTestDb } from "../../tests/support/test-db.ts";
+import { createTestWorkspaceRoot } from "../../tests/support/test-workspace.ts";
+import { githubCodeHostAdapter } from "../code-hosts/github.ts";
+import { runs } from "../db/schema.ts";
+import { createGitHubClient } from "../github-client.ts";
+import { createRunner } from "../runner/runner.ts";
+import { githubTrackerAdapter } from "../trackers/github.ts";
+import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { createOrchestrator } from "./orchestrator.ts";
-import { createRunner } from "./runner.ts";
-import { runs } from "./schema.ts";
-import { githubTrackerAdapter } from "./trackers/github.ts";
-import type { RepoWorkflow } from "./types.ts";
 
 describe("Orchestrator dispatch", () => {
 	it("dispatches agent for a pending issue, swaps label, and creates DB record", async () => {

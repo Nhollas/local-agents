@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import { access, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { Issue } from "./types.ts";
-import { renderPrompt } from "./workflow.ts";
+import type { Issue } from "../trackers/types.ts";
+import { renderPrompt } from "../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 

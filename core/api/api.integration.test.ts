@@ -1,11 +1,11 @@
 import type { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createTestDb } from "../tests/support/test-db.ts";
+import { createTestDb } from "../../tests/support/test-db.ts";
+import type { Db } from "../db/db.ts";
+import { runEvents, runs } from "../db/schema.ts";
+import type { Runner } from "../runner/runner.ts";
+import { createRunner } from "../runner/runner.ts";
 import { createApi, type RetryFn } from "./api.ts";
-import type { Db } from "./db.ts";
-import type { Runner } from "./runner.ts";
-import { createRunner } from "./runner.ts";
-import { runEvents, runs } from "./schema.ts";
 
 function seedRun(
 	db: Db,

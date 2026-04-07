@@ -1,4 +1,4 @@
-import type { Config } from "../../core/types.ts";
+import type { Config } from "../../core/config.ts";
 
 export function createTestConfig(
 	overrides: Partial<Config["defaults"]> = {},

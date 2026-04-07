@@ -1,6 +1,6 @@
-import type { GitHubClient } from "../gh.ts";
-import type { ChangeRequest, CodeHostAdapter } from "../types.ts";
+import type { GitHubClient } from "../github-client.ts";
 import { decorateCodeHost } from "./decorator.ts";
+import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
 type GitHubContent = {
 	content: string;

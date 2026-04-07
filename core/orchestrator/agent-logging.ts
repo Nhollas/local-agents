@@ -1,7 +1,7 @@
 /**
  * Shared agent message logging utilities.
  */
-import { logger } from "./logger.ts";
+import { logger } from "../logger.ts";
 
 /** Strip the workdir prefix from a path for cleaner logging. */
 function shortPath(fullPath: string, workDir: string): string {

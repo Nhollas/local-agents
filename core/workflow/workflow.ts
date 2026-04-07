@@ -1,6 +1,17 @@
 import { parse } from "yaml";
 import { z } from "zod";
-import type { Issue, RepoWorkflow } from "./types.ts";
+import type { Issue } from "../trackers/types.ts";
+
+export type RepoWorkflow = {
+	branch: string;
+	base_branch: string;
+	hooks?: {
+		after_create?: string;
+		before_run?: string;
+		after_run?: string;
+	};
+	prompt: string;
+};
 
 const repoWorkflowSchema = z.object({
 	branch: z.string().default("agent/issue-{{ issue.number }}"),

@@ -1,5 +1,5 @@
 import { logger } from "../logger.ts";
-import type { CodeHostAdapter } from "../types.ts";
+import type { CodeHostAdapter } from "./types.ts";
 
 export function decorateCodeHost(inner: CodeHostAdapter): CodeHostAdapter {
 	return {

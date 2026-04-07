@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Issue } from "./types.ts";
+import type { Issue } from "../trackers/types.ts";
 import { parseRepoWorkflow, renderPrompt } from "./workflow.ts";
 
 const baseIssue: Issue = {

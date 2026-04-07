@@ -3,10 +3,10 @@ import { and, asc, desc, eq, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import type { Db } from "./db.ts";
-import { eventBus, type RunEvent } from "./event-bus.ts";
-import type { Runner } from "./runner.ts";
-import { runEvents, runs } from "./schema.ts";
+import type { Db } from "../db/db.ts";
+import { runEvents, runs } from "../db/schema.ts";
+import { eventBus, type RunEvent } from "../event-bus.ts";
+import type { Runner } from "../runner/runner.ts";
 
 const runsQuerySchema = z.object({
 	agent: z.string().optional(),
