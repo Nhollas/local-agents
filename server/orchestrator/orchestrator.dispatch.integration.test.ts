@@ -367,7 +367,7 @@ describe("Orchestrator dispatch", () => {
 		await expect(access(sentinelPath)).resolves.toBeUndefined();
 	});
 
-	it("before_run failure does not prevent dispatch", async () => {
+	it("before_run failure prevents dispatch", async () => {
 		server.use(
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent"])],
@@ -403,8 +403,7 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0].status).toBe("completed");
+		expect(allRuns).toHaveLength(0);
 	});
 
 	it("onComplete failure (PR creation 500) leaves run completed but label stays running", async () => {

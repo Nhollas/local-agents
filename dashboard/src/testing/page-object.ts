@@ -19,6 +19,8 @@ export function dashboardPageObject(page: BrowserPage) {
 		getRunDetailHeading: () => page.getByRole("heading", { level: 2 }),
 		getErrorAlert: () => page.getByRole("alert"),
 		getEventList: () => page.getByRole("list", { name: /events/i }),
+		getLoadingIndicator: () =>
+			page.getByRole("status", { name: "" }).getByText(/loading/i),
 
 		// --- Assertions ---
 
@@ -50,6 +52,10 @@ export function dashboardPageObject(page: BrowserPage) {
 			await expect
 				.element(self.getAgentSection(agentName))
 				.toHaveTextContent(new RegExp(`${count} run\\(s\\)`));
+		},
+
+		expectLoading: async () => {
+			await expect.element(self.getLoadingIndicator()).toBeVisible();
 		},
 
 		expectRunDetails: async (agentName: string) => {

@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchRunDetail, retryRun } from "../lib/api.ts";
+import { useQuery } from "@tanstack/react-query";
+import { useRetryRun } from "../hooks/use-retry-run.ts";
+import { fetchRunDetail } from "../lib/api.ts";
 import { formatDuration } from "../lib/format.ts";
 import type { Run } from "../lib/types.ts";
 import { StatusBadge } from "./status-badge.tsx";
@@ -10,18 +11,11 @@ type Props = {
 };
 
 export function RunDetails({ run, onBack }: Props) {
-	const queryClient = useQueryClient();
-	const { data: detail } = useQuery({
+	const { data: detail, isLoading } = useQuery({
 		queryKey: ["runs", run.id],
 		queryFn: () => fetchRunDetail(run.id),
 	});
-	const retryMutation = useMutation({
-		mutationFn: retryRun,
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["runs"] });
-			onBack();
-		},
-	});
+	const retryMutation = useRetryRun({ onSuccess: onBack });
 	const events = detail?.events ?? [];
 
 	return (
@@ -85,30 +79,36 @@ export function RunDetails({ run, onBack }: Props) {
 					</div>
 				)}
 
-				{events.length > 0 && (
-					<div>
-						<h3 className="text-sm font-medium text-text-secondary mb-2">
-							Events
-						</h3>
-						<ol aria-label="Events" className="space-y-1">
-							{events.map((ev) => (
-								<li
-									key={ev.id}
-									className="flex items-center gap-3 text-xs py-1"
-								>
-									<span className="text-text-muted font-mono w-16 shrink-0">
-										{new Date(ev.createdAt).toLocaleTimeString()}
-									</span>
-									<span className="text-text-subtle">{ev.type}</span>
-									{Object.keys(ev.data).length > 0 && (
-										<span className="text-text-muted truncate">
-											{JSON.stringify(ev.data)}
+				{isLoading ? (
+					<p role="status" className="text-sm text-text-muted py-2">
+						Loading events...
+					</p>
+				) : (
+					events.length > 0 && (
+						<div>
+							<h3 className="text-sm font-medium text-text-secondary mb-2">
+								Events
+							</h3>
+							<ol aria-label="Events" className="space-y-1">
+								{events.map((ev) => (
+									<li
+										key={ev.id}
+										className="flex items-center gap-3 text-xs py-1"
+									>
+										<span className="text-text-muted font-mono w-16 shrink-0">
+											{new Date(ev.createdAt).toLocaleTimeString()}
 										</span>
-									)}
-								</li>
-							))}
-						</ol>
-					</div>
+										<span className="text-text-subtle">{ev.type}</span>
+										{Object.keys(ev.data).length > 0 && (
+											<span className="text-text-muted truncate">
+												{JSON.stringify(ev.data)}
+											</span>
+										)}
+									</li>
+								))}
+							</ol>
+						</div>
+					)
 				)}
 			</div>
 		</div>

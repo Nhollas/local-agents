@@ -28,4 +28,6 @@ pnpm test                 # vitest across all projects
 
 ## Before considering work complete
 
-- Leave the codebase better than you found it. Fix pre-existing issues you encounter — for example lint warnings, type errors, or code smells — don't skip them just because they weren't yours.
+- Run `pnpm typecheck` and `pnpm test` to verify nothing is broken.
+- Check test coverage before you start and again once you're done. You should keep coverage at the same level or improve it. Match the testing depth the repo already establishes.
+- Leave the codebase better than you found it. Fix pre-existing issues you encounter, for example lint warnings, type errors, or code smells. Don't skip them just because they weren't yours.

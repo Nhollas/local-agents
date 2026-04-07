@@ -45,17 +45,20 @@ function mapApiRun(r: RunFromApi): Run {
 
 export async function fetchRuns(): Promise<Run[]> {
 	const res = await fetch("/runs");
+	if (!res.ok) throw new Error(`Failed to fetch runs: ${res.status}`);
 	const data: RunFromApi[] = await res.json();
 	return data.map(mapApiRun);
 }
 
 export async function fetchRunDetail(runId: string): Promise<RunDetailFromApi> {
 	const res = await fetch(`/runs/${runId}`);
+	if (!res.ok) throw new Error(`Failed to fetch run detail: ${res.status}`);
 	return res.json();
 }
 
 export async function killRun(runId: string): Promise<void> {
-	await fetch(`/runs/${runId}/kill`, { method: "POST" });
+	const res = await fetch(`/runs/${runId}/kill`, { method: "POST" });
+	if (!res.ok) throw new Error(`Failed to kill run: ${res.status}`);
 }
 
 export async function retryRun(runId: string): Promise<void> {

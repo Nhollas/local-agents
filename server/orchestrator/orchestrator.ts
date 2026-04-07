@@ -111,14 +111,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				issue,
 				attempt,
 			});
-			try {
-				await runShell(script, ws.path);
-			} catch (err) {
-				logger.warn(
-					{ issue: issue.key, err },
-					"orchestrator.before_run_failed",
-				);
-			}
+			await runShell(script, ws.path);
 		}
 
 		const prompt = renderPrompt(workflow.prompt, { issue, attempt });
@@ -155,7 +148,14 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 						issue,
 						attempt,
 					});
-					await runShell(script, ws.path);
+					try {
+						await runShell(script, ws.path);
+					} catch (err) {
+						logger.warn(
+							{ issue: issue.key, err },
+							"orchestrator.after_run_failed",
+						);
+					}
 				}
 			},
 		});

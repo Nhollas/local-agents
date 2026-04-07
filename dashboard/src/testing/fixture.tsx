@@ -3,6 +3,7 @@ import { test as base } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { App } from "../app";
+import { ErrorBoundary } from "../components/error-boundary";
 import type { RunEvent } from "../lib/types";
 import { Providers } from "../providers";
 import { browserWorker } from "./msw";
@@ -52,9 +53,11 @@ export const test = base
 		return {
 			async mount() {
 				await render(
-					<Providers>
-						<App />
-					</Providers>,
+					<ErrorBoundary>
+						<Providers>
+							<App />
+						</Providers>
+					</ErrorBoundary>,
 				);
 				await sseStream.waitForConnection();
 				return dashboardPageObject(page);
