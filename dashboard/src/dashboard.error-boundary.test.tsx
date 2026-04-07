@@ -5,7 +5,7 @@ import { ErrorBoundary } from "./components/error-boundary";
 
 const test = base.extend({});
 
-function ThrowingComponent({ message }: { message: string }) {
+function ThrowingComponent({ message }: { message: string }): React.ReactNode {
 	throw new Error(message);
 }
 
