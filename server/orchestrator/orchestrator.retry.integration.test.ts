@@ -113,6 +113,68 @@ describe("Orchestrator retryRun", () => {
 		expect(capturedOptions?.resume).toBe("sess-resume-me");
 	});
 
+	it("rejects retry when run does not exist", async () => {
+		server.use(...githubHandlers());
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig(),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: noopAgent,
+		});
+
+		const result = await orchestrator.retryRun("nonexistent-id");
+		expect(result).toEqual({ error: "Run not found" });
+	});
+
+	it("uses empty title when failed run has no stored issueTitle", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent:running"])],
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		seedRun(db, {
+			...failedRunDefaults,
+			id: "no-title",
+			issueTitle: null,
+		});
+
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({ workspace_root: workspace.root }),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: noopAgent,
+		});
+
+		const result = await orchestrator.retryRun("no-title");
+		expect(result).toHaveProperty("runId");
+
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		const allRuns = db.select().from(runs).all();
+		const retryRun = allRuns.find((r) => r.id !== "no-title");
+		expect(retryRun?.issueTitle).toBe("");
+	});
+
 	it("rejects retry when run is not failed", async () => {
 		server.use(...githubHandlers());
 

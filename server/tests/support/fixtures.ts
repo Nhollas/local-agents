@@ -29,12 +29,17 @@ export async function* failingAgent() {
 	throw new Error("agent exploded");
 }
 
-export function createSessionAgent(sessionId: string) {
+type ContentBlock = { type: "text"; text: string } | { type: string };
+
+export function createSessionAgent(
+	sessionId: string,
+	content: ContentBlock[] = [],
+) {
 	return async function* sessionAgent() {
 		yield {
 			type: "assistant" as const,
 			session_id: sessionId,
-			message: { content: [] },
+			message: { content },
 			parent_tool_use_id: null,
 			uuid: "00000000-0000-0000-0000-000000000001" as const,
 		};

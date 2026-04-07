@@ -214,6 +214,26 @@ describe("Runner integration", () => {
 		expect(run?.parentRunId).toBe("prev-id");
 	});
 
+	it("only persists the first sessionId when handler calls setSessionId multiple times", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const { runId } = runner.enqueue({
+			name: "multi-session-job",
+			issueKey: "owner/repo#8",
+			issueTitle: "Multi session issue",
+			handler: async (_emitToolUse, setSessionId) => {
+				setSessionId("first-session");
+				setSessionId("second-session");
+				setSessionId("third-session");
+			},
+		});
+
+		await runner.queue.waitForIdle();
+
+		const run = getRun(db, runId);
+		expect(run?.sessionId).toBe("first-session");
+	});
+
 	it("captures sessionId via setSessionId callback", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 

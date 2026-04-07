@@ -134,12 +134,9 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					prompt,
 					options: agentOptions as Parameters<typeof query>[0]["options"],
 				})) {
-					if (msg.type === "assistant") {
-						logAgentMessage(msg, ws.path, emitToolUse);
-						if ("session_id" in msg && typeof msg.session_id === "string") {
-							setSessionId(msg.session_id);
-						}
-					}
+					if (msg.type !== "assistant") continue;
+					logAgentMessage(msg, ws.path, emitToolUse);
+					setSessionId(msg.session_id);
 				}
 
 				if (workflow.hooks?.after_run) {
@@ -208,7 +205,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			}
 		}
 
-		const retriesExhausted = (defaults.max_retries ?? 0) - ctx.attempt < 0;
+		const retriesExhausted = defaults.max_retries - ctx.attempt < 0;
 		const shouldCleanup = result.status === "completed" || retriesExhausted;
 
 		if (shouldCleanup) {
@@ -356,7 +353,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		if (!failedRun.sessionId) return { error: "No session to resume" };
 		if (!failedRun.issueKey) return { error: "No issue key" };
 
-		const attempt = (failedRun.attempt ?? 1) + 1;
+		const attempt = failedRun.attempt + 1;
 		if (attempt > defaults.max_retries + 1)
 			return { error: "Max retries exceeded" };
 

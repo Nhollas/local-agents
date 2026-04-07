@@ -669,7 +669,7 @@ describe("Orchestrator dispatch", () => {
 		expect(names).toEqual(["issue-1", "issue-2"]);
 	});
 
-	it("stores sessionId when agent emits messages with session_id", async () => {
+	it("stores sessionId when agent emits assistant messages", async () => {
 		server.use(
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent"])],
@@ -690,7 +690,9 @@ describe("Orchestrator dispatch", () => {
 			config: createTestConfig({ workspace_root: workspace.root }),
 			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
 			runner,
-			runAgent: createSessionAgent("test-sess-abc"),
+			runAgent: createSessionAgent("test-sess-abc", [
+				{ type: "text", text: "Working on it" },
+			]),
 		});
 
 		await orchestrator.tick();

@@ -84,6 +84,18 @@ describe("logAgentMessage", () => {
 		expect(emitToolUse).toHaveBeenCalledWith("Bash", "pnpm test");
 	});
 
+	it("emits empty detail for tools with no recognisable input keys", () => {
+		const emitToolUse = vi.fn();
+
+		logAgentMessage(
+			toolUseMsg("WebSearch", { query: "vitest coverage" }),
+			"/workdir",
+			emitToolUse,
+		);
+
+		expect(emitToolUse).toHaveBeenCalledWith("WebSearch", "");
+	});
+
 	it("reads file_path, pattern, or command from tool input", () => {
 		const emitToolUse = vi.fn();
 		const workDir = "/workdir";
