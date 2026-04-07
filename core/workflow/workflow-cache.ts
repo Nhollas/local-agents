@@ -54,13 +54,7 @@ export function createWorkflowCache(
 		workflows,
 		refresh,
 		start() {
-			timer = setInterval(
-				() =>
-					refresh().catch((err) =>
-						logger.error({ err }, "workflow-cache.refresh_error"),
-					),
-				REFRESH_INTERVAL_MS,
-			);
+			timer = setInterval(refresh, REFRESH_INTERVAL_MS);
 		},
 		stop() {
 			clearInterval(timer);

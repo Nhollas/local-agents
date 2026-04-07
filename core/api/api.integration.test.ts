@@ -1,42 +1,14 @@
 import type { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createTestDb } from "../../tests/support/test-db.ts";
+import {
+	createTestDb,
+	seedEvent,
+	seedRun,
+} from "../../tests/support/test-db.ts";
 import type { Db } from "../db/db.ts";
-import { runEvents, runs } from "../db/schema.ts";
 import type { Runner } from "../runner/runner.ts";
 import { createRunner } from "../runner/runner.ts";
 import { createApi, type RetryFn } from "./api.ts";
-
-function seedRun(
-	db: Db,
-	overrides: Partial<typeof runs.$inferInsert> & { id: string },
-) {
-	db.insert(runs)
-		.values({
-			agentName: "test-agent",
-			status: "completed",
-			startedAt: new Date().toISOString(),
-			...overrides,
-		})
-		.run();
-}
-
-function seedEvent(
-	db: Db,
-	overrides: Partial<typeof runEvents.$inferInsert> & {
-		id: string;
-		runId: string;
-	},
-) {
-	db.insert(runEvents)
-		.values({
-			type: "run:started",
-			data: {},
-			createdAt: new Date().toISOString(),
-			...overrides,
-		})
-		.run();
-}
 
 const noopRetry: RetryFn = async () => ({ error: "not implemented" });
 

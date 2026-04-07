@@ -7,6 +7,55 @@ import { githubCodeHostAdapter } from "./github.ts";
 
 const adapter = githubCodeHostAdapter(createGitHubClient("test-token"));
 
+describe("fetchFile", () => {
+	it("fetches file content from the default branch", async () => {
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, () =>
+				HttpResponse.json({
+					content: Buffer.from("hello world").toString("base64"),
+				}),
+			),
+		);
+
+		const content = await adapter.fetchFile(REPO, "README.md");
+		expect(content).toBe("hello world");
+	});
+
+	it("passes ref as query param when provided", async () => {
+		let capturedRef: string | null = null;
+
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, ({ request }) => {
+				const url = new URL(request.url);
+				capturedRef = url.searchParams.get("ref");
+				return HttpResponse.json({
+					content: Buffer.from("from branch").toString("base64"),
+				});
+			}),
+		);
+
+		const content = await adapter.fetchFile(
+			REPO,
+			"README.md",
+			"feature-branch",
+		);
+		expect(content).toBe("from branch");
+		expect(capturedRef).toBe("feature-branch");
+	});
+
+	it("returns null when file does not exist", async () => {
+		server.use(
+			http.get(
+				`${GITHUB_API}/repos/${REPO}/contents/:path+`,
+				() => new HttpResponse(null, { status: 404 }),
+			),
+		);
+
+		const content = await adapter.fetchFile(REPO, "nonexistent.md");
+		expect(content).toBeNull();
+	});
+});
+
 describe("createChangeRequest", () => {
 	it("creates a new PR when none exists", async () => {
 		server.use(

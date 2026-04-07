@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GITHUB_API, REPO } from "../../tests/support/fixtures.ts";
 import { server } from "../../tests/support/msw.ts";
 import { githubCodeHostAdapter } from "../code-hosts/github.ts";
@@ -57,16 +57,11 @@ describe("Workflow cache integration", () => {
 	});
 
 	it("keeps last-known-good workflow on refresh failure", async () => {
-		let callCount = 0;
-
 		server.use(
-			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, () => {
-				callCount++;
-				if (callCount === 1) {
-					return HttpResponse.json({
-						content: base64(validWorkflowYaml),
-					});
-				}
+			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, function* () {
+				yield HttpResponse.json({
+					content: base64(validWorkflowYaml),
+				});
 				return new HttpResponse(null, { status: 500 });
 			}),
 		);
@@ -120,18 +115,44 @@ base_branch: "develop"
 		expect(workflow2?.base_branch).toBe("develop");
 	});
 
-	it("keeps last-known-good workflow when schema validation fails", async () => {
-		let callCount = 0;
+	it("start() triggers periodic refresh and stop() halts it", async () => {
+		vi.useFakeTimers();
+
+		let fetchCount = 0;
 
 		server.use(
 			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, () => {
-				callCount++;
-				if (callCount === 1) {
-					return HttpResponse.json({
-						content: base64(validWorkflowYaml),
-					});
-				}
-				// Return valid base64 but invalid YAML content (missing required field)
+				fetchCount++;
+				return HttpResponse.json({
+					content: base64(validWorkflowYaml),
+				});
+			}),
+		);
+
+		const github = createGitHubClient("test-token");
+		const codeHost = githubCodeHostAdapter(github);
+		const cache = createWorkflowCache(codeHost, [REPO]);
+
+		cache.start();
+
+		await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+		expect(fetchCount).toBe(1);
+
+		cache.stop();
+
+		await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+		expect(fetchCount).toBe(1);
+
+		vi.useRealTimers();
+	});
+
+	it("keeps last-known-good workflow when schema validation fails", async () => {
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, function* () {
+				yield HttpResponse.json({
+					content: base64(validWorkflowYaml),
+				});
+				// Valid base64 but invalid YAML content (missing required field)
 				return HttpResponse.json({
 					content: base64("not: valid\nworkflow: yaml\n"),
 				});
