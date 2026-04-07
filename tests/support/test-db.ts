@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { Db } from "../../core/db/db.ts";
 import { migrate } from "../../core/db/migrate.ts";
@@ -41,4 +42,12 @@ export function seedEvent(
 			...overrides,
 		})
 		.run();
+}
+
+export function getRun(db: Db, runId: string) {
+	return db.select().from(runs).where(eq(runs.id, runId)).get();
+}
+
+export function getEvents(db: Db, runId: string) {
+	return db.select().from(runEvents).where(eq(runEvents.runId, runId)).all();
 }
