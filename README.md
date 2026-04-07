@@ -2,9 +2,9 @@
 
 AI agents that run on your machine, triggered by issue trackers, powered by your Claude subscription.
 
-A polling orchestrator watches multiple repos for labeled issues, merges them into an oldest-first queue, creates isolated workspaces, and runs Claude agents to do the work.
+A polling orchestrator watches multiple repos for labelled issues, merges them into an oldest-first queue, creates isolated workspaces, and runs Claude agents to do the work.
 
-See [docs/pattern.md](docs/pattern.md) for the full pattern documentation.
+See [docs/architecture.md](docs/architecture.md) for the full architecture and design decisions.
 
 ## Setup
 
@@ -98,45 +98,6 @@ The dashboard shows all agent runs in real-time:
 - Drill into run details to see tool use activity
 - Kill running agents
 - Dark/light theme
-
-## Architecture
-
-```
-config.yaml → Orchestrator → GitHub Issues (poll all repos)
-                   │
-                   ▼
-             Merge + Sort (oldest first)
-                   │
-                   ▼
-             Claim → Workspace (git clone) → Claude Agent SDK
-                   │
-                   ▼
-             Runner (queue + persistence + SSE)
-                   │
-                   ▼
-             Dashboard (React + Tailwind)
-```
-
-### Key Components
-
-| Component      | File                        | Purpose                                                |
-| -------------- | --------------------------- | ------------------------------------------------------ |
-| Orchestrator   | `core/orchestrator.ts`      | Multi-repo polling with oldest-first dispatch          |
-| Tracker        | `core/trackers/github.ts`   | GitHub Issues adapter via `gh` CLI                     |
-| Code Host      | `core/code-hosts/github.ts` | GitHub file fetching and clone URLs                    |
-| Config         | `core/config.ts`            | Central `config.yaml` parser                           |
-| Workflow       | `core/workflow.ts`          | Per-repo workflow parser with template rendering       |
-| Workflow Cache | `core/workflow-cache.ts`    | Fetches and caches `.agents/workflow.yaml` from repos  |
-| Workspace      | `core/workspace.ts`         | Isolated workspace management with git clone and hooks |
-| Runner         | `core/runner.ts`            | Job queue with persistence and SSE events              |
-| API            | `core/api.ts`               | Hono server for dashboard endpoints                    |
-
-### Adapter Interfaces
-
-| Interface         | Purpose                               | Implementations   |
-| ----------------- | ------------------------------------- | ----------------- |
-| `TrackerAdapter`  | Fetch active issues from a tracker    | GitHub (`gh` CLI) |
-| `CodeHostAdapter` | Fetch files and clone URLs from repos | GitHub (`gh` API) |
 
 ## Requirements
 
