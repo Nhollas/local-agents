@@ -7,7 +7,7 @@ import { renderPrompt } from "../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 
-function sanitizeKey(key: string): string {
+export function sanitizeKey(key: string): string {
 	return key.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 

@@ -22,8 +22,13 @@ const LABELS = {
 	completed: "agent:awaiting-review",
 } as const;
 
-function repoFromKey(key: string): string {
-	return key.slice(0, key.lastIndexOf("#"));
+function parseIssueKey(key: string): { repo: string; number: number } {
+	const hashIndex = key.lastIndexOf("#");
+	if (hashIndex === -1) throw new Error(`Invalid issue key: ${key}`);
+	return {
+		repo: key.slice(0, hashIndex),
+		number: Number.parseInt(key.slice(hashIndex + 1), 10),
+	};
 }
 
 async function runShell(script: string, cwd: string): Promise<void> {
@@ -48,6 +53,12 @@ type OrchestratorConfig = {
 
 type RunSnapshot = { id: string; issueKey: string };
 type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
+type TickState = {
+	runningByIssue: Map<string, string[]>;
+	runningCount: number;
+	pending: TaggedIssue[];
+	stillRunning: Map<string, Set<string>>;
+};
 
 function getRunSnapshot(db: Db): RunSnapshot[] {
 	return db
@@ -224,117 +235,124 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		}
 	}
 
+	async function fetchTickState(): Promise<TickState> {
+		const entries = [...workflows.entries()];
+
+		const dbSnapshot = getRunSnapshot(db);
+		const runningByIssue = new Map<string, string[]>();
+		for (const r of dbSnapshot) {
+			const ids = runningByIssue.get(r.issueKey) ?? [];
+			ids.push(r.id);
+			runningByIssue.set(r.issueKey, ids);
+		}
+
+		const reposWithRunning = new Set(
+			[...runningByIssue.keys()].map((k) => parseIssueKey(k).repo),
+		);
+
+		const [pendingResults, runningResults] = await Promise.all([
+			Promise.allSettled(
+				entries.map(async ([repo, workflow]) => {
+					const issues = await tracker.fetchActiveIssues(repo, LABELS.pending);
+					return issues.map(
+						(issue): TaggedIssue => ({ issue, repo, workflow }),
+					);
+				}),
+			),
+			runningByIssue.size > 0
+				? Promise.allSettled(
+						entries
+							.filter(([repo]) => reposWithRunning.has(repo))
+							.map(async ([repo]) => {
+								const issues = await tracker.fetchActiveIssues(
+									repo,
+									LABELS.running,
+								);
+								return { repo, keys: new Set(issues.map((i) => i.key)) };
+							}),
+					)
+				: Promise.resolve([]),
+		]);
+
+		const pending: TaggedIssue[] = [];
+		for (const result of pendingResults) {
+			if (result.status === "fulfilled") {
+				pending.push(...result.value);
+			}
+		}
+		pending.sort((a, b) => a.issue.createdAt.localeCompare(b.issue.createdAt));
+
+		const stillRunning = new Map<string, Set<string>>();
+		for (const result of runningResults) {
+			if (result.status === "fulfilled") {
+				stillRunning.set(result.value.repo, result.value.keys);
+			}
+		}
+
+		return {
+			runningByIssue,
+			runningCount: dbSnapshot.length,
+			pending,
+			stillRunning,
+		};
+	}
+
+	function reconcileStaleRuns(state: TickState) {
+		for (const [key, runIds] of state.runningByIssue) {
+			const { repo } = parseIssueKey(key);
+			const repoKeys = state.stillRunning.get(repo);
+			if (repoKeys && !repoKeys.has(key)) {
+				logger.info({ key }, "orchestrator.reconcile_terminal");
+				for (const id of runIds) {
+					runner.kill(id);
+				}
+			}
+		}
+	}
+
+	async function dispatchPendingIssues(state: TickState) {
+		let { runningCount } = state;
+
+		for (const { issue, repo, workflow } of state.pending) {
+			if (state.runningByIssue.has(issue.key)) continue;
+			if (runningCount >= defaults.max_concurrent) break;
+
+			await tracker.swapLabel(
+				repo,
+				issue.number,
+				LABELS.pending,
+				LABELS.running,
+			);
+
+			try {
+				await prepareAndDispatch({ issue, repo, workflow, attempt: 1 });
+			} catch (err) {
+				logger.warn({ issue: issue.key, err }, "orchestrator.dispatch_failed");
+				await tracker
+					.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+					.catch((rollbackErr) =>
+						logger.warn(
+							{ issue: issue.key, err: rollbackErr },
+							"orchestrator.rollback_failed",
+						),
+					);
+				continue;
+			}
+
+			runningCount++;
+			state.runningByIssue.set(issue.key, []);
+			logger.info({ issue: issue.key }, "orchestrator.dispatched");
+		}
+	}
+
 	async function tick() {
 		if (ticking) return;
 		ticking = true;
 
 		try {
-			const entries = [...workflows.entries()];
-
-			const snapshot = getRunSnapshot(db);
-			const runningByIssue = new Map<string, string[]>();
-			for (const r of snapshot) {
-				const ids = runningByIssue.get(r.issueKey) ?? [];
-				ids.push(r.id);
-				runningByIssue.set(r.issueKey, ids);
-			}
-			let runningCount = snapshot.length;
-
-			const reposWithRunning = new Set(
-				[...runningByIssue.keys()].map((k) => repoFromKey(k)),
-			);
-
-			const [pendingResults, runningResults] = await Promise.all([
-				Promise.allSettled(
-					entries.map(async ([repo, workflow]) => {
-						const issues = await tracker.fetchActiveIssues(
-							repo,
-							LABELS.pending,
-						);
-						return issues.map(
-							(issue): TaggedIssue => ({ issue, repo, workflow }),
-						);
-					}),
-				),
-				runningByIssue.size > 0
-					? Promise.allSettled(
-							entries
-								.filter(([repo]) => reposWithRunning.has(repo))
-								.map(async ([repo]) => {
-									const issues = await tracker.fetchActiveIssues(
-										repo,
-										LABELS.running,
-									);
-									return { repo, keys: new Set(issues.map((i) => i.key)) };
-								}),
-						)
-					: Promise.resolve([]),
-			]);
-
-			const allTagged: TaggedIssue[] = [];
-			for (const result of pendingResults) {
-				if (result.status === "fulfilled") {
-					allTagged.push(...result.value);
-				}
-			}
-
-			allTagged.sort((a, b) =>
-				a.issue.createdAt.localeCompare(b.issue.createdAt),
-			);
-
-			// Reconcile: kill agents whose issues no longer have the running label
-			const stillRunning = new Map<string, Set<string>>();
-			for (const result of runningResults) {
-				if (result.status === "fulfilled") {
-					stillRunning.set(result.value.repo, result.value.keys);
-				}
-			}
-
-			for (const [key, runIds] of runningByIssue) {
-				const repo = repoFromKey(key);
-				const repoKeys = stillRunning.get(repo);
-				if (repoKeys && !repoKeys.has(key)) {
-					logger.info({ key }, "orchestrator.reconcile_terminal");
-					for (const id of runIds) {
-						runner.kill(id);
-					}
-				}
-			}
-
-			// Dispatch oldest-first up to max_concurrent
-			for (const { issue, repo, workflow } of allTagged) {
-				if (runningByIssue.has(issue.key)) continue;
-				if (runningCount >= defaults.max_concurrent) break;
-
-				await tracker.swapLabel(
-					repo,
-					issue.number,
-					LABELS.pending,
-					LABELS.running,
-				);
-
-				try {
-					await prepareAndDispatch({ issue, repo, workflow, attempt: 1 });
-				} catch (err) {
-					logger.warn(
-						{ issue: issue.key, err },
-						"orchestrator.dispatch_failed",
-					);
-					await tracker
-						.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
-						.catch((rollbackErr) =>
-							logger.warn(
-								{ issue: issue.key, err: rollbackErr },
-								"orchestrator.rollback_failed",
-							),
-						);
-					continue;
-				}
-
-				runningCount++;
-				runningByIssue.set(issue.key, []);
-				logger.info({ issue: issue.key }, "orchestrator.dispatched");
-			}
+			const state = await fetchTickState();
+			reconcileStaleRuns(state);
+			await dispatchPendingIssues(state);
 		} finally {
 			ticking = false;
 		}
@@ -362,11 +380,10 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			return { error: "Issue already has a running agent" };
 		}
 
-		const repo = repoFromKey(failedRun.issueKey);
+		const { repo, number: issueNumber } = parseIssueKey(failedRun.issueKey);
 		const workflow = workflows.get(repo);
 		if (!workflow) return { error: "No workflow for repo" };
 
-		const issueNumber = Number.parseInt(failedRun.issueKey.split("#")[1], 10);
 		const issue: Issue = {
 			key: failedRun.issueKey,
 			number: issueNumber,

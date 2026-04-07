@@ -1,10 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-function sanitizeKey(key: string): string {
-	return key.replace(/[^A-Za-z0-9._-]/g, "_");
-}
+import { sanitizeKey } from "../../orchestrator/workspace.ts";
 
 type TestWorkspace = {
 	root: string;
