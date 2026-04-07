@@ -233,4 +233,84 @@ describe("Dashboard - run details", () => {
 		await dashboard.goBack();
 		await dashboard.expectAgentVisible("pr-summary");
 	});
+
+	test("shows attempt number for retried runs", async ({ dashboardPage }) => {
+		browserWorker.use(
+			http.get("/runs", () =>
+				HttpResponse.json([
+					createRunFromApi({
+						id: "run-abc",
+						agentName: "pr-summary",
+						status: "failed",
+						error: "Agent crashed",
+						attempt: 3,
+					}),
+				]),
+			),
+			http.get("/runs/run-abc", () =>
+				HttpResponse.json(
+					createRunDetailFromApi({
+						id: "run-abc",
+						agentName: "pr-summary",
+						status: "failed",
+						error: "Agent crashed",
+						attempt: 3,
+					}),
+				),
+			),
+		);
+
+		const dashboard = await dashboardPage.mount();
+		await dashboard.selectRun("run-abc");
+		await dashboard.expectRunDetails("pr-summary");
+
+		await expect.element(dashboard.getByText("Attempt")).toBeVisible();
+	});
+
+	test("appends live SSE events to the event timeline", async ({
+		dashboardPage,
+		sseStream,
+	}) => {
+		browserWorker.use(
+			http.get("/runs/run-abc", () =>
+				HttpResponse.json(
+					createRunDetailFromApi({
+						id: "run-abc",
+						agentName: "pr-summary",
+						events: [
+							{
+								id: "evt-1",
+								runId: "run-abc",
+								type: "run:started",
+								data: {},
+								createdAt: "2026-03-20T12:00:00.000Z",
+							},
+						],
+					}),
+				),
+			),
+		);
+
+		const dashboard = await dashboardPage.mount();
+
+		sseStream.emit(
+			createRunEvent("run:started", {
+				runId: "run-abc",
+				agentName: "pr-summary",
+			}),
+		);
+
+		await dashboard.selectRun("run-abc");
+		await dashboard.expectEvents(1);
+
+		sseStream.emit(
+			createRunEvent("run:output", {
+				runId: "run-abc",
+				agentName: "pr-summary",
+				data: { message: "Processing PR #42" },
+			}),
+		);
+
+		await dashboard.expectEvents(2);
+	});
 });

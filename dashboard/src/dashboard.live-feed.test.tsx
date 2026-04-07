@@ -1,6 +1,8 @@
+import { HttpResponse, http } from "msw";
 import { describe } from "vitest";
-import { createRunEvent } from "./testing/contract";
+import { createRunEvent, createRunFromApi } from "./testing/contract";
 import { expect, test } from "./testing/fixture";
+import { browserWorker } from "./testing/msw";
 
 describe("Dashboard - live feed", () => {
 	test("displays a new run when a run:started event arrives", async ({
@@ -117,5 +119,36 @@ describe("Dashboard - live feed", () => {
 		await dashboard.expectRunCount("pr-summary", 2);
 		await dashboard.expectRunVisible("run-1");
 		await dashboard.expectRunVisible("run-2");
+	});
+
+	test("does not duplicate a run when run:started arrives for an existing run", async ({
+		dashboardPage,
+		sseStream,
+	}) => {
+		browserWorker.use(
+			http.get("/runs", () =>
+				HttpResponse.json([
+					createRunFromApi({
+						id: "run-1",
+						agentName: "pr-summary",
+						status: "running",
+						completedAt: null,
+						durationMs: null,
+					}),
+				]),
+			),
+		);
+
+		const dashboard = await dashboardPage.mount();
+		await dashboard.expectRunCount("pr-summary", 1);
+
+		sseStream.emit(
+			createRunEvent("run:started", {
+				runId: "run-1",
+				agentName: "pr-summary",
+			}),
+		);
+
+		await dashboard.expectRunCount("pr-summary", 1);
 	});
 });
