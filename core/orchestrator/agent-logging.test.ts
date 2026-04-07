@@ -1,21 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import { logAgentMessage } from "./agent-logging.ts";
+import { type AgentMessage, logAgentMessage } from "./agent-logging.ts";
 
-function toolUseMsg(name: string, input: Record<string, unknown>) {
+function toolUseMsg(
+	name: string,
+	input: Record<string, unknown>,
+): AgentMessage {
 	return {
-		type: "assistant" as const,
-		message: {
-			content: [{ type: "tool_use" as const, name, input }],
-		},
+		type: "assistant",
+		message: { content: [{ type: "tool_use", name, input }] },
 	};
 }
 
-function textMsg(text: string) {
+function textMsg(text: string): AgentMessage {
 	return {
-		type: "assistant" as const,
-		message: {
-			content: [{ type: "text" as const, text }],
-		},
+		type: "assistant",
+		message: { content: [{ type: "text", text }] },
 	};
 }
 

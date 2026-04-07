@@ -3,6 +3,23 @@
  */
 import { logger } from "../logger.ts";
 
+type TextBlock = { type: "text"; text: string };
+type ToolUseBlock = {
+	type: "tool_use";
+	name: string;
+	input: Record<string, unknown>;
+};
+type ContentBlock = TextBlock | ToolUseBlock | { type: string };
+
+export type AgentMessage = {
+	type: "assistant";
+	message: { content: ContentBlock[] };
+};
+
+function isToolUse(block: ContentBlock): block is ToolUseBlock {
+	return block.type === "tool_use";
+}
+
 /** Strip the workdir prefix from a path for cleaner logging. */
 function shortPath(fullPath: string, workDir: string): string {
 	const privatePrefixed = `/private${workDir}`;
@@ -17,33 +34,24 @@ function shortPath(fullPath: string, workDir: string): string {
 
 /** Log assistant text and tool use activity from an agent message. */
 export function logAgentMessage(
-	msg: { type: string; message: { content: Array<Record<string, unknown>> } },
+	msg: AgentMessage,
 	workDir: string,
 	emitToolUse?: (tool: string, target: string) => void,
 ): void {
 	const text = msg.message.content
-		.filter((b): b is { type: "text"; text: string } => b.type === "text")
+		.filter((b): b is TextBlock => b.type === "text")
 		.map((b) => b.text)
 		.join("")
 		.slice(0, 200);
-	if (text) logger.debug({ text: text.slice(0, 200) }, "agent.text");
+	if (text) logger.debug({ text }, "agent.text");
 
-	const toolUses = msg.message.content.filter(
-		(b) => b.type === "tool_use",
-	) as Array<{
-		type: "tool_use";
-		name: string;
-		input: Record<string, unknown>;
-	}>;
-	for (const tool of toolUses) {
+	for (const block of msg.message.content) {
+		if (!isToolUse(block)) continue;
 		const raw = String(
-			tool.input.pattern ?? tool.input.file_path ?? tool.input.command ?? "",
+			block.input.pattern ?? block.input.file_path ?? block.input.command ?? "",
 		);
-		const detail = shortPath(raw, workDir);
-		logger.debug(
-			{ tool: tool.name, target: detail.slice(0, 100) },
-			"agent.tool_use",
-		);
-		emitToolUse?.(tool.name, detail.slice(0, 100));
+		const detail = shortPath(raw, workDir).slice(0, 100);
+		logger.debug({ tool: block.name, target: detail }, "agent.tool_use");
+		emitToolUse?.(block.name, detail);
 	}
 }
