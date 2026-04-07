@@ -7,7 +7,7 @@ import {
 } from "../../tests/support/fixtures.ts";
 import { githubHandlers, server } from "../../tests/support/msw.ts";
 import { createTestConfig } from "../../tests/support/test-config.ts";
-import { createTestDb } from "../../tests/support/test-db.ts";
+import { createTestDb, seedRun } from "../../tests/support/test-db.ts";
 import { createTestWorkspaceRoot } from "../../tests/support/test-workspace.ts";
 import { githubCodeHostAdapter } from "../code-hosts/github.ts";
 import { runs } from "../db/schema.ts";
@@ -17,25 +17,16 @@ import { githubTrackerAdapter } from "../trackers/github.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { createOrchestrator } from "./orchestrator.ts";
 
-function seedFailedRun(
-	db: ReturnType<typeof createTestDb>,
-	overrides: Partial<typeof runs.$inferInsert> & { id: string },
-) {
-	db.insert(runs)
-		.values({
-			agentName: "issue-1",
-			status: "failed",
-			issueKey: `${REPO}#1`,
-			issueTitle: "Test issue",
-			startedAt: new Date().toISOString(),
-			completedAt: new Date().toISOString(),
-			error: "agent exploded",
-			sessionId: "sess-abc",
-			attempt: 1,
-			...overrides,
-		})
-		.run();
-}
+const failedRunDefaults = {
+	agentName: "issue-1",
+	status: "failed" as const,
+	issueKey: `${REPO}#1`,
+	issueTitle: "Test issue",
+	completedAt: new Date().toISOString(),
+	error: "agent exploded",
+	sessionId: "sess-abc",
+	attempt: 1,
+};
 
 describe("Orchestrator retryRun", () => {
 	it("retries a failed run and creates a new run record", async () => {
@@ -49,7 +40,7 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
-		seedFailedRun(db, { id: "failed-1" });
+		seedRun(db, { ...failedRunDefaults, id: "failed-1" });
 
 		const github = createGitHubClient("test-token");
 		const runner = createRunner({ db, maxConcurrency: 2 });
@@ -90,7 +81,11 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
-		seedFailedRun(db, { id: "failed-2", sessionId: "sess-resume-me" });
+		seedRun(db, {
+			...failedRunDefaults,
+			id: "failed-2",
+			sessionId: "sess-resume-me",
+		});
 
 		const github = createGitHubClient("test-token");
 		const runner = createRunner({ db, maxConcurrency: 2 });
@@ -155,7 +150,7 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
-		seedFailedRun(db, { id: "no-sess", sessionId: null });
+		seedRun(db, { ...failedRunDefaults, id: "no-sess", sessionId: null });
 
 		const github = createGitHubClient("test-token");
 		const runner = createRunner({ db, maxConcurrency: 2 });
@@ -178,7 +173,7 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
-		seedFailedRun(db, { id: "maxed-out", attempt: 4 });
+		seedRun(db, { ...failedRunDefaults, id: "maxed-out", attempt: 4 });
 
 		const github = createGitHubClient("test-token");
 		const runner = createRunner({ db, maxConcurrency: 2 });
@@ -201,7 +196,7 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
-		seedFailedRun(db, { id: "failed-dup" });
+		seedRun(db, { ...failedRunDefaults, id: "failed-dup" });
 		// Seed a running run for the same issue
 		db.insert(runs)
 			.values({

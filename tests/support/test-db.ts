@@ -1,7 +1,9 @@
 import Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { Db } from "../../core/db/db.ts";
 import { migrate } from "../../core/db/migrate.ts";
+import { runEvents, runs } from "../../core/db/schema.ts";
 
 export function createTestDb(): Db {
 	const sqlite = new Database(":memory:");
@@ -9,4 +11,43 @@ export function createTestDb(): Db {
 	const db = drizzle(sqlite);
 	migrate(db);
 	return db;
+}
+
+export function seedRun(
+	db: Db,
+	overrides: Partial<typeof runs.$inferInsert> & { id: string },
+) {
+	db.insert(runs)
+		.values({
+			agentName: "test-agent",
+			status: "completed",
+			startedAt: new Date().toISOString(),
+			...overrides,
+		})
+		.run();
+}
+
+export function seedEvent(
+	db: Db,
+	overrides: Partial<typeof runEvents.$inferInsert> & {
+		id: string;
+		runId: string;
+	},
+) {
+	db.insert(runEvents)
+		.values({
+			type: "run:started",
+			data: {},
+			createdAt: new Date().toISOString(),
+			...overrides,
+		})
+		.run();
+}
+
+export function getRun(db: Db, runId: string) {
+	return db.select().from(runs).where(eq(runs.id, runId)).get();
+}
+
+export function getEvents(db: Db, runId: string) {
+	return db.select().from(runEvents).where(eq(runEvents.runId, runId)).all();
 }

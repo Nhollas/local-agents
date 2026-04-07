@@ -1,17 +1,11 @@
-import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createTestDb } from "../../tests/support/test-db.ts";
+import {
+	createTestDb,
+	getEvents,
+	getRun,
+} from "../../tests/support/test-db.ts";
 import type { Db } from "../db/db.ts";
-import { runEvents, runs } from "../db/schema.ts";
 import { createRunner } from "./runner.ts";
-
-function getRun(db: Db, runId: string) {
-	return db.select().from(runs).where(eq(runs.id, runId)).get();
-}
-
-function getEvents(db: Db, runId: string) {
-	return db.select().from(runEvents).where(eq(runEvents.runId, runId)).all();
-}
 
 describe("Runner integration", () => {
 	let db: Db;

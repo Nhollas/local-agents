@@ -8,6 +8,9 @@ export default defineConfig({
 		silent: "passed-only",
 		clearMocks: true,
 		restoreMocks: true,
+		coverage: {
+			provider: "v8",
+		},
 		projects: [
 			{
 				test: {
