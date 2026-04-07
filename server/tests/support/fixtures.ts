@@ -39,7 +39,8 @@ export function createSessionAgent(
 		yield {
 			type: "assistant" as const,
 			session_id: sessionId,
-			message: { content },
+			// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's BetaMessage shape
+			message: { content } as any,
 			parent_tool_use_id: null,
 			uuid: "00000000-0000-0000-0000-000000000001" as const,
 		};
