@@ -15,11 +15,11 @@ pnpm test                 # vitest across all projects
 
 ## Structure
 
-| Directory    | Purpose                                                          |
-| ------------ | ---------------------------------------------------------------- |
-| `core/`      | Orchestrator, queue, runner, code-host adapters, workflow engine |
-| `dashboard/` | React + Vite dashboard UI with Tailwind                          |
-| `docs/`      | Architecture and pattern documentation                           |
+| Directory      | Purpose                                                          |
+| -------------- | ---------------------------------------------------------------- |
+| `server/`      | Orchestrator, queue, runner, code-host adapters, workflow engine |
+| `dashboard/`   | React + Vite dashboard UI with Tailwind                          |
+| `docs/`        | Architecture and pattern documentation                           |
 
 ## Before writing code
 

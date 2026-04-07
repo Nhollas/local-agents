@@ -1,9 +1,9 @@
 import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import type { Db } from "../../core/db/db.ts";
-import { migrate } from "../../core/db/migrate.ts";
-import { runEvents, runs } from "../../core/db/schema.ts";
+import type { Db } from "../../db/db.ts";
+import { migrate } from "../../db/migrate.ts";
+import { runEvents, runs } from "../../db/schema.ts";
 
 export function createTestDb(): Db {
 	const sqlite = new Database(":memory:");

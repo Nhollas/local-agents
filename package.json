@@ -5,8 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"prepare": "husky",
-		"start": "node server.ts",
-		"dev": "concurrently -n orchestrator,dashboard -c blue,magenta \"node --watch server.ts\" \"vite --config dashboard/vite.config.ts\"",
+		"start": "node server/server.ts",
+		"dev": "concurrently -n orchestrator,dashboard -c blue,magenta \"node --watch server/server.ts\" \"vite --config dashboard/vite.config.ts\"",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"test": "vitest run",

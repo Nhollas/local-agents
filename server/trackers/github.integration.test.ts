@@ -1,12 +1,12 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { createGitHubClient } from "../github-client.ts";
 import {
 	createGitHubIssue,
 	GITHUB_API,
 	REPO,
-} from "../../tests/support/fixtures.ts";
-import { server } from "../../tests/support/msw.ts";
-import { createGitHubClient } from "../github-client.ts";
+} from "../tests/support/fixtures.ts";
+import { server } from "../tests/support/msw.ts";
 import { githubTrackerAdapter } from "./github.ts";
 
 describe("githubTrackerAdapter", () => {

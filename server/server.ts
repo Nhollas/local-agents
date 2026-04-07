@@ -1,16 +1,16 @@
 import { serve } from "@hono/node-server";
-import { createApi } from "./core/api/api.ts";
-import { githubCodeHostAdapter } from "./core/code-hosts/github.ts";
-import { loadConfig } from "./core/config.ts";
-import { getDb } from "./core/db/db.ts";
-import { migrate } from "./core/db/migrate.ts";
-import { loadEnv } from "./core/env.ts";
-import { createGitHubClient } from "./core/github-client.ts";
-import { logger } from "./core/logger.ts";
-import { createOrchestrator } from "./core/orchestrator/orchestrator.ts";
-import { createRunner } from "./core/runner/runner.ts";
-import { githubTrackerAdapter } from "./core/trackers/github.ts";
-import { createWorkflowCache } from "./core/workflow/workflow-cache.ts";
+import { createApi } from "./api/api.ts";
+import { githubCodeHostAdapter } from "./code-hosts/github.ts";
+import { loadConfig } from "./config.ts";
+import { getDb } from "./db/db.ts";
+import { migrate } from "./db/migrate.ts";
+import { loadEnv } from "./env.ts";
+import { createGitHubClient } from "./github-client.ts";
+import { logger } from "./logger.ts";
+import { createOrchestrator } from "./orchestrator/orchestrator.ts";
+import { createRunner } from "./runner/runner.ts";
+import { githubTrackerAdapter } from "./trackers/github.ts";
+import { createWorkflowCache } from "./workflow/workflow-cache.ts";
 
 const env = loadEnv();
 const config = loadConfig(env.CONFIG_PATH);

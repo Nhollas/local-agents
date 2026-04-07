@@ -1,4 +1,4 @@
-import type { RepoWorkflow } from "../../core/workflow/workflow.ts";
+import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 export const GITHUB_API = "https://api.github.com";
 export const REPO = "test-owner/test-repo";

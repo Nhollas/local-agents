@@ -28,7 +28,7 @@ export default defineConfig({
 					name: "integration",
 					include: ["**/*.integration.test.ts"],
 					exclude: ["node_modules/**", "dashboard/**"],
-					setupFiles: ["tests/setup/integration.ts"],
+					setupFiles: ["server/tests/setup/integration.ts"],
 				},
 			},
 			{

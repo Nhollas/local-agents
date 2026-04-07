@@ -1,5 +1,9 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { githubCodeHostAdapter } from "../code-hosts/github.ts";
+import { runs } from "../db/schema.ts";
+import { createGitHubClient } from "../github-client.ts";
+import { createRunner } from "../runner/runner.ts";
 import {
 	createGitHubIssue,
 	createTestWorkflow,
@@ -7,15 +11,11 @@ import {
 	hangingAgent,
 	noopAgent,
 	REPO,
-} from "../../tests/support/fixtures.ts";
-import { githubHandlers, server } from "../../tests/support/msw.ts";
-import { createTestConfig } from "../../tests/support/test-config.ts";
-import { createTestDb } from "../../tests/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../../tests/support/test-workspace.ts";
-import { githubCodeHostAdapter } from "../code-hosts/github.ts";
-import { runs } from "../db/schema.ts";
-import { createGitHubClient } from "../github-client.ts";
-import { createRunner } from "../runner/runner.ts";
+} from "../tests/support/fixtures.ts";
+import { githubHandlers, server } from "../tests/support/msw.ts";
+import { createTestConfig } from "../tests/support/test-config.ts";
+import { createTestDb } from "../tests/support/test-db.ts";
+import { createTestWorkspaceRoot } from "../tests/support/test-workspace.ts";
 import { githubTrackerAdapter } from "../trackers/github.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { createOrchestrator } from "./orchestrator.ts";

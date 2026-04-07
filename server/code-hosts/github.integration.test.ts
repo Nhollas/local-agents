@@ -1,8 +1,8 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { GITHUB_API, REPO } from "../../tests/support/fixtures.ts";
-import { server } from "../../tests/support/msw.ts";
 import { createGitHubClient } from "../github-client.ts";
+import { GITHUB_API, REPO } from "../tests/support/fixtures.ts";
+import { server } from "../tests/support/msw.ts";
 import { githubCodeHostAdapter } from "./github.ts";
 
 const adapter = githubCodeHostAdapter(createGitHubClient("test-token"));

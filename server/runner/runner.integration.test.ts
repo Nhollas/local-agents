@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-	createTestDb,
-	getEvents,
-	getRun,
-} from "../../tests/support/test-db.ts";
 import type { Db } from "../db/db.ts";
+import { createTestDb, getEvents, getRun } from "../tests/support/test-db.ts";
 import { createRunner } from "./runner.ts";
 
 describe("Runner integration", () => {
