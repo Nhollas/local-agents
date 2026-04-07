@@ -36,7 +36,7 @@ export default defineConfig({
 				test: {
 					name: "dashboard",
 					include: ["dashboard/src/**/*.test.tsx"],
-					setupFiles: ["dashboard/tests/setup/browser.ts"],
+					setupFiles: ["dashboard/src/testing/setup/browser.ts"],
 					browser: {
 						enabled: true,
 						headless: true,

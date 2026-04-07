@@ -2,9 +2,9 @@ import { sse } from "msw";
 import { test as base } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { App } from "../../src/App";
-import { Providers } from "../../src/Providers";
-import type { RunEvent } from "../../src/types";
+import { App } from "../app";
+import type { RunEvent } from "../lib/types";
+import { Providers } from "../providers";
 import { browserWorker } from "./msw";
 import { dashboardPageObject } from "./page-object";
 

@@ -1,8 +1,8 @@
 import { HttpResponse, http } from "msw";
 import { describe } from "vitest";
-import { createRunEvent, createRunFromApi } from "../tests/support/contract";
-import { test } from "../tests/support/fixture";
-import { browserWorker } from "../tests/support/msw";
+import { createRunEvent, createRunFromApi } from "./testing/contract";
+import { test } from "./testing/fixture";
+import { browserWorker } from "./testing/msw";
 
 describe("Dashboard - history", () => {
 	test("loads and displays historical runs on mount", async ({

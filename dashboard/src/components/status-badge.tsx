@@ -1,4 +1,4 @@
-import type { RunStatus } from "./types.ts";
+import type { RunStatus } from "../lib/types.ts";
 
 const styles: Record<RunStatus, string> = {
 	running: "bg-running-muted text-running border-running-border",

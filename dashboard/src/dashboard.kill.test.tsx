@@ -1,8 +1,8 @@
 import { HttpResponse, http } from "msw";
 import { describe } from "vitest";
-import { createRunEvent } from "../tests/support/contract";
-import { expect, test } from "../tests/support/fixture";
-import { browserWorker } from "../tests/support/msw";
+import { createRunEvent } from "./testing/contract";
+import { expect, test } from "./testing/fixture";
+import { browserWorker } from "./testing/msw";
 
 describe("Dashboard - kill action", () => {
 	test("sends kill request when kill button is clicked on a running run", async ({

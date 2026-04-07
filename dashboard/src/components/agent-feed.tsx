@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { killRun, retryRun } from "./api.ts";
-import { formatDuration, formatTime } from "./format.ts";
-import { StatusBadge } from "./StatusBadge.tsx";
-import type { Run } from "./types.ts";
+import { killRun, retryRun } from "../lib/api.ts";
+import { formatDuration, formatTime } from "../lib/format.ts";
+import type { Run } from "../lib/types.ts";
+import { StatusBadge } from "./status-badge.tsx";
 
 type Props = {
 	name: string;

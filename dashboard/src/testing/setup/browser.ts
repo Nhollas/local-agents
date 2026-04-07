@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll } from "vitest";
-import { browserWorker } from "../support/msw";
-import "../../src/index.css";
+import { browserWorker } from "../msw";
+import "../../index.css";
 
 beforeAll(async () => {
 	await browserWorker.start({

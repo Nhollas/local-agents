@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchRuns } from "./api.ts";
+import { fetchRuns } from "../lib/api.ts";
 
 export function useRunHistory() {
 	return useQuery({

@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { AgentFeed } from "./AgentFeed.tsx";
-import { RunDetails } from "./RunDetails.tsx";
-import { ThemeToggle } from "./ThemeToggle.tsx";
-import type { Run } from "./types.ts";
-import { useEventStream } from "./use-event-stream.ts";
-import { useRunHistory } from "./use-run-history.ts";
+import { AgentFeed } from "./components/agent-feed.tsx";
+import { RunDetails } from "./components/run-details.tsx";
+import { ThemeToggle } from "./components/theme-toggle.tsx";
+import { useEventStream } from "./hooks/use-event-stream.ts";
+import { useRunHistory } from "./hooks/use-run-history.ts";
+import type { Run } from "./lib/types.ts";
 
 export function App() {
 	const { connected } = useEventStream("/events");
@@ -23,9 +23,8 @@ export function App() {
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([name, agentRunList]) => ({
 				name,
-				runs: agentRunList.sort(
-					(a, b) =>
-						new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+				runs: agentRunList.sort((a, b) =>
+					b.startedAt > a.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : 0,
 				),
 			}));
 	}, [runs]);

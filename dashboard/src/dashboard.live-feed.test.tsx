@@ -1,6 +1,6 @@
 import { describe } from "vitest";
-import { createRunEvent } from "../tests/support/contract";
-import { expect, test } from "../tests/support/fixture";
+import { createRunEvent } from "./testing/contract";
+import { expect, test } from "./testing/fixture";
 
 describe("Dashboard - live feed", () => {
 	test("displays a new run when a run:started event arrives", async ({

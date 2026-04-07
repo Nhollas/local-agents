@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import type { RunDetailFromApi } from "./api.ts";
-import type { Run, RunEvent } from "./types.ts";
+import type { RunDetailFromApi } from "../lib/api.ts";
+import type { Run, RunEvent } from "../lib/types.ts";
 
 export function useEventStream(url: string) {
 	const queryClient = useQueryClient();
