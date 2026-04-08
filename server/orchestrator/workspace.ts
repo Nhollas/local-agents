@@ -15,7 +15,7 @@ export async function ensureWorkspace(
 	issue: Issue,
 	workspaceRoot: string,
 	cloneUrl: string,
-	hooks?: { after_create?: string },
+	hooks?: { after_create?: string | undefined },
 ): Promise<{ path: string; created: boolean }> {
 	const dirName = sanitizeKey(issue.key);
 	const wsPath = join(workspaceRoot, dirName);

@@ -2,17 +2,6 @@ import { parse } from "yaml";
 import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
 
-export type RepoWorkflow = {
-	branch: string;
-	base_branch: string;
-	hooks?: {
-		after_create?: string;
-		before_run?: string;
-		after_run?: string;
-	};
-	prompt: string;
-};
-
 const repoWorkflowSchema = z.object({
 	branch: z.string().default("agent/issue-{{ issue.number }}"),
 	base_branch: z.string().default("main"),
@@ -26,9 +15,11 @@ const repoWorkflowSchema = z.object({
 	prompt: z.string(),
 });
 
+export type RepoWorkflow = z.infer<typeof repoWorkflowSchema>;
+
 export function parseRepoWorkflow(yamlContent: string): RepoWorkflow {
 	const parsed = parse(yamlContent);
-	return repoWorkflowSchema.parse(parsed) as RepoWorkflow;
+	return repoWorkflowSchema.parse(parsed);
 }
 
 /**
