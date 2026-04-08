@@ -87,13 +87,13 @@ describe("Orchestrator reconciliation", () => {
 		const runsAfter = db.select().from(runs).all();
 		expect(runsAfter).toEqual([
 			{
-				id: runsBefore[0].id,
+				id: runsBefore[0]?.id,
 				agentName: "issue-1",
 				status: "failed",
 				error: "Run killed by user",
 				issueKey: `${REPO}#1`,
 				issueTitle: "Issue 1",
-				startedAt: runsBefore[0].startedAt,
+				startedAt: runsBefore[0]?.startedAt,
 				completedAt: expect.any(String),
 				durationMs: expect.any(Number),
 				sessionId: null,

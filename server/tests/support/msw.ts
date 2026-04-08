@@ -25,7 +25,7 @@ export function githubHandlers({
 			HttpResponse.json({ login: "test-user" }),
 		),
 		http.get(`${GITHUB_API}/repos/${REPO}/issues/:number`, ({ params }) => {
-			const num = Number(params.number);
+			const num = Number(params["number"]);
 			const all = resolve("agent").concat(resolve("agent:running"));
 			const issue = all.find((i) => i.number === num);
 			if (!issue) return new HttpResponse(null, { status: 404 });
@@ -39,7 +39,7 @@ export function githubHandlers({
 		http.delete(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 			({ params }) => {
-				onLabelDelete?.(params.label as string);
+				onLabelDelete?.(params["label"] as string);
 				return new HttpResponse(null, { status: 204 });
 			},
 		),
@@ -47,7 +47,7 @@ export function githubHandlers({
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
 			async ({ request }) => {
 				const body = (await request.json()) as { labels: string[] };
-				onLabelAdd?.(body.labels[0]);
+				onLabelAdd?.(body.labels[0] as string);
 				return HttpResponse.json([]);
 			},
 		),

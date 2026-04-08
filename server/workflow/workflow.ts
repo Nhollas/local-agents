@@ -28,7 +28,7 @@ const repoWorkflowSchema = z.object({
 
 export function parseRepoWorkflow(yamlContent: string): RepoWorkflow {
 	const parsed = parse(yamlContent);
-	return repoWorkflowSchema.parse(parsed);
+	return repoWorkflowSchema.parse(parsed) as RepoWorkflow;
 }
 
 /**

@@ -5,6 +5,6 @@ export default defineConfig({
 	schema: "./server/db/schema.ts",
 	out: "./drizzle",
 	dbCredentials: {
-		url: `${process.env.DATA_DIR ?? ".data"}/gateway.db`,
+		url: `${process.env["DATA_DIR"] ?? ".data"}/gateway.db`,
 	},
 });

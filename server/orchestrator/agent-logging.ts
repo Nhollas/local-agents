@@ -48,7 +48,10 @@ export function logAgentMessage(
 	for (const block of msg.message.content) {
 		if (!isToolUse(block)) continue;
 		const raw = String(
-			block.input.pattern ?? block.input.file_path ?? block.input.command ?? "",
+			block.input["pattern"] ??
+				block.input["file_path"] ??
+				block.input["command"] ??
+				"",
 		);
 		const detail = shortPath(raw, workDir).slice(0, 100);
 		logger.debug({ tool: block.name, target: detail }, "agent.tool_use");

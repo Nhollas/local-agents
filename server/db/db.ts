@@ -14,7 +14,7 @@ let db: Db | undefined;
 export function getDb(dbPath?: string): Db {
 	if (db) return db;
 	const resolvedPath =
-		dbPath ?? `${process.env.DATA_DIR ?? ".data"}/gateway.db`;
+		dbPath ?? `${process.env["DATA_DIR"] ?? ".data"}/gateway.db`;
 	mkdirSync(dirname(resolvedPath), { recursive: true });
 	const sqlite = new Database(resolvedPath);
 	sqlite.pragma("journal_mode = WAL");

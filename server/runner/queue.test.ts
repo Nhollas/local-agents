@@ -106,7 +106,7 @@ describe("createJobQueue", () => {
 
 		expect(queue.runningCount).toBe(5);
 		expect(queue.pendingCount).toBe(1);
-		expect(jobs[5].started).toBe(false);
+		expect(jobs[5]?.started).toBe(false);
 	});
 
 	it("supports configurable max concurrency", () => {

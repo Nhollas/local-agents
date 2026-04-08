@@ -42,7 +42,11 @@ type RunnerConfig = {
 
 export function createRunner(config: RunnerConfig): Runner {
 	const { db } = config;
-	const queue = createJobQueue({ maxConcurrency: config.maxConcurrency });
+	const queue = createJobQueue(
+		config.maxConcurrency != null
+			? { maxConcurrency: config.maxConcurrency }
+			: {},
+	);
 	const activeRuns = new Map<string, AbortController>();
 
 	function emitEvent(

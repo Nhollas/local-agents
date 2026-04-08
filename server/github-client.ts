@@ -28,11 +28,12 @@ export function createGitHubClient(token: string): GitHubClient {
 			headers["Content-Type"] = "application/json";
 		}
 
-		const response = await fetch(`${BASE_URL}${path}`, {
-			method,
-			headers,
-			body: body ? JSON.stringify(body) : undefined,
-		});
+		const init: RequestInit = { method, headers };
+		if (body) {
+			init.body = JSON.stringify(body);
+		}
+
+		const response = await fetch(`${BASE_URL}${path}`, init);
 
 		if (!response.ok) {
 			const text = await response.text();

@@ -121,22 +121,21 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			issueKey: issue.key,
 			issueTitle: issue.title,
 			attempt,
-			parentRunId: params.parentRunId,
+			...(params.parentRunId != null && { parentRunId: params.parentRunId }),
 			handler: async (emitToolUse, setSessionId) => {
-				const agentOptions: Record<string, unknown> = {
+				const options = {
 					cwd: ws.path,
 					model: defaults.model,
 					allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-					permissionMode: "dontAsk",
+					permissionMode: "dontAsk" as const,
+					...(params.resumeSessionId && {
+						resume: params.resumeSessionId,
+					}),
 				};
-
-				if (params.resumeSessionId) {
-					agentOptions.resume = params.resumeSessionId;
-				}
 
 				for await (const msg of runAgent({
 					prompt,
-					options: agentOptions as Parameters<typeof query>[0]["options"],
+					options,
 				})) {
 					if (msg.type !== "assistant") continue;
 					logAgentMessage(msg, ws.path, emitToolUse);

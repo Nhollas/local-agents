@@ -1045,7 +1045,7 @@ describe("Orchestrator dispatch", () => {
 			http.delete(
 				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 				({ params }) => {
-					const label = decodeURIComponent(params.label as string);
+					const label = decodeURIComponent(params["label"] as string);
 					if (label === "agent:running") {
 						return new HttpResponse(null, { status: 500 });
 					}
