@@ -283,4 +283,138 @@ describe("Orchestrator reconciliation", () => {
 		const runsAfter = db.select().from(runs).all();
 		expect(runsAfter).toEqual(runsBefore);
 	});
+
+	it("skips orphan reconciliation while post-run work is still settling", async () => {
+		let pendingIssues = [createGitHubIssue(1, ["agent"])];
+		let runningIssues: ReturnType<typeof createGitHubIssue>[] = [];
+		const labelOps: string[] = [];
+		let releasePrCreate = () => {};
+		const prCreateBarrier = new Promise<void>(
+			(resolve) => (releasePrCreate = resolve),
+		);
+
+		server.use(
+			// Custom PR handler must come first to override the default in githubHandlers
+			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, async () => {
+				await prCreateBarrier;
+				return HttpResponse.json({
+					number: 1,
+					html_url: `https://github.com/${REPO}/pull/1`,
+				});
+			}),
+			...githubHandlers({
+				resolveIssues: (label) => {
+					if (label === "agent") return pendingIssues;
+					if (label === "agent:running") return runningIssues;
+					return [];
+				},
+				onLabelAdd: (label) => labelOps.push(`+${label}`),
+				onLabelDelete: (label) => labelOps.push(`-${label}`),
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 5 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({
+				workspace_root: workspace.root,
+				max_concurrent: 5,
+			}),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: noopAgent,
+		});
+
+		// Tick 1: dispatches the agent. Handler completes instantly (noopAgent),
+		// but onSettled blocks on PR creation (barrier).
+		await orchestrator.tick();
+
+		// Simulate GitHub still showing agent:running (label swap hasn't happened yet)
+		pendingIssues = [];
+		runningIssues = [createGitHubIssue(1, ["agent:running"])];
+		labelOps.length = 0;
+
+		// Tick 2: should NOT orphan-reconcile because the issue is settling
+		await orchestrator.tick();
+
+		expect(labelOps).toEqual([]);
+
+		// Release the barrier and let onSettled finish
+		releasePrCreate();
+		await orchestrator.settled();
+
+		// Verify the final label swap happened correctly
+		expect(labelOps).toEqual(["-agent:running", "+agent:awaiting-review"]);
+	});
+
+	it("marks stale DB runs as failed when no process exists to kill", async () => {
+		server.use(
+			...githubHandlers({
+				resolveIssues: () => [],
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 5 });
+
+		// Seed a "running" record with no actual process (simulates server restart)
+		db.insert(runs)
+			.values({
+				id: "stale-run",
+				agentName: "issue-5",
+				status: "running",
+				issueKey: `${REPO}#5`,
+				issueTitle: "Stale issue",
+				startedAt: "2025-01-01T00:00:00Z",
+				attempt: 1,
+			})
+			.run();
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({ workspace_root: workspace.root }),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: noopAgent,
+		});
+
+		await orchestrator.tick();
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual([
+			{
+				id: "stale-run",
+				agentName: "issue-5",
+				status: "failed",
+				error: "Stale run from previous session",
+				issueKey: `${REPO}#5`,
+				issueTitle: "Stale issue",
+				startedAt: "2025-01-01T00:00:00Z",
+				completedAt: expect.any(String),
+				durationMs: null,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
+
+		// Second tick should NOT log reconcile_terminal again
+		await orchestrator.tick();
+
+		const runsAfterSecondTick = db.select().from(runs).all();
+		expect(runsAfterSecondTick).toEqual(allRuns);
+	});
 });

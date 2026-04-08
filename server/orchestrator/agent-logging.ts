@@ -1,7 +1,7 @@
 /**
  * Shared agent message logging utilities.
  */
-import { logger } from "../logger.ts";
+import * as canonicalLog from "../canonical-log.ts";
 
 type TextBlock = { type: "text"; text: string };
 type ToolUseBlock = {
@@ -38,13 +38,6 @@ export function logAgentMessage(
 	workDir: string,
 	emitToolUse?: (tool: string, target: string) => void,
 ): void {
-	const text = msg.message.content
-		.filter((b): b is TextBlock => b.type === "text")
-		.map((b) => b.text)
-		.join("")
-		.slice(0, 200);
-	if (text) logger.debug({ text }, "agent.text");
-
 	for (const block of msg.message.content) {
 		if (!isToolUse(block)) continue;
 		const raw = String(
@@ -54,7 +47,7 @@ export function logAgentMessage(
 				"",
 		);
 		const detail = shortPath(raw, workDir).slice(0, 100);
-		logger.debug({ tool: block.name, target: detail }, "agent.tool_use");
+		canonicalLog.increment("tool_use_count");
 		emitToolUse?.(block.name, detail);
 	}
 }

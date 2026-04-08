@@ -2,7 +2,7 @@ import type { Hook } from "@hono/zod-validator";
 import type { Context, Env, ErrorHandler, ValidationTargets } from "hono";
 import { z } from "zod";
 import type { $ZodError, $ZodType } from "zod/v4/core";
-import { logger } from "../logger.ts";
+import * as canonicalLog from "../canonical-log.ts";
 
 const STATUS_TITLES = {
 	400: "Bad Request",
@@ -53,7 +53,9 @@ export const problemDetailsHandler: ErrorHandler = (err, c) => {
 		return buildProblemResponse(c, err.status, err.detail, err.extensions);
 	}
 
-	logger.error({ err }, "Unhandled error");
+	canonicalLog.set({
+		error: canonicalLog.errorMessage(err),
+	});
 	return buildProblemResponse(c, 500, "Internal Server Error");
 };
 

@@ -7,6 +7,7 @@ import type { Db } from "../db/db.ts";
 import { runEvents, runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { Runner } from "../runner/runner.ts";
+import { canonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
 	problemDetailsHandler,
@@ -62,6 +63,8 @@ export function createApi({
 			}
 		});
 	});
+
+	app.use(canonicalLogMiddleware);
 
 	app.get(
 		"/runs",

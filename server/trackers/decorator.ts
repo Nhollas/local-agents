@@ -1,4 +1,4 @@
-import { logger } from "../logger.ts";
+import * as canonicalLog from "../canonical-log.ts";
 import type { TrackerAdapter } from "./types.ts";
 
 export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
@@ -6,10 +6,12 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 		async fetchIssue(repo, issueNumber) {
 			try {
 				const issue = await inner.fetchIssue(repo, issueNumber);
-				logger.info({ repo, issueNumber }, "tracker.fetch_issue");
+				canonicalLog.set({ tracker_fetch_issue: `${repo}#${issueNumber}` });
 				return issue;
 			} catch (err) {
-				logger.warn({ repo, issueNumber, err }, "tracker.fetch_issue_failed");
+				canonicalLog.set({
+					tracker_error: `fetch_issue_failed: ${repo}#${issueNumber}`,
+				});
 				throw err;
 			}
 		},
@@ -17,13 +19,12 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 		async fetchActiveIssues(repo, label) {
 			try {
 				const issues = await inner.fetchActiveIssues(repo, label);
-				logger.info(
-					{ repo, label, count: issues.length },
-					"tracker.fetch_active_issues",
-				);
+				canonicalLog.set({
+					tracker_active_issues_count: issues.length,
+				});
 				return issues;
 			} catch (err) {
-				logger.warn({ repo, label, err }, "tracker.fetch_active_issues_failed");
+				canonicalLog.append("warnings", `fetch_active_issues_failed: ${repo}`);
 				throw err;
 			}
 		},
@@ -31,14 +32,11 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 		async swapLabel(repo, issueNumber, remove, add) {
 			try {
 				await inner.swapLabel(repo, issueNumber, remove, add);
-				logger.info(
-					{ repo, issueNumber, from: remove, to: add },
-					"tracker.label_swapped",
-				);
+				canonicalLog.append("label_swaps", { from: remove, to: add });
 			} catch (err) {
-				logger.warn(
-					{ repo, issueNumber, from: remove, to: add, err },
-					"tracker.label_swap_failed",
+				canonicalLog.append(
+					"warnings",
+					`label_swap_failed: ${repo}#${issueNumber}`,
 				);
 				throw err;
 			}

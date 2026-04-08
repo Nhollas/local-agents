@@ -2,12 +2,13 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { eq } from "drizzle-orm";
+import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/db.ts";
 import { runs } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import type { Runner, RunResult } from "../runner/runner.ts";
+import type { Runner } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
@@ -75,7 +76,8 @@ function getRunSnapshot(db: Db): RunSnapshot[] {
 export function createOrchestrator(opts: OrchestratorConfig) {
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
-	const pendingPostRuns = new Set<Promise<void>>();
+	const pendingPostRuns = new Set<Promise<unknown>>();
+	const settlingIssues = new Set<string>();
 
 	const {
 		db,
@@ -150,101 +152,77 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					try {
 						await runShell(script, ws.path);
 					} catch (err) {
-						logger.warn(
-							{ issue: issue.key, err },
-							"orchestrator.after_run_failed",
+						canonicalLog.append(
+							"warnings",
+							`after_run_failed: ${canonicalLog.errorMessage(err)}`,
 						);
 					}
 				}
 			},
+			onSettled: async (result) => {
+				settlingIssues.add(issue.key);
+				try {
+					if (result.status === "completed") {
+						try {
+							const head = renderPrompt(workflow.branch, { issue });
+							await codeHost.createChangeRequest(
+								repo,
+								head,
+								workflow.base_branch,
+								issue.title,
+								`Closes ${issue.key}`,
+							);
+
+							await tracker.swapLabel(
+								repo,
+								issue.number,
+								LABELS.running,
+								LABELS.completed,
+							);
+						} catch (err) {
+							canonicalLog.append(
+								"warnings",
+								`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
+							);
+							await tracker
+								.swapLabel(repo, issue.number, LABELS.running, LABELS.completed)
+								.catch((labelErr) =>
+									canonicalLog.append(
+										"warnings",
+										`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
+									),
+								);
+						}
+					}
+
+					const retriesExhausted = defaults.max_retries - attempt < 0;
+					const shouldCleanup =
+						result.status === "completed" || retriesExhausted;
+
+					if (shouldCleanup) {
+						await removeWorkspace(ws.path);
+					}
+
+					if (result.status === "failed" && retriesExhausted) {
+						await tracker
+							.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+							.catch((err) =>
+								canonicalLog.append(
+									"warnings",
+									`label_rollback_failed: ${canonicalLog.errorMessage(err)}`,
+								),
+							);
+					}
+				} finally {
+					settlingIssues.delete(issue.key);
+				}
+			},
 		});
 
-		const postRun = handlePostRun(done, {
-			issue,
-			repo,
-			workflow,
-			wsPath: ws.path,
-			attempt,
-		});
-		pendingPostRuns.add(postRun);
-		postRun.finally(() => pendingPostRuns.delete(postRun));
+		pendingPostRuns.add(done);
+		done.finally(() => pendingPostRuns.delete(done));
 
 		return runId;
-	}
-
-	async function handlePostRun(
-		done: Promise<RunResult>,
-		ctx: {
-			issue: Issue;
-			repo: string;
-			workflow: RepoWorkflow;
-			wsPath: string;
-			attempt: number;
-		},
-	) {
-		const result = await done;
-
-		if (result.status === "completed") {
-			try {
-				const head = renderPrompt(ctx.workflow.branch, {
-					issue: ctx.issue,
-				});
-				await codeHost.createChangeRequest(
-					ctx.repo,
-					head,
-					ctx.workflow.base_branch,
-					ctx.issue.title,
-					`Closes ${ctx.issue.key}`,
-				);
-
-				await tracker.swapLabel(
-					ctx.repo,
-					ctx.issue.number,
-					LABELS.running,
-					LABELS.completed,
-				);
-			} catch (err) {
-				logger.error(
-					{
-						agent: `issue-${ctx.issue.number}`,
-						runId: "unknown",
-						err: err instanceof Error ? err.message : String(err),
-					},
-					"orchestrator.on_complete_failed",
-				);
-				await tracker
-					.swapLabel(
-						ctx.repo,
-						ctx.issue.number,
-						LABELS.running,
-						LABELS.completed,
-					)
-					.catch((labelErr) =>
-						logger.warn(
-							{ issue: ctx.issue.key, err: labelErr },
-							"orchestrator.label_recovery_failed",
-						),
-					);
-			}
-		}
-
-		const retriesExhausted = defaults.max_retries - ctx.attempt < 0;
-		const shouldCleanup = result.status === "completed" || retriesExhausted;
-
-		if (shouldCleanup) {
-			await removeWorkspace(ctx.wsPath);
-		}
-
-		if (result.status === "failed" && retriesExhausted) {
-			await tracker
-				.swapLabel(ctx.repo, ctx.issue.number, LABELS.running, LABELS.pending)
-				.catch((err) =>
-					logger.warn(
-						{ issue: ctx.issue.key, err },
-						"orchestrator.label_rollback_failed",
-					),
-				);
-		}
 	}
 
 	async function fetchTickState(): Promise<TickState> {
@@ -305,7 +283,17 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			if (repoKeys && !repoKeys.has(key)) {
 				logger.info({ key }, "orchestrator.reconcile_terminal");
 				for (const id of runIds) {
-					runner.kill(id);
+					const killed = runner.kill(id);
+					if (!killed) {
+						db.update(runs)
+							.set({
+								status: "failed",
+								error: "Stale run from previous session",
+								completedAt: new Date().toISOString(),
+							})
+							.where(eq(runs.id, id))
+							.run();
+					}
 				}
 			}
 		}
@@ -313,6 +301,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		for (const [repo, keys] of state.stillRunning) {
 			for (const key of keys) {
 				if (state.runningByIssue.has(key)) continue;
+				if (settlingIssues.has(key)) continue;
 				const { number } = parseIssueKey(key);
 				logger.info({ key }, "orchestrator.reconcile_orphan");
 				await tracker
@@ -329,6 +318,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 
 		for (const { issue, repo, workflow } of state.pending) {
 			if (state.runningByIssue.has(issue.key)) continue;
+			if (settlingIssues.has(issue.key)) continue;
 			if (runningCount >= defaults.max_concurrent) break;
 
 			await tracker.swapLabel(
