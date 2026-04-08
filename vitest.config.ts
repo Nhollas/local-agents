@@ -61,6 +61,7 @@ export default defineConfig({
 		],
 		env: {
 			LOG_LEVEL: "silent",
+			GITHUB_TOKEN: "test",
 		},
 	},
 });
