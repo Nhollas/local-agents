@@ -8,7 +8,7 @@ import type { Config } from "../config.ts";
 import type { Db } from "../db/db.ts";
 import { runs } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import type { Runner } from "../runner/runner.ts";
+import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
@@ -124,98 +124,156 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			issueTitle: issue.title,
 			attempt,
 			...(params.parentRunId != null && { parentRunId: params.parentRunId }),
-			handler: async (emitToolUse, setSessionId) => {
-				const options = {
-					cwd: ws.path,
-					model: defaults.model,
-					allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-					permissionMode: "dontAsk" as const,
-					...(params.resumeSessionId && {
-						resume: params.resumeSessionId,
-					}),
-				};
+			handler: async (ctx) => {
+				return canonicalLog.run(
+					{
+						scope: "run",
+						run_id: ctx.runId,
+						agent: `issue-${issue.number}`,
+						issue_key: issue.key,
+						attempt: attempt,
+					},
+					async () => {
+						const startTime = Date.now();
+						let result: RunResult;
 
-				for await (const msg of runAgent({
-					prompt,
-					options,
-				})) {
-					if (msg.type !== "assistant") continue;
-					logAgentMessage(msg, ws.path, emitToolUse);
-					setSessionId(msg.session_id);
-				}
-
-				if (workflow.hooks?.after_run) {
-					const script = renderPrompt(workflow.hooks.after_run, {
-						issue,
-						attempt,
-					});
-					try {
-						await runShell(script, ws.path);
-					} catch (err) {
-						canonicalLog.append(
-							"warnings",
-							`after_run_failed: ${canonicalLog.errorMessage(err)}`,
-						);
-					}
-				}
-			},
-			onSettled: async (result) => {
-				settlingIssues.add(issue.key);
-				try {
-					if (result.status === "completed") {
 						try {
-							const head = renderPrompt(workflow.branch, { issue });
-							await codeHost.createChangeRequest(
-								repo,
-								head,
-								workflow.base_branch,
-								issue.title,
-								`Closes ${issue.key}`,
-							);
+							const abortPromise = new Promise<never>((_, reject) => {
+								ctx.signal.addEventListener("abort", () => {
+									reject(new Error(ABORT_ERROR));
+								});
+							});
 
-							await tracker.swapLabel(
-								repo,
-								issue.number,
-								LABELS.running,
-								LABELS.completed,
-							);
+							await Promise.race([
+								(async () => {
+									const options = {
+										cwd: ws.path,
+										model: defaults.model,
+										allowedTools: [
+											"Read",
+											"Write",
+											"Edit",
+											"Bash",
+											"Glob",
+											"Grep",
+										],
+										permissionMode: "dontAsk" as const,
+										...(params.resumeSessionId && {
+											resume: params.resumeSessionId,
+										}),
+									};
+
+									for await (const msg of runAgent({
+										prompt,
+										options,
+									})) {
+										if (msg.type !== "assistant") continue;
+										logAgentMessage(msg, ws.path, ctx.emitToolUse);
+										ctx.setSessionId(msg.session_id);
+									}
+
+									if (workflow.hooks?.after_run) {
+										const script = renderPrompt(workflow.hooks.after_run, {
+											issue,
+											attempt,
+										});
+										try {
+											await runShell(script, ws.path);
+										} catch (err) {
+											canonicalLog.append(
+												"warnings",
+												`after_run_failed: ${canonicalLog.errorMessage(err)}`,
+											);
+										}
+									}
+								})(),
+								abortPromise,
+							]);
+
+							result = {
+								status: "completed",
+								durationMs: Date.now() - startTime,
+							};
 						} catch (err) {
-							canonicalLog.append(
-								"warnings",
-								`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
-							);
-							await tracker
-								.swapLabel(repo, issue.number, LABELS.running, LABELS.completed)
-								.catch((labelErr) =>
+							result = {
+								status: "failed",
+								error: canonicalLog.errorMessage(err),
+								durationMs: Date.now() - startTime,
+							};
+						}
+
+						canonicalLog.set({
+							status: result.status,
+							...(result.status === "failed" && { error: result.error }),
+						});
+
+						// Post-run work — inside the canonical scope so decorators
+						// and warnings are captured in the run's log line.
+						settlingIssues.add(issue.key);
+						try {
+							if (result.status === "completed") {
+								try {
+									const head = renderPrompt(workflow.branch, { issue });
+									await codeHost.createChangeRequest(
+										repo,
+										head,
+										workflow.base_branch,
+										issue.title,
+										`Closes ${issue.key}`,
+									);
+
+									await tracker.swapLabel(
+										repo,
+										issue.number,
+										LABELS.running,
+										LABELS.completed,
+									);
+								} catch (err) {
 									canonicalLog.append(
 										"warnings",
-										`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
-									),
-								);
+										`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
+									);
+									await tracker
+										.swapLabel(
+											repo,
+											issue.number,
+											LABELS.running,
+											LABELS.completed,
+										)
+										.catch((labelErr) =>
+											canonicalLog.append(
+												"warnings",
+												`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
+											),
+										);
+								}
+							}
+
+							const retriesExhausted = defaults.max_retries - attempt < 0;
+							const shouldCleanup =
+								result.status === "completed" || retriesExhausted;
+
+							if (shouldCleanup) {
+								await removeWorkspace(ws.path);
+							}
+
+							if (result.status === "failed" && retriesExhausted) {
+								await tracker
+									.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+									.catch((err) =>
+										canonicalLog.append(
+											"warnings",
+											`label_rollback_failed: ${canonicalLog.errorMessage(err)}`,
+										),
+									);
+							}
+						} finally {
+							settlingIssues.delete(issue.key);
 						}
-					}
 
-					const retriesExhausted = defaults.max_retries - attempt < 0;
-					const shouldCleanup =
-						result.status === "completed" || retriesExhausted;
-
-					if (shouldCleanup) {
-						await removeWorkspace(ws.path);
-					}
-
-					if (result.status === "failed" && retriesExhausted) {
-						await tracker
-							.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
-							.catch((err) =>
-								canonicalLog.append(
-									"warnings",
-									`label_rollback_failed: ${canonicalLog.errorMessage(err)}`,
-								),
-							);
-					}
-				} finally {
-					settlingIssues.delete(issue.key);
-				}
+						return result;
+					},
+				);
 			},
 		});
 
@@ -257,6 +315,11 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		for (const result of pendingResults) {
 			if (result.status === "fulfilled") {
 				pending.push(...result.value);
+			} else {
+				logger.warn(
+					{ err: result.reason },
+					"orchestrator.fetch_pending_failed",
+				);
 			}
 		}
 		pending.sort((a, b) => a.issue.createdAt.localeCompare(b.issue.createdAt));
@@ -265,6 +328,11 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		for (const result of runningResults) {
 			if (result.status === "fulfilled") {
 				stillRunning.set(result.value.repo, result.value.keys);
+			} else {
+				logger.warn(
+					{ err: result.reason },
+					"orchestrator.fetch_running_failed",
+				);
 			}
 		}
 

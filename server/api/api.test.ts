@@ -38,7 +38,7 @@ describe("GET /events", () => {
 				name: "sse-agent",
 				issueKey: "test/repo#42",
 				issueTitle: "SSE test issue",
-				handler: async () => {},
+				handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 			});
 
 			await runner.queue.waitForIdle();

@@ -1,21 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import * as canonicalLog from "../canonical-log.ts";
 import type { Db } from "../db/db.ts";
 import { runEvents, runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
 
+export const ABORT_ERROR = "Run killed by user";
+
+export type RunContext = {
+	runId: string;
+	emitToolUse: (tool: string, target: string) => void;
+	setSessionId: (id: string) => void;
+	signal: AbortSignal;
+};
+
 export type AgentJob = {
 	name: string;
 	issueKey: string;
 	issueTitle: string;
-	handler: (
-		emitToolUse: (tool: string, target: string) => void,
-		setSessionId: (id: string) => void,
-	) => Promise<void>;
-	/** Called after the handler completes and the canonical log scope flushes. */
-	onSettled?: (result: RunResult) => Promise<void>;
+	handler: (ctx: RunContext) => Promise<RunResult>;
 	attempt?: number;
 	parentRunId?: string;
 };
@@ -91,119 +94,107 @@ export function createRunner(config: RunnerConfig): Runner {
 		activeRuns.set(runId, controller);
 
 		queue.enqueue(async () => {
-			const result = await canonicalLog.run(
-				{
-					scope: "run",
-					run_id: runId,
-					agent: job.name,
-					issue_key: job.issueKey,
+			const startTime = Date.now();
+			const startedAt = new Date(startTime).toISOString();
+
+			db.insert(runs)
+				.values({
+					id: runId,
+					agentName: job.name,
+					status: "running",
+					issueKey: job.issueKey,
+					issueTitle: job.issueTitle,
+					startedAt,
 					attempt: job.attempt ?? 1,
+					parentRunId: job.parentRunId ?? null,
+				})
+				.run();
+
+			emitEvent(
+				runId,
+				job.name,
+				{
+					type: "run:started",
+					data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
 				},
-				async () => {
-					const startedAt = new Date().toISOString();
-
-					db.insert(runs)
-						.values({
-							id: runId,
-							agentName: job.name,
-							status: "running",
-							issueKey: job.issueKey,
-							issueTitle: job.issueTitle,
-							startedAt,
-							attempt: job.attempt ?? 1,
-							parentRunId: job.parentRunId ?? null,
-						})
-						.run();
-
-					emitEvent(
-						runId,
-						job.name,
-						{
-							type: "run:started",
-							data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
-						},
-						startedAt,
-					);
-
-					const emitToolUse = (tool: string, target: string) => {
-						emitEvent(runId, job.name, {
-							type: "run:tool_use",
-							data: { tool, target },
-						});
-					};
-
-					let sessionCaptured = false;
-					const setSessionId = (id: string) => {
-						if (sessionCaptured) return;
-						sessionCaptured = true;
-						db.update(runs)
-							.set({ sessionId: id })
-							.where(eq(runs.id, runId))
-							.run();
-					};
-
-					const startTime = Date.now();
-
-					try {
-						const abortPromise = new Promise<never>((_, reject) => {
-							controller.signal.addEventListener("abort", () => {
-								reject(new Error("Run killed by user"));
-							});
-						});
-
-						await Promise.race([
-							job.handler(emitToolUse, setSessionId),
-							abortPromise,
-						]);
-
-						const durationMs = Date.now() - startTime;
-						const completedAt = new Date().toISOString();
-
-						db.update(runs)
-							.set({ status: "completed", completedAt, durationMs })
-							.where(eq(runs.id, runId))
-							.run();
-
-						emitEvent(
-							runId,
-							job.name,
-							{ type: "run:completed", data: { durationMs } },
-							completedAt,
-						);
-
-						canonicalLog.set({ status: "completed" });
-						return { status: "completed", durationMs } as const;
-					} catch (err) {
-						const durationMs = Date.now() - startTime;
-						const error = canonicalLog.errorMessage(err);
-						const failedAt = new Date().toISOString();
-
-						db.update(runs)
-							.set({
-								status: "failed",
-								completedAt: failedAt,
-								durationMs,
-								error,
-							})
-							.where(eq(runs.id, runId))
-							.run();
-
-						emitEvent(
-							runId,
-							job.name,
-							{ type: "run:failed", data: { error, durationMs } },
-							failedAt,
-						);
-
-						canonicalLog.set({ status: "failed", error });
-						return { status: "failed", error, durationMs } as const;
-					} finally {
-						activeRuns.delete(runId);
-					}
-				},
+				startedAt,
 			);
 
-			if (job.onSettled) await job.onSettled(result);
+			let sessionCaptured = false;
+			const setSessionId = (id: string) => {
+				if (sessionCaptured) return;
+				sessionCaptured = true;
+				db.update(runs).set({ sessionId: id }).where(eq(runs.id, runId)).run();
+			};
+
+			const emitToolUse = (tool: string, target: string) => {
+				emitEvent(runId, job.name, {
+					type: "run:tool_use",
+					data: { tool, target },
+				});
+			};
+
+			const abortPromise = new Promise<RunResult>((resolve) => {
+				controller.signal.addEventListener("abort", () => {
+					resolve({
+						status: "failed",
+						error: ABORT_ERROR,
+						durationMs: Date.now() - startTime,
+					});
+				});
+			});
+
+			const result = await Promise.race([
+				job.handler({
+					runId,
+					emitToolUse,
+					setSessionId,
+					signal: controller.signal,
+				}),
+				abortPromise,
+			]);
+
+			const completedAt = new Date().toISOString();
+
+			if (result.status === "completed") {
+				db.update(runs)
+					.set({
+						status: "completed",
+						completedAt,
+						durationMs: result.durationMs,
+					})
+					.where(eq(runs.id, runId))
+					.run();
+
+				emitEvent(
+					runId,
+					job.name,
+					{ type: "run:completed", data: { durationMs: result.durationMs } },
+					completedAt,
+				);
+			} else {
+				db.update(runs)
+					.set({
+						status: "failed",
+						completedAt,
+						durationMs: result.durationMs,
+						error: result.error,
+					})
+					.where(eq(runs.id, runId))
+					.run();
+
+				emitEvent(
+					runId,
+					job.name,
+					{
+						type: "run:failed",
+						data: { error: result.error, durationMs: result.durationMs },
+					},
+					completedAt,
+				);
+			}
+
+			activeRuns.delete(runId);
 			resolveResult(result);
 		});
 

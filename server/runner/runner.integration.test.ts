@@ -1,7 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../db/db.ts";
 import { createTestDb, getEvents, getRun } from "../tests/support/test-db.ts";
-import { createRunner } from "./runner.ts";
+import { ABORT_ERROR, createRunner, type RunResult } from "./runner.ts";
+
+/** Helper: a handler that completes immediately. */
+const completedHandler = async (): Promise<RunResult> => ({
+	status: "completed",
+	durationMs: 0,
+});
+
+/** Helper: a handler that fails with the given message. */
+const failedHandler = (error: string) => async (): Promise<RunResult> => ({
+	status: "failed",
+	error,
+	durationMs: 0,
+});
 
 describe("Runner integration", () => {
 	let db: Db;
@@ -12,7 +25,7 @@ describe("Runner integration", () => {
 
 	it("records a running status when a job is enqueued", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
-		let resolveHandler!: () => void;
+		let resolveHandler!: (result: RunResult) => void;
 
 		const { runId } = runner.enqueue({
 			name: "test-job",
@@ -41,7 +54,7 @@ describe("Runner integration", () => {
 			parentRunId: null,
 		});
 
-		resolveHandler();
+		resolveHandler({ status: "completed", durationMs: 0 });
 		await runner.queue.waitForIdle();
 	});
 
@@ -52,7 +65,7 @@ describe("Runner integration", () => {
 			name: "fast-job",
 			issueKey: "owner/repo#2",
 			issueTitle: "Fast issue",
-			handler: async () => {},
+			handler: completedHandler,
 		});
 
 		const result = await done;
@@ -85,9 +98,7 @@ describe("Runner integration", () => {
 			name: "failing-job",
 			issueKey: "owner/repo#3",
 			issueTitle: "Failing issue",
-			handler: async () => {
-				throw new Error("Something went wrong");
-			},
+			handler: failedHandler("Something went wrong"),
 		});
 
 		const result = await done;
@@ -121,9 +132,7 @@ describe("Runner integration", () => {
 			name: "crash-job",
 			issueKey: "owner/repo#99",
 			issueTitle: "Crash issue",
-			handler: async () => {
-				throw new Error("catastrophic failure");
-			},
+			handler: failedHandler("catastrophic failure"),
 		});
 
 		// Should resolve (not reject) with a failed result
@@ -142,7 +151,7 @@ describe("Runner integration", () => {
 			name: "lifecycle-job",
 			issueKey: "owner/repo#4",
 			issueTitle: "Lifecycle issue",
-			handler: async () => {},
+			handler: completedHandler,
 		});
 
 		await runner.queue.waitForIdle();
@@ -173,9 +182,7 @@ describe("Runner integration", () => {
 			name: "fail-event-job",
 			issueKey: "owner/repo#5",
 			issueTitle: "Fail event issue",
-			handler: async () => {
-				throw new Error("boom");
-			},
+			handler: failedHandler("boom"),
 		});
 
 		await runner.queue.waitForIdle();
@@ -206,9 +213,10 @@ describe("Runner integration", () => {
 			name: "tool-job",
 			issueKey: "owner/repo#6",
 			issueTitle: "Tool issue",
-			handler: async (emitToolUse) => {
-				emitToolUse("Read", "/src/index.ts");
-				emitToolUse("Edit", "/src/index.ts");
+			handler: async (ctx) => {
+				ctx.emitToolUse("Read", "/src/index.ts");
+				ctx.emitToolUse("Edit", "/src/index.ts");
+				return { status: "completed", durationMs: 0 };
 			},
 		});
 
@@ -263,7 +271,7 @@ describe("Runner integration", () => {
 		const result = await done;
 		expect(result).toEqual({
 			status: "failed",
-			error: "Run killed by user",
+			error: ABORT_ERROR,
 			durationMs: expect.any(Number),
 		});
 
@@ -272,7 +280,7 @@ describe("Runner integration", () => {
 			id: runId,
 			agentName: "killable-job",
 			status: "failed",
-			error: "Run killed by user",
+			error: ABORT_ERROR,
 			issueKey: "owner/repo#7",
 			issueTitle: "Killable issue",
 			startedAt: expect.any(String),
@@ -297,7 +305,7 @@ describe("Runner integration", () => {
 			name: "retry-job",
 			issueKey: "owner/repo#1",
 			issueTitle: "Retry issue",
-			handler: async () => {},
+			handler: completedHandler,
 			attempt: 2,
 			parentRunId: "prev-id",
 		});
@@ -328,10 +336,11 @@ describe("Runner integration", () => {
 			name: "multi-session-job",
 			issueKey: "owner/repo#8",
 			issueTitle: "Multi session issue",
-			handler: async (_emitToolUse, setSessionId) => {
-				setSessionId("first-session");
-				setSessionId("second-session");
-				setSessionId("third-session");
+			handler: async (ctx) => {
+				ctx.setSessionId("first-session");
+				ctx.setSessionId("second-session");
+				ctx.setSessionId("third-session");
+				return { status: "completed", durationMs: 0 };
 			},
 		});
 
@@ -361,7 +370,7 @@ describe("Runner integration", () => {
 			name: "default-concurrency-job",
 			issueKey: "owner/repo#10",
 			issueTitle: "Default concurrency",
-			handler: async () => {},
+			handler: completedHandler,
 		});
 
 		const result = await done;
@@ -375,42 +384,6 @@ describe("Runner integration", () => {
 		expect(run?.status).toBe("completed");
 	});
 
-	it("captures non-Error throwables as string", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
-
-		const { runId, done } = runner.enqueue({
-			name: "string-throw-job",
-			issueKey: "owner/repo#11",
-			issueTitle: "String throw",
-			handler: async () => {
-				throw "raw string error";
-			},
-		});
-
-		const result = await done;
-		expect(result).toEqual({
-			status: "failed",
-			error: "raw string error",
-			durationMs: expect.any(Number),
-		});
-
-		const run = getRun(db, runId);
-		expect(run).toEqual({
-			id: runId,
-			agentName: "string-throw-job",
-			status: "failed",
-			error: "raw string error",
-			issueKey: "owner/repo#11",
-			issueTitle: "String throw",
-			startedAt: expect.any(String),
-			completedAt: expect.any(String),
-			durationMs: expect.any(Number),
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-		});
-	});
-
 	it("captures sessionId via setSessionId callback", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 
@@ -418,8 +391,9 @@ describe("Runner integration", () => {
 			name: "session-job",
 			issueKey: "owner/repo#2",
 			issueTitle: "Session issue",
-			handler: async (_emitToolUse, setSessionId) => {
-				setSessionId("sess-123");
+			handler: async (ctx) => {
+				ctx.setSessionId("sess-123");
+				return { status: "completed", durationMs: 0 };
 			},
 		});
 
