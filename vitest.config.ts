@@ -10,6 +10,13 @@ export default defineConfig({
 		restoreMocks: true,
 		coverage: {
 			provider: "v8",
+			exclude: ["**/testing/**", "**/tests/**", "**/*.css", "server/env.ts"],
+			thresholds: {
+				statements: 95,
+				branches: 95,
+				functions: 95,
+				lines: 95,
+			},
 		},
 		projects: [
 			{
