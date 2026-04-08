@@ -3,6 +3,7 @@
 	"version": "1.0.0",
 	"description": "Local autonomous agents powered by Claude Agent SDK",
 	"type": "module",
+	"packageManager": "pnpm@9.15.2",
 	"scripts": {
 		"prepare": "husky",
 		"start": "node server/server.ts",
