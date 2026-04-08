@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createTestApi } from "../tests/support/test-api.ts";
-import { seedEvent, seedRun } from "../tests/support/test-db.ts";
+import { createTestApi } from "../testing/support/test-api.ts";
+import { seedEvent, seedRun } from "../testing/support/test-db.ts";
 
 describe("GET /runs", () => {
 	it("returns empty array when no runs exist", async () => {
