@@ -5,13 +5,27 @@ export type RunEventType =
 	| "run:completed"
 	| "run:failed";
 
-export type RunEvent = {
-	type: RunEventType;
+type RunEventBase = {
 	runId: string;
 	agentName: string;
-	data: Record<string, unknown>;
 	createdAt: string;
 };
+
+export type RunEvent =
+	| (RunEventBase & {
+			type: "run:started";
+			data: { issueKey: string; issueTitle: string };
+	  })
+	| (RunEventBase & { type: "run:output"; data: Record<string, unknown> })
+	| (RunEventBase & {
+			type: "run:tool_use";
+			data: { tool: string; target: string };
+	  })
+	| (RunEventBase & { type: "run:completed"; data: { durationMs: number } })
+	| (RunEventBase & {
+			type: "run:failed";
+			data: { error: string; durationMs: number };
+	  });
 
 export type RunStatus = "running" | "completed" | "failed";
 

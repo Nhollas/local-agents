@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/db.ts";
-import type { RunEventType } from "../db/schema.ts";
 import { runEvents, runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import { logger } from "../logger.ts";
@@ -49,24 +48,27 @@ export function createRunner(config: RunnerConfig): Runner {
 	);
 	const activeRuns = new Map<string, AbortController>();
 
+	type EventPayload = {
+		[E in RunEvent as E["type"]]: Pick<E, "type" | "data">;
+	}[RunEvent["type"]];
+
 	function emitEvent(
 		runId: string,
 		agentName: string,
-		type: RunEventType,
-		data: Record<string, unknown>,
+		event: EventPayload,
 		createdAt = new Date().toISOString(),
 	): void {
-		const event: RunEvent = { type, runId, agentName, data, createdAt };
+		const fullEvent = { ...event, runId, agentName, createdAt } as RunEvent;
 		db.insert(runEvents)
 			.values({
 				id: randomUUID().slice(0, 8),
 				runId,
-				type,
-				data,
+				type: event.type,
+				data: event.data as Record<string, unknown>,
 				createdAt,
 			})
 			.run();
-		eventBus.emit(event);
+		eventBus.emit(fullEvent);
 	}
 
 	function kill(runId: string): boolean {
@@ -105,16 +107,18 @@ export function createRunner(config: RunnerConfig): Runner {
 			emitEvent(
 				runId,
 				job.name,
-				"run:started",
 				{
-					issueKey: job.issueKey,
-					issueTitle: job.issueTitle,
+					type: "run:started",
+					data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
 				},
 				startedAt,
 			);
 
 			const emitToolUse = (tool: string, target: string) => {
-				emitEvent(runId, job.name, "run:tool_use", { tool, target });
+				emitEvent(runId, job.name, {
+					type: "run:tool_use",
+					data: { tool, target },
+				});
 			};
 
 			let sessionCaptured = false;
@@ -149,8 +153,7 @@ export function createRunner(config: RunnerConfig): Runner {
 				emitEvent(
 					runId,
 					job.name,
-					"run:completed",
-					{ durationMs },
+					{ type: "run:completed", data: { durationMs } },
 					completedAt,
 				);
 				resolveResult({ status: "completed", durationMs });
@@ -167,8 +170,7 @@ export function createRunner(config: RunnerConfig): Runner {
 				emitEvent(
 					runId,
 					job.name,
-					"run:failed",
-					{ error, durationMs },
+					{ type: "run:failed", data: { error, durationMs } },
 					failedAt,
 				);
 				resolveResult({ status: "failed", error, durationMs });

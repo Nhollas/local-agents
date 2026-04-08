@@ -9,7 +9,6 @@ export function useEventStream(url: string) {
 
 	const handleEvent = useCallback(
 		(event: RunEvent) => {
-			// Update run status in the runs list cache
 			// Cancel any in-flight /runs fetch so it doesn't overwrite our SSE update
 			queryClient.cancelQueries({ queryKey: ["runs"] });
 
@@ -35,21 +34,23 @@ export function useEventStream(url: string) {
 				case "run:failed":
 					queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {
 						const idx = prev.findIndex((r) => r.id === event.runId);
-						if (idx < 0) return prev;
+						const existing = prev[idx];
+						if (idx < 0 || !existing) return prev;
 						const runs = [...prev];
+						const error =
+							event.type === "run:failed" ? event.data.error : undefined;
 						runs[idx] = {
-							...runs[idx],
+							...existing,
 							status: event.type === "run:completed" ? "completed" : "failed",
 							completedAt: event.createdAt,
-							error: event.data.error as string | undefined,
-							durationMs: event.data.durationMs as number | undefined,
+							durationMs: event.data.durationMs,
+							...(error !== undefined && { error }),
 						};
 						return runs;
 					});
 					break;
 			}
 
-			// Append every event to the run detail cache (if open)
 			queryClient.setQueryData<RunDetailFromApi>(
 				["runs", event.runId],
 				(prev) => {

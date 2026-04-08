@@ -21,7 +21,7 @@ describe("Dashboard - retry action", () => {
 			createRunEvent("run:failed", {
 				runId: "run-fail",
 				agentName: "test-agent",
-				data: { error: "boom" },
+				data: { error: "boom", durationMs: 500 },
 			}),
 		);
 
@@ -87,7 +87,7 @@ describe("Dashboard - retry action", () => {
 			createRunEvent("run:failed", {
 				runId: "run-fail",
 				agentName: "test-agent",
-				data: { error: "boom" },
+				data: { error: "boom", durationMs: 500 },
 			}),
 		);
 

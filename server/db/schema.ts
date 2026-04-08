@@ -43,3 +43,9 @@ export type RunEventType =
 	| "run:tool_use"
 	| "run:completed"
 	| "run:failed";
+
+export type RunStartedData = { issueKey: string; issueTitle: string };
+export type RunOutputData = Record<string, unknown>;
+export type RunToolUseData = { tool: string; target: string };
+export type RunCompletedData = { durationMs: number };
+export type RunFailedData = { error: string; durationMs: number };

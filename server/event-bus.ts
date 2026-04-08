@@ -1,13 +1,24 @@
 import { EventEmitter } from "node:events";
-import type { RunEventType } from "./db/schema.ts";
+import type {
+	RunCompletedData,
+	RunFailedData,
+	RunOutputData,
+	RunStartedData,
+	RunToolUseData,
+} from "./db/schema.ts";
 
-export type RunEvent = {
-	type: RunEventType;
+type RunEventBase = {
 	runId: string;
 	agentName: string;
-	data: Record<string, unknown>;
 	createdAt: string;
 };
+
+export type RunEvent =
+	| (RunEventBase & { type: "run:started"; data: RunStartedData })
+	| (RunEventBase & { type: "run:output"; data: RunOutputData })
+	| (RunEventBase & { type: "run:tool_use"; data: RunToolUseData })
+	| (RunEventBase & { type: "run:completed"; data: RunCompletedData })
+	| (RunEventBase & { type: "run:failed"; data: RunFailedData });
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50);

@@ -1,9 +1,9 @@
-import type { Run } from "./types.ts";
+import type { Run, RunEventType, RunStatus } from "./types.ts";
 
 export type RunFromApi = {
 	id: string;
 	agentName: string;
-	status: string;
+	status: RunStatus;
 	error: string | null;
 	issueKey: string | null;
 	issueTitle: string | null;
@@ -18,7 +18,7 @@ export type RunFromApi = {
 export type RunEventFromApi = {
 	id: string;
 	runId: string;
-	type: string;
+	type: RunEventType;
 	data: Record<string, unknown>;
 	createdAt: string;
 };
@@ -31,15 +31,15 @@ function mapApiRun(r: RunFromApi): Run {
 	return {
 		id: r.id,
 		agentName: r.agentName,
-		status: r.status as Run["status"],
-		error: r.error ?? undefined,
-		issueKey: r.issueKey ?? undefined,
-		issueTitle: r.issueTitle ?? undefined,
+		status: r.status,
 		startedAt: r.startedAt,
-		completedAt: r.completedAt ?? undefined,
-		durationMs: r.durationMs ?? undefined,
 		attempt: r.attempt,
-		parentRunId: r.parentRunId ?? undefined,
+		...(r.error != null && { error: r.error }),
+		...(r.issueKey != null && { issueKey: r.issueKey }),
+		...(r.issueTitle != null && { issueTitle: r.issueTitle }),
+		...(r.completedAt != null && { completedAt: r.completedAt }),
+		...(r.durationMs != null && { durationMs: r.durationMs }),
+		...(r.parentRunId != null && { parentRunId: r.parentRunId }),
 	};
 }
 
