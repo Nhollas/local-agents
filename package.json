@@ -3,6 +3,7 @@
 	"version": "1.0.0",
 	"description": "Local autonomous agents powered by Claude Agent SDK",
 	"type": "module",
+	"packageManager": "pnpm@9.15.2",
 	"scripts": {
 		"prepare": "husky",
 		"start": "node server/server.ts",
@@ -22,8 +23,12 @@
 		"*.{ts,tsx,json,mjs}": "biome check --write --no-errors-on-unmatched"
 	},
 	"keywords": [],
-	"author": "",
+	"author": "Nick Hollas",
 	"license": "ISC",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Nhollas/local-agents.git"
+	},
 	"engines": {
 		"node": ">=22.6.0"
 	},
