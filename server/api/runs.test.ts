@@ -238,7 +238,12 @@ describe("GET /runs/:id", () => {
 		const res = await app.request("/runs/nonexistent");
 
 		expect(res.status).toBe(404);
-		expect(await res.json()).toEqual({ error: "Not found" });
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 404,
+			title: "Not Found",
+			detail: "Not found",
+		});
 	});
 });
 
@@ -266,7 +271,12 @@ describe("POST /runs/:id/kill", () => {
 		});
 
 		expect(res.status).toBe(404);
-		expect(await res.json()).toEqual({ error: "Run not found or not running" });
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 404,
+			title: "Not Found",
+			detail: "Run not found or not running",
+		});
 	});
 });
 
@@ -292,7 +302,12 @@ describe("POST /runs/:id/retry", () => {
 		});
 
 		expect(res.status).toBe(400);
-		expect(await res.json()).toEqual({ error: "Run is not failed" });
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 400,
+			title: "Bad Request",
+			detail: "Run is not failed",
+		});
 	});
 
 	it("returns 400 when run not found", async () => {
@@ -303,6 +318,11 @@ describe("POST /runs/:id/retry", () => {
 		});
 
 		expect(res.status).toBe(400);
-		expect(await res.json()).toEqual({ error: "Run not found" });
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 400,
+			title: "Bad Request",
+			detail: "Run not found",
+		});
 	});
 });

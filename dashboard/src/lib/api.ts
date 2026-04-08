@@ -29,7 +29,10 @@ export type RunDetailFromApi = RunFromApi & {
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 	const res = await fetch(url, init);
-	if (!res.ok) throw new Error(`API request failed: ${res.status}`);
+	if (!res.ok) {
+		const body = await res.json().catch(() => null);
+		throw new Error(body?.detail ?? `API request failed: ${res.status}`);
+	}
 	return res;
 }
 
@@ -65,9 +68,5 @@ export async function killRun(runId: string): Promise<void> {
 }
 
 export async function retryRun(runId: string): Promise<void> {
-	const res = await fetch(`/runs/${runId}/retry`, { method: "POST" });
-	if (!res.ok) {
-		const body = await res.json().catch(() => ({ error: "Retry failed" }));
-		throw new Error(body.error ?? "Retry failed");
-	}
+	await apiFetch(`/runs/${runId}/retry`, { method: "POST" });
 }

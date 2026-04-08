@@ -7,6 +7,11 @@ import type { Db } from "../db/db.ts";
 import { runEvents, runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { Runner } from "../runner/runner.ts";
+import {
+	ProblemDetailsError,
+	problemDetailsHandler,
+	zodProblemHook,
+} from "./problem-details.ts";
 
 const runsQuerySchema = z.object({
 	agent: z.string().optional(),
@@ -32,6 +37,7 @@ export function createApi({
 	retryRun: RetryFn;
 }) {
 	const app = new Hono();
+	app.onError(problemDetailsHandler);
 
 	app.get("/events", (c) => {
 		return streamSSE(c, async (stream) => {
@@ -57,57 +63,70 @@ export function createApi({
 		});
 	});
 
-	app.get("/runs", zValidator("query", runsQuerySchema), (c) => {
-		const { agent, status, limit } = c.req.valid("query");
+	app.get(
+		"/runs",
+		zValidator("query", runsQuerySchema, zodProblemHook),
+		(c) => {
+			const { agent, status, limit } = c.req.valid("query");
 
-		const conditions: SQL[] = [];
-		if (agent) conditions.push(eq(runs.agentName, agent));
-		if (status) conditions.push(eq(runs.status, status));
+			const conditions: SQL[] = [];
+			if (agent) conditions.push(eq(runs.agentName, agent));
+			if (status) conditions.push(eq(runs.status, status));
 
-		const query = db
-			.select()
-			.from(runs)
-			.orderBy(desc(runs.startedAt))
-			.limit(limit);
+			const query = db
+				.select()
+				.from(runs)
+				.orderBy(desc(runs.startedAt))
+				.limit(limit);
 
-		const result =
-			conditions.length > 0
-				? query.where(and(...conditions)).all()
-				: query.all();
+			const result =
+				conditions.length > 0
+					? query.where(and(...conditions)).all()
+					: query.all();
 
-		return c.json(result);
-	});
+			return c.json(result);
+		},
+	);
 
-	app.get("/runs/:id", zValidator("param", runParamSchema), (c) => {
-		const { id } = c.req.valid("param");
+	app.get(
+		"/runs/:id",
+		zValidator("param", runParamSchema, zodProblemHook),
+		(c) => {
+			const { id } = c.req.valid("param");
 
-		const run = db.select().from(runs).where(eq(runs.id, id)).get();
-		if (!run) return c.json({ error: "Not found" }, 404);
+			const run = db.select().from(runs).where(eq(runs.id, id)).get();
+			if (!run) throw new ProblemDetailsError(404, "Not found");
 
-		const events = db
-			.select()
-			.from(runEvents)
-			.where(eq(runEvents.runId, id))
-			.orderBy(asc(runEvents.createdAt))
-			.all();
+			const events = db
+				.select()
+				.from(runEvents)
+				.where(eq(runEvents.runId, id))
+				.orderBy(asc(runEvents.createdAt))
+				.all();
 
-		return c.json({ ...run, events });
-	});
+			return c.json({ ...run, events });
+		},
+	);
 
-	app.post("/runs/:id/kill", zValidator("param", runParamSchema), (c) => {
-		const { id } = c.req.valid("param");
-		const killed = runner.kill(id);
-		if (!killed) return c.json({ error: "Run not found or not running" }, 404);
-		return c.json({ killed: true });
-	});
+	app.post(
+		"/runs/:id/kill",
+		zValidator("param", runParamSchema, zodProblemHook),
+		(c) => {
+			const { id } = c.req.valid("param");
+			const killed = runner.kill(id);
+			if (!killed)
+				throw new ProblemDetailsError(404, "Run not found or not running");
+			return c.json({ killed: true });
+		},
+	);
 
 	app.post(
 		"/runs/:id/retry",
-		zValidator("param", runParamSchema),
+		zValidator("param", runParamSchema, zodProblemHook),
 		async (c) => {
 			const { id } = c.req.valid("param");
 			const result = await retryRun(id);
-			if ("error" in result) return c.json({ error: result.error }, 400);
+			if ("error" in result) throw new ProblemDetailsError(400, result.error);
 			return c.json({ runId: result.runId }, 201);
 		},
 	);
