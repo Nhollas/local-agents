@@ -3,6 +3,17 @@ import type { TrackerAdapter } from "./types.ts";
 
 export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 	return {
+		async fetchIssue(repo, issueNumber) {
+			try {
+				const issue = await inner.fetchIssue(repo, issueNumber);
+				logger.info({ repo, issueNumber }, "tracker.fetch_issue");
+				return issue;
+			} catch (err) {
+				logger.warn({ repo, issueNumber, err }, "tracker.fetch_issue_failed");
+				throw err;
+			}
+		},
+
 		async fetchActiveIssues(repo, label) {
 			try {
 				const issues = await inner.fetchActiveIssues(repo, label);

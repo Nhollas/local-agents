@@ -213,6 +213,19 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					},
 					"orchestrator.on_complete_failed",
 				);
+				await tracker
+					.swapLabel(
+						ctx.repo,
+						ctx.issue.number,
+						LABELS.running,
+						LABELS.completed,
+					)
+					.catch((labelErr) =>
+						logger.warn(
+							{ issue: ctx.issue.key, err: labelErr },
+							"orchestrator.label_recovery_failed",
+						),
+					);
 			}
 		}
 
@@ -246,10 +259,6 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 			runningByIssue.set(r.issueKey, ids);
 		}
 
-		const reposWithRunning = new Set(
-			[...runningByIssue.keys()].map((k) => parseIssueKey(k).repo),
-		);
-
 		const [pendingResults, runningResults] = await Promise.all([
 			Promise.allSettled(
 				entries.map(async ([repo, workflow]) => {
@@ -259,19 +268,12 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 					);
 				}),
 			),
-			runningByIssue.size > 0
-				? Promise.allSettled(
-						entries
-							.filter(([repo]) => reposWithRunning.has(repo))
-							.map(async ([repo]) => {
-								const issues = await tracker.fetchActiveIssues(
-									repo,
-									LABELS.running,
-								);
-								return { repo, keys: new Set(issues.map((i) => i.key)) };
-							}),
-					)
-				: Promise.resolve([]),
+			Promise.allSettled(
+				entries.map(async ([repo]) => {
+					const issues = await tracker.fetchActiveIssues(repo, LABELS.running);
+					return { repo, keys: new Set(issues.map((i) => i.key)) };
+				}),
+			),
 		]);
 
 		const pending: TaggedIssue[] = [];
@@ -297,7 +299,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		};
 	}
 
-	function reconcileStaleRuns(state: TickState) {
+	async function reconcileStaleRuns(state: TickState) {
 		for (const [key, runIds] of state.runningByIssue) {
 			const { repo } = parseIssueKey(key);
 			const repoKeys = state.stillRunning.get(repo);
@@ -306,6 +308,19 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				for (const id of runIds) {
 					runner.kill(id);
 				}
+			}
+		}
+
+		for (const [repo, keys] of state.stillRunning) {
+			for (const key of keys) {
+				if (state.runningByIssue.has(key)) continue;
+				const { number } = parseIssueKey(key);
+				logger.info({ key }, "orchestrator.reconcile_orphan");
+				await tracker
+					.swapLabel(repo, number, LABELS.running, LABELS.pending)
+					.catch((err) =>
+						logger.warn({ key, err }, "orchestrator.orphan_recovery_failed"),
+					);
 			}
 		}
 	}
@@ -351,7 +366,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 
 		try {
 			const state = await fetchTickState();
-			reconcileStaleRuns(state);
+			await reconcileStaleRuns(state);
 			await dispatchPendingIssues(state);
 		} finally {
 			ticking = false;
@@ -384,15 +399,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		const workflow = workflows.get(repo);
 		if (!workflow) return { error: "No workflow for repo" };
 
-		const issue: Issue = {
-			key: failedRun.issueKey,
-			number: issueNumber,
-			title: failedRun.issueTitle ?? "",
-			description: "",
-			labels: [],
-			url: "",
-			createdAt: "",
-		};
+		const issue = await tracker.fetchIssue(repo, issueNumber);
 
 		const runId = await prepareAndDispatch({
 			issue,

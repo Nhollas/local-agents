@@ -476,7 +476,7 @@ describe("Orchestrator dispatch", () => {
 		expect(allRuns).toHaveLength(0);
 	});
 
-	it("onComplete failure (PR creation 500) leaves run completed but label stays running", async () => {
+	it("transitions label to awaiting-review even when PR creation fails", async () => {
 		const labelOps: { method: string; label: string }[] = [];
 
 		server.use(
@@ -532,13 +532,11 @@ describe("Orchestrator dispatch", () => {
 			},
 		]);
 
-		// PR creation failed, so swapLabel to awaiting-review never happened
-		expect(labelOps).not.toContainEqual({
+		// PR creation failed, but label should still transition to awaiting-review
+		expect(labelOps).toContainEqual({
 			method: "add",
 			label: "agent:awaiting-review",
 		});
-		// Label should still be agent:running (set during dispatch, never swapped)
-		expect(labelOps).toContainEqual({ method: "add", label: "agent:running" });
 	});
 
 	it("onFinally triggers workspace cleanup", async () => {
@@ -1118,15 +1116,15 @@ describe("Orchestrator dispatch", () => {
 		orchestrator.start();
 
 		await vi.advanceTimersByTimeAsync(0);
-		expect(tickCount).toBe(1);
+		expect(tickCount).toBe(2);
 
 		await vi.advanceTimersByTimeAsync(1000);
-		expect(tickCount).toBe(2);
+		expect(tickCount).toBe(4);
 
 		orchestrator.stop();
 
 		await vi.advanceTimersByTimeAsync(5000);
-		expect(tickCount).toBe(2);
+		expect(tickCount).toBe(4);
 
 		vi.useRealTimers();
 	});
@@ -1174,10 +1172,10 @@ describe("Orchestrator dispatch", () => {
 		orchestrator.start();
 
 		await vi.advanceTimersByTimeAsync(0);
-		expect(tickCount).toBe(1);
+		expect(tickCount).toBe(2);
 
 		await vi.advanceTimersByTimeAsync(1000);
-		expect(tickCount).toBe(2);
+		expect(tickCount).toBe(4);
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(0);

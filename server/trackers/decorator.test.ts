@@ -6,6 +6,9 @@ function createFakeTracker(
 	overrides: Partial<TrackerAdapter> = {},
 ): TrackerAdapter {
 	return {
+		fetchIssue: async () => {
+			throw new Error("not implemented");
+		},
 		fetchActiveIssues: async () => [],
 		swapLabel: async () => {},
 		...overrides,

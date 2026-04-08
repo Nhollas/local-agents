@@ -5,6 +5,7 @@ import { createGitHubClient } from "../github-client.ts";
 import { createRunner } from "../runner/runner.ts";
 import {
 	createGitHubIssue,
+	createPromptSpyAgent,
 	createTestWorkflow,
 	noopAgent,
 	REPO,
@@ -69,7 +70,7 @@ describe("Orchestrator retryRun", () => {
 			status: "completed",
 			error: null,
 			issueKey: `${REPO}#1`,
-			issueTitle: "Test issue",
+			issueTitle: "Issue 1",
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
@@ -99,11 +100,7 @@ describe("Orchestrator retryRun", () => {
 		const github = createGitHubClient("test-token");
 		const runner = createRunner({ db, maxConcurrency: 2 });
 
-		let capturedOptions: Record<string, unknown> | undefined;
-		// biome-ignore lint/correctness/useYield: spy agent only captures params
-		async function* spyAgent(params: { options?: Record<string, unknown> }) {
-			capturedOptions = params.options;
-		}
+		const { spyAgent, getCaptured } = createPromptSpyAgent();
 
 		const orchestrator = createOrchestrator({
 			db,
@@ -119,7 +116,7 @@ describe("Orchestrator retryRun", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
-		expect(capturedOptions).toEqual({
+		expect(getCaptured().options).toEqual({
 			cwd: expect.stringContaining("test-owner_test-repo_1"),
 			model: "claude-sonnet-4-6",
 			allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
@@ -149,7 +146,7 @@ describe("Orchestrator retryRun", () => {
 		expect(result).toEqual({ error: "Run not found" });
 	});
 
-	it("uses empty title when failed run has no stored issueTitle", async () => {
+	it("uses fetched issue title even when failed run has no stored issueTitle", async () => {
 		server.use(
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent:running"])],
@@ -193,7 +190,7 @@ describe("Orchestrator retryRun", () => {
 			status: "completed",
 			error: null,
 			issueKey: `${REPO}#1`,
-			issueTitle: "",
+			issueTitle: "Issue 1",
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),

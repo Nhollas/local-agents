@@ -163,7 +163,7 @@ describe("Orchestrator reconciliation", () => {
 		]);
 	});
 
-	it("skips repos with no running agents (avoids unnecessary API call)", async () => {
+	it("fetches running issues even with no running DB records to detect orphans", async () => {
 		let fetchCallCount = 0;
 
 		server.use(
@@ -198,11 +198,11 @@ describe("Orchestrator reconciliation", () => {
 			runAgent: noopAgent,
 		});
 
-		// No running agents — tick should only fetch pending issues, not running ones
+		// No running agents — tick should still fetch running issues to detect orphans
 		await orchestrator.tick();
 
-		// Should have fetched pending issues (1 call) but NOT running issues
-		expect(fetchCallCount).toBe(1);
+		// Should have fetched both pending and running issues
+		expect(fetchCallCount).toBe(2);
 	});
 
 	it("handles fetch failure gracefully during reconciliation", async () => {

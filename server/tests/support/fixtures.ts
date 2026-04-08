@@ -1,3 +1,4 @@
+import type { query } from "@anthropic-ai/claude-agent-sdk";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 export const GITHUB_API = "https://api.github.com";
@@ -45,6 +46,29 @@ export function createSessionAgent(
 			uuid: "00000000-0000-0000-0000-000000000001" as const,
 		};
 	};
+}
+
+type QueryParams = Parameters<typeof query>[0];
+
+export function createPromptSpyAgent() {
+	let captured: QueryParams | undefined;
+	async function* spyAgent(params: QueryParams) {
+		captured = params;
+		yield {
+			type: "assistant" as const,
+			session_id: "spy-session",
+			// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's BetaMessage shape
+			message: { content: [] } as any,
+			parent_tool_use_id: null,
+			uuid: "00000000-0000-0000-0000-000000000002" as const,
+		};
+	}
+	function getCaptured(): QueryParams {
+		if (!captured) throw new Error("spyAgent was never called");
+		return captured;
+	}
+
+	return { spyAgent, getCaptured };
 }
 
 export function createTestWorkflow(

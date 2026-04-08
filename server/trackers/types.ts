@@ -9,6 +9,7 @@ export type Issue = {
 };
 
 export type TrackerAdapter = {
+	fetchIssue(repo: string, issueNumber: number): Promise<Issue>;
 	fetchActiveIssues(repo: string, label: string): Promise<Issue[]>;
 	swapLabel(
 		repo: string,

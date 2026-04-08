@@ -24,6 +24,13 @@ export function githubHandlers({
 		http.get(`${GITHUB_API}/user`, () =>
 			HttpResponse.json({ login: "test-user" }),
 		),
+		http.get(`${GITHUB_API}/repos/${REPO}/issues/:number`, ({ params }) => {
+			const num = Number(params.number);
+			const all = resolve("agent").concat(resolve("agent:running"));
+			const issue = all.find((i) => i.number === num);
+			if (!issue) return new HttpResponse(null, { status: 404 });
+			return HttpResponse.json(issue);
+		}),
 		http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
 			const url = new URL(request.url);
 			const label = url.searchParams.get("labels");
