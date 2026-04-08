@@ -1,19 +1,23 @@
+import { z } from "zod";
 import type { GitHubClient } from "../github-client.ts";
 import { decorateTracker } from "./decorator.ts";
 import type { Issue, TrackerAdapter } from "./types.ts";
 
-type GitHubIssue = {
-	number: number;
-	title: string;
-	body: string | null;
-	labels: { name: string }[];
-	html_url: string;
-	created_at: string;
-};
+const githubUserSchema = z.object({
+	login: z.string(),
+});
 
-type GitHubUser = {
-	login: string;
-};
+const githubIssueSchema = z.object({
+	number: z.number(),
+	title: z.string(),
+	body: z.string().nullable(),
+	labels: z.array(z.object({ name: z.string() })),
+	html_url: z.string(),
+	created_at: z.string(),
+});
+
+type GitHubIssue = z.infer<typeof githubIssueSchema>;
+const githubIssuesSchema = z.array(githubIssueSchema);
 
 type IssueState = "open" | "closed" | "all";
 
@@ -33,12 +37,15 @@ export function githubTrackerAdapter(
 	client: GitHubClient,
 	activeStates: IssueState[] = ["open"],
 ): TrackerAdapter {
-	const usernamePromise = client.get<GitHubUser>("/user").then((u) => u.login);
+	const usernamePromise = client
+		.get("/user", githubUserSchema)
+		.then((u) => u.login);
 
 	return decorateTracker({
 		async fetchIssue(repo: string, issueNumber: number): Promise<Issue> {
-			const i = await client.get<GitHubIssue>(
+			const i = await client.get(
 				`/repos/${repo}/issues/${issueNumber}`,
+				githubIssueSchema,
 			);
 			return mapGitHubIssue(repo, i);
 		},
@@ -54,7 +61,10 @@ export function githubTrackerAdapter(
 						creator: username,
 						per_page: "100",
 					});
-					return client.get<GitHubIssue[]>(`/repos/${repo}/issues?${params}`);
+					return client.get(
+						`/repos/${repo}/issues?${params}`,
+						githubIssuesSchema,
+					);
 				}),
 			);
 

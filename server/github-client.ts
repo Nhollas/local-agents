@@ -1,22 +1,32 @@
+import type { z } from "zod";
+
 const BASE_URL = "https://api.github.com";
 
 type RequestOptions = {
 	method?: string;
 	body?: Record<string, unknown>;
+	schema?: z.ZodType | undefined;
 };
 
 export type GitHubClient = {
-	get: <T>(path: string) => Promise<T>;
-	post: <T>(path: string, body: Record<string, unknown>) => Promise<T>;
+	get: <T extends z.ZodType>(path: string, schema: T) => Promise<z.infer<T>>;
+	post: {
+		<T extends z.ZodType>(
+			path: string,
+			body: Record<string, unknown>,
+			schema: T,
+		): Promise<z.infer<T>>;
+		(path: string, body: Record<string, unknown>): Promise<void>;
+	};
 	delete: (path: string) => Promise<void>;
 };
 
 export function createGitHubClient(token: string): GitHubClient {
-	async function request<T>(
+	async function request(
 		path: string,
 		options: RequestOptions = {},
-	): Promise<T> {
-		const { method = "GET", body } = options;
+	): Promise<unknown> {
+		const { method = "GET", body, schema } = options;
 
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${token}`,
@@ -42,14 +52,39 @@ export function createGitHubClient(token: string): GitHubClient {
 			);
 		}
 
+		if (!schema) {
+			return;
+		}
+
 		const text = await response.text();
-		return text ? JSON.parse(text) : (undefined as T);
+		return schema.parse(JSON.parse(text));
+	}
+
+	function get<T extends z.ZodType>(
+		path: string,
+		schema: T,
+	): Promise<z.infer<T>> {
+		return request(path, { schema }) as Promise<z.infer<T>>;
+	}
+
+	function post<T extends z.ZodType>(
+		path: string,
+		body: Record<string, unknown>,
+		schema: T,
+	): Promise<z.infer<T>>;
+	function post(path: string, body: Record<string, unknown>): Promise<void>;
+	function post(
+		path: string,
+		body: Record<string, unknown>,
+		schema?: z.ZodType,
+	) {
+		return request(path, { method: "POST", body, schema });
 	}
 
 	return {
-		get: <T>(path: string) => request<T>(path),
-		post: <T>(path: string, body: Record<string, unknown>) =>
-			request<T>(path, { method: "POST", body }),
-		delete: (path: string) => request(path, { method: "DELETE" }),
+		get,
+		post,
+		delete: (path: string) =>
+			request(path, { method: "DELETE" }) as Promise<void>,
 	};
 }
