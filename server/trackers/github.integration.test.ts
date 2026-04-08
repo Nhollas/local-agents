@@ -5,8 +5,8 @@ import {
 	createGitHubIssue,
 	GITHUB_API,
 	REPO,
-} from "../tests/support/fixtures.ts";
-import { server } from "../tests/support/msw.ts";
+} from "../testing/support/fixtures.ts";
+import { server } from "../testing/support/msw.ts";
 import { githubTrackerAdapter } from "./github.ts";
 
 describe("githubTrackerAdapter", () => {

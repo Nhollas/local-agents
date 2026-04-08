@@ -7,11 +7,11 @@ import {
 	createTestWorkflow,
 	noopAgent,
 	REPO,
-} from "../tests/support/fixtures.ts";
-import { githubHandlers, server } from "../tests/support/msw.ts";
-import { createTestConfig } from "../tests/support/test-config.ts";
-import { createTestDb, seedRun } from "../tests/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../tests/support/test-workspace.ts";
+} from "../testing/support/fixtures.ts";
+import { githubHandlers, server } from "../testing/support/msw.ts";
+import { createTestConfig } from "../testing/support/test-config.ts";
+import { createTestDb, seedRun } from "../testing/support/test-db.ts";
+import { createTestWorkspaceRoot } from "../testing/support/test-workspace.ts";
 import { githubTrackerAdapter } from "../trackers/github.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { createOrchestrator } from "./orchestrator.ts";
