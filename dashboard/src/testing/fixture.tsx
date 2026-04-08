@@ -11,7 +11,10 @@ import { dashboardPageObject } from "./page-object";
 
 export const test = base
 	.extend("sseStream", { auto: true }, async () => {
-		let client: { send(payload: Record<string, unknown>): void } | null = null;
+		let client: {
+			send(payload: Record<string, unknown>): void;
+			error(): void;
+		} | null = null;
 		let resolveConnected: (() => void) | null = null;
 		const connected = new Promise<void>((r) => {
 			resolveConnected = r;
@@ -46,6 +49,14 @@ export const test = base
 			},
 			async waitForConnection() {
 				await connected;
+			},
+			disconnect() {
+				if (!client) {
+					throw new Error(
+						"SSE client not connected — call waitForConnection() first",
+					);
+				}
+				client.error();
 			},
 		};
 	})

@@ -354,6 +354,63 @@ describe("Runner integration", () => {
 		});
 	});
 
+	it("uses default maxConcurrency when not specified", async () => {
+		const runner = createRunner({ db });
+
+		const { runId, done } = runner.enqueue({
+			name: "default-concurrency-job",
+			issueKey: "owner/repo#10",
+			issueTitle: "Default concurrency",
+			handler: async () => {},
+		});
+
+		const result = await done;
+		expect(result).toEqual({
+			status: "completed",
+			durationMs: expect.any(Number),
+		});
+
+		const run = getRun(db, runId);
+		expect(run).toBeDefined();
+		expect(run?.status).toBe("completed");
+	});
+
+	it("captures non-Error throwables as string", async () => {
+		const runner = createRunner({ db, maxConcurrency: 1 });
+
+		const { runId, done } = runner.enqueue({
+			name: "string-throw-job",
+			issueKey: "owner/repo#11",
+			issueTitle: "String throw",
+			handler: async () => {
+				throw "raw string error";
+			},
+		});
+
+		const result = await done;
+		expect(result).toEqual({
+			status: "failed",
+			error: "raw string error",
+			durationMs: expect.any(Number),
+		});
+
+		const run = getRun(db, runId);
+		expect(run).toEqual({
+			id: runId,
+			agentName: "string-throw-job",
+			status: "failed",
+			error: "raw string error",
+			issueKey: "owner/repo#11",
+			issueTitle: "String throw",
+			startedAt: expect.any(String),
+			completedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+		});
+	});
+
 	it("captures sessionId via setSessionId callback", async () => {
 		const runner = createRunner({ db, maxConcurrency: 1 });
 

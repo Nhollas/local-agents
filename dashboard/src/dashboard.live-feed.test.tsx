@@ -97,7 +97,7 @@ describe("Dashboard - live feed", () => {
 		await dashboard.expectRunCount("pr-conventions", 1);
 	});
 
-	test("shows multiple runs under the same agent", async ({
+	test("shows multiple runs under the same agent sorted by time", async ({
 		dashboardPage,
 		sseStream,
 	}) => {
@@ -107,12 +107,14 @@ describe("Dashboard - live feed", () => {
 			createRunEvent("run:started", {
 				runId: "run-1",
 				agentName: "pr-summary",
+				createdAt: "2026-03-20T11:00:00.000Z",
 			}),
 		);
 		sseStream.emit(
 			createRunEvent("run:started", {
 				runId: "run-2",
 				agentName: "pr-summary",
+				createdAt: "2026-03-20T12:00:00.000Z",
 			}),
 		);
 

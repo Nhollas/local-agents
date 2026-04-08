@@ -21,6 +21,7 @@ describe("Dashboard - history", () => {
 						agentName: "pr-conventions",
 						status: "failed",
 						error: "Timed out",
+						parentRunId: "run-old-1",
 					}),
 				]),
 			),

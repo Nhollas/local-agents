@@ -539,6 +539,135 @@ describe("Orchestrator dispatch", () => {
 		});
 	});
 
+	it("after_run hook failure does not prevent completion", async () => {
+		const labelOps: { method: string; label: string }[] = [];
+
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
+				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({ workspace_root: workspace.root }),
+			workflows: new Map<string, RepoWorkflow>([
+				[
+					REPO,
+					createTestWorkflow({
+						hooks: { after_run: "exit 1" },
+					}),
+				],
+			]),
+			runner,
+			runAgent: noopAgent,
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
+
+		expect(labelOps).toContainEqual({
+			method: "add",
+			label: "agent:awaiting-review",
+		});
+	});
+
+	it("does not crash when both PR creation and label recovery fail", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+			}),
+		);
+		// PR creation fails
+		server.use(
+			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, () => {
+				return new HttpResponse(null, { status: 500 });
+			}),
+		);
+		// Label delete succeeds for "agent" (dispatch) but fails for "agent:running" (recovery)
+		server.use(
+			http.delete(
+				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
+				({ params }) => {
+					const label = decodeURIComponent(params["label"] as string);
+					if (label === "agent:running") {
+						return new HttpResponse(null, { status: 500 });
+					}
+					return new HttpResponse(null, { status: 204 });
+				},
+			),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({ workspace_root: workspace.root }),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: noopAgent,
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
+	});
+
 	it("onFinally triggers workspace cleanup", async () => {
 		server.use(
 			...githubHandlers({
@@ -836,6 +965,65 @@ describe("Orchestrator dispatch", () => {
 				completedAt: expect.any(String),
 				durationMs: expect.any(Number),
 				sessionId: "test-sess-abc",
+				attempt: 1,
+				parentRunId: null,
+			},
+		]);
+	});
+
+	it("completes run when agent emits non-assistant messages", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
+			}),
+		);
+
+		await using workspace = await createTestWorkspaceRoot();
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		const db = createTestDb();
+		const github = createGitHubClient("test-token");
+		const runner = createRunner({ db, maxConcurrency: 2 });
+
+		// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's message shape
+		async function* mixedMessageAgent(): AsyncGenerator<any> {
+			yield { type: "system" };
+			yield {
+				type: "assistant",
+				session_id: "sess-mixed",
+				message: { content: [] },
+				parent_tool_use_id: null,
+				uuid: "00000000-0000-0000-0000-000000000099",
+			};
+		}
+
+		const orchestrator = createOrchestrator({
+			db,
+			tracker: githubTrackerAdapter(github),
+			codeHost: githubCodeHostAdapter(github),
+			config: createTestConfig({ workspace_root: workspace.root }),
+			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			runner,
+			runAgent: mixedMessageAgent,
+		});
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "completed",
+				error: null,
+				issueKey: `${REPO}#1`,
+				issueTitle: "Issue 1",
+				startedAt: expect.any(String),
+				completedAt: expect.any(String),
+				durationMs: expect.any(Number),
+				sessionId: "sess-mixed",
 				attempt: 1,
 				parentRunId: null,
 			},

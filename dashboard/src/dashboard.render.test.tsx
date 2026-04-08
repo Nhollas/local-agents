@@ -26,9 +26,28 @@ describe("Dashboard - render", () => {
 
 		await lightToggle.click();
 
+		const darkToggle = dashboard.getByRole("button", {
+			name: /switch to dark mode/i,
+		});
+		await expect.element(darkToggle).toBeVisible();
+
+		await darkToggle.click();
+
 		await expect
-			.element(dashboard.getByRole("button", { name: /switch to dark mode/i }))
+			.element(dashboard.getByRole("button", { name: /switch to light mode/i }))
 			.toBeVisible();
+	});
+
+	test("shows disconnected status when SSE stream errors", async ({
+		dashboardPage,
+		sseStream,
+	}) => {
+		const dashboard = await dashboardPage.mount();
+		await dashboard.expectConnected();
+
+		sseStream.disconnect();
+
+		await dashboard.expectDisconnected();
 	});
 
 	test("remains connected after receiving a heartbeat", async ({
