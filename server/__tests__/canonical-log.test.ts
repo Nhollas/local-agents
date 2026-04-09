@@ -19,6 +19,18 @@ function capturingLogger(): {
 }
 
 describe("canonicalLog", () => {
+	describe("errorMessage", () => {
+		it("extracts message from Error instances", () => {
+			expect(canonicalLog.errorMessage(new Error("boom"))).toBe("boom");
+		});
+
+		it("converts non-Error values to strings", () => {
+			expect(canonicalLog.errorMessage("plain string")).toBe("plain string");
+			expect(canonicalLog.errorMessage(42)).toBe("42");
+			expect(canonicalLog.errorMessage(null)).toBe("null");
+		});
+	});
+
 	describe("outside a scope", () => {
 		it("set, append, and increment are no-ops", () => {
 			canonicalLog.set({ key: "value" });

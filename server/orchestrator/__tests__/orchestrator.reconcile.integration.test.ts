@@ -289,7 +289,7 @@ describe("Orchestrator reconciliation", () => {
 		expect(runsAfter).toEqual(runsBefore);
 	});
 
-	it("skips orphan reconciliation while post-run work is still settling", async () => {
+	it("does not orphan-reconcile a run with pending post-run work", async () => {
 		let pendingIssues = [createGitHubIssue(1, ["agent"])];
 		let runningIssues: ReturnType<typeof createGitHubIssue>[] = [];
 		const labelOps: string[] = [];
