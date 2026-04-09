@@ -1,13 +1,13 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { createGitHubClient } from "../github-client.ts";
+import { createGitHubClient } from "../../github-client.ts";
 import {
 	createGitHubIssue,
 	GITHUB_API,
 	REPO,
-} from "../testing/support/fixtures.ts";
-import { server } from "../testing/support/msw.ts";
-import { githubTrackerAdapter } from "./github.ts";
+} from "../../testing/support/fixtures.ts";
+import { server } from "../../testing/support/msw.ts";
+import { githubTrackerAdapter } from "../github.ts";
 
 describe("githubTrackerAdapter", () => {
 	describe("fetchActiveIssues", () => {

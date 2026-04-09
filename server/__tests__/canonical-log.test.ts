@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as canonicalLog from "./canonical-log.ts";
+import * as canonicalLog from "../canonical-log.ts";
 
 type LogFields = Record<string, unknown>;
 

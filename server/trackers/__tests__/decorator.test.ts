@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decorateTracker } from "./decorator.ts";
-import type { TrackerAdapter } from "./types.ts";
+import { decorateTracker } from "../decorator.ts";
+import type { TrackerAdapter } from "../types.ts";
 
 function createFakeTracker(
 	overrides: Partial<TrackerAdapter> = {},

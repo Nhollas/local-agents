@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { githubCodeHostAdapter } from "../code-hosts/github.ts";
-import { createGitHubClient } from "../github-client.ts";
-import { createRunner } from "../runner/runner.ts";
+import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
+import { createGitHubClient } from "../../github-client.ts";
+import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
 	createTestWorkflow,
 	noopAgent,
 	REPO,
-} from "../testing/support/fixtures.ts";
-import { githubHandlers, server } from "../testing/support/msw.ts";
-import { createTestConfig } from "../testing/support/test-config.ts";
-import { createTestDb } from "../testing/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../testing/support/test-workspace.ts";
-import { githubTrackerAdapter } from "../trackers/github.ts";
-import type { RepoWorkflow } from "../workflow/workflow.ts";
-import { createOrchestrator } from "./orchestrator.ts";
+} from "../../testing/support/fixtures.ts";
+import { githubHandlers, server } from "../../testing/support/msw.ts";
+import { createTestConfig } from "../../testing/support/test-config.ts";
+import { createTestDb } from "../../testing/support/test-db.ts";
+import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
+import { githubTrackerAdapter } from "../../trackers/github.ts";
+import type { RepoWorkflow } from "../../workflow/workflow.ts";
+import { createOrchestrator } from "../orchestrator.ts";
 
 describe("Orchestrator dispatch label rollback", () => {
 	it("recovers an issue stuck with agent:running label but no DB record", async () => {
