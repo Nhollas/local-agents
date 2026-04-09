@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Db } from "../db/db.ts";
-import { createTestDb, getEvents, getRun } from "../testing/support/test-db.ts";
-import { ABORT_ERROR, createRunner, type RunResult } from "./runner.ts";
+import type { Db } from "../../db/db.ts";
+import {
+	createTestDb,
+	getEvents,
+	getRun,
+} from "../../testing/support/test-db.ts";
+import { ABORT_ERROR, createRunner, type RunResult } from "../runner.ts";
 
 /** Helper: a handler that completes immediately. */
 const completedHandler = async (): Promise<RunResult> => ({

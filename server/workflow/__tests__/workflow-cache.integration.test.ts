@@ -1,10 +1,10 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
-import { githubCodeHostAdapter } from "../code-hosts/github.ts";
-import { createGitHubClient } from "../github-client.ts";
-import { GITHUB_API, REPO } from "../testing/support/fixtures.ts";
-import { server } from "../testing/support/msw.ts";
-import { createWorkflowCache } from "./workflow-cache.ts";
+import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
+import { createGitHubClient } from "../../github-client.ts";
+import { GITHUB_API, REPO } from "../../testing/support/fixtures.ts";
+import { server } from "../../testing/support/msw.ts";
+import { createWorkflowCache } from "../workflow-cache.ts";
 
 function base64(content: string): string {
 	return Buffer.from(content).toString("base64");

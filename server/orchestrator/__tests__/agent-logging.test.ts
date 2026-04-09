@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { type AgentMessage, logAgentMessage } from "./agent-logging.ts";
+import { type AgentMessage, logAgentMessage } from "../agent-logging.ts";
 
 function toolUseMsg(
 	name: string,

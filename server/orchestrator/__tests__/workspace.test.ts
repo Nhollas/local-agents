@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Issue } from "../trackers/types.ts";
-import { ensureWorkspace, removeWorkspace } from "./workspace.ts";
+import type { Issue } from "../../trackers/types.ts";
+import { ensureWorkspace, removeWorkspace } from "../workspace.ts";
 
 const exec = promisify(execFile);
 

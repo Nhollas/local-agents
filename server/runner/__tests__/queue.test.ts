@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createJobQueue } from "./queue.ts";
+import { createJobQueue } from "../queue.ts";
 
 /** Create a job that resolves when explicitly triggered. */
 function createControllableJob() {

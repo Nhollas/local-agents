@@ -6,7 +6,7 @@ import {
 	ProblemDetailsError,
 	problemDetailsHandler,
 	zodProblemHook,
-} from "./problem-details.ts";
+} from "../problem-details.ts";
 
 function createApp() {
 	const app = new Hono();
