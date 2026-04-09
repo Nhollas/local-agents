@@ -267,7 +267,9 @@ describe("POST /runs/:id/kill", () => {
 
 describe("POST /runs/:id/retry", () => {
 	it("returns 201 with new runId on successful retry", async () => {
-		const { app, db } = createTestApi(async () => ({ runId: "new-run-1" }));
+		const { app, db } = createTestApi({
+			retryRun: async () => ({ runId: "new-run-1" }),
+		});
 		seedRun(db, { id: "failed-1", status: "failed" });
 
 		const res = await app.request("/runs/failed-1/retry", { method: "POST" });
@@ -277,9 +279,9 @@ describe("POST /runs/:id/retry", () => {
 	});
 
 	it("returns 400 when retryRun returns an error", async () => {
-		const { app, db } = createTestApi(async () => ({
-			error: "Run is not failed",
-		}));
+		const { app, db } = createTestApi({
+			retryRun: async () => ({ error: "Run is not failed" }),
+		});
 		seedRun(db, { id: "completed-1", status: "completed" });
 
 		const res = await app.request("/runs/completed-1/retry", {

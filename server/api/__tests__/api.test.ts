@@ -1,14 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../../testing/support/test-api.ts";
+import type { HealthCheck } from "../api.ts";
 
 describe("GET /health", () => {
-	it("returns OK", async () => {
+	it("returns 200 with healthy status when all checks pass", async () => {
 		const { app } = createTestApi();
 
 		const res = await app.request("/health");
 
 		expect(res.status).toBe(200);
-		expect(await res.text()).toBe("OK");
+		expect(await res.json()).toEqual({
+			status: "healthy",
+			checks: { database: { status: "pass" } },
+		});
+	});
+
+	it("returns 503 with unhealthy status when a check fails", async () => {
+		const unhealthyCheck: HealthCheck = () => ({
+			status: "unhealthy",
+			checks: {
+				database: { status: "fail", message: "connection refused" },
+			},
+		});
+		const { app } = createTestApi({ checkHealth: unhealthyCheck });
+
+		const res = await app.request("/health");
+
+		expect(res.status).toBe(503);
+		expect(await res.json()).toEqual({
+			status: "unhealthy",
+			checks: {
+				database: { status: "fail", message: "connection refused" },
+			},
+		});
 	});
 });
 

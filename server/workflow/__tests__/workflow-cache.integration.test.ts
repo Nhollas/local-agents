@@ -26,7 +26,7 @@ describe("Workflow cache integration", () => {
 			),
 		);
 
-		const github = createGitHubClient("test-token");
+		const github = createGitHubClient("test-token", { maxAttempts: 1 });
 		const codeHost = githubCodeHostAdapter(github);
 		const cache = createWorkflowCache(codeHost, [REPO]);
 
@@ -47,7 +47,7 @@ describe("Workflow cache integration", () => {
 			),
 		);
 
-		const github = createGitHubClient("test-token");
+		const github = createGitHubClient("test-token", { maxAttempts: 1 });
 		const codeHost = githubCodeHostAdapter(github);
 		const cache = createWorkflowCache(codeHost, [REPO]);
 
@@ -66,7 +66,7 @@ describe("Workflow cache integration", () => {
 			}),
 		);
 
-		const github = createGitHubClient("test-token");
+		const github = createGitHubClient("test-token", { maxAttempts: 1 });
 		const codeHost = githubCodeHostAdapter(github);
 		const cache = createWorkflowCache(codeHost, [REPO]);
 
@@ -103,7 +103,7 @@ base_branch: "develop"
 			),
 		);
 
-		const github = createGitHubClient("test-token");
+		const github = createGitHubClient("test-token", { maxAttempts: 1 });
 		const codeHost = githubCodeHostAdapter(github);
 		const cache = createWorkflowCache(codeHost, [REPO, REPO2]);
 
@@ -135,7 +135,7 @@ base_branch: "develop"
 			}),
 		);
 
-		const github = createGitHubClient("test-token");
+		const github = createGitHubClient("test-token", { maxAttempts: 1 });
 		const codeHost = githubCodeHostAdapter(github);
 		const cache = createWorkflowCache(codeHost, [REPO]);
 
@@ -165,7 +165,7 @@ base_branch: "develop"
 			}),
 		);
 
-		const github = createGitHubClient("test-token");
+		const github = createGitHubClient("test-token", { maxAttempts: 1 });
 		const codeHost = githubCodeHostAdapter(github);
 		const cache = createWorkflowCache(codeHost, [REPO]);
 

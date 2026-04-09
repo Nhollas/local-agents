@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 export type Db = ReturnType<typeof drizzle>;
 
 let db: Db | undefined;
+let sqlite: InstanceType<typeof Database> | undefined;
 
 /**
  * Get or create the shared Drizzle database instance.
@@ -16,8 +17,14 @@ export function getDb(dbPath?: string): Db {
 	const resolvedPath =
 		dbPath ?? `${process.env["DATA_DIR"] ?? ".data"}/gateway.db`;
 	mkdirSync(dirname(resolvedPath), { recursive: true });
-	const sqlite = new Database(resolvedPath);
+	sqlite = new Database(resolvedPath);
 	sqlite.pragma("journal_mode = WAL");
 	db = drizzle(sqlite);
 	return db;
+}
+
+export function closeDb(): void {
+	sqlite?.close();
+	sqlite = undefined;
+	db = undefined;
 }

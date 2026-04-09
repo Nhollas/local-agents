@@ -88,29 +88,32 @@ export function createRunner(config: RunnerConfig): Runner {
 		const controller = new AbortController();
 		activeRuns.set(runId, controller);
 
+		// Insert DB record and emit event immediately so reconciliation
+		// sees the run even when the queue is at capacity.
+		const startedAt = new Date().toISOString();
+
+		repo.insertRun({
+			id: runId,
+			agentName: job.name,
+			issueKey: job.issueKey,
+			issueTitle: job.issueTitle,
+			startedAt,
+			attempt: job.attempt ?? 1,
+			parentRunId: job.parentRunId ?? null,
+		});
+
+		emitEvent(
+			runId,
+			job.name,
+			{
+				type: "run:started",
+				data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
+			},
+			startedAt,
+		);
+
 		queue.enqueue(async () => {
-			const startTime = Date.now();
-			const startedAt = new Date(startTime).toISOString();
-
-			repo.insertRun({
-				id: runId,
-				agentName: job.name,
-				issueKey: job.issueKey,
-				issueTitle: job.issueTitle,
-				startedAt,
-				attempt: job.attempt ?? 1,
-				parentRunId: job.parentRunId ?? null,
-			});
-
-			emitEvent(
-				runId,
-				job.name,
-				{
-					type: "run:started",
-					data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
-				},
-				startedAt,
-			);
+			const executionStart = Date.now();
 
 			let sessionCaptured = false;
 			const setSessionId = (id: string) => {
@@ -131,7 +134,7 @@ export function createRunner(config: RunnerConfig): Runner {
 					resolve({
 						status: "failed",
 						error: ABORT_ERROR,
-						durationMs: Date.now() - startTime,
+						durationMs: Date.now() - executionStart,
 					});
 				});
 			});

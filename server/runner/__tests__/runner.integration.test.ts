@@ -68,6 +68,52 @@ describe("Runner integration", () => {
 		await runner.queue.waitForIdle();
 	});
 
+	it("records a running status even when the queue is at capacity", async () => {
+		const runner = createRunner({ repo, maxConcurrency: 1 });
+		let resolveBlocker!: (result: RunResult) => void;
+
+		// Fill the single slot with a blocking job
+		runner.enqueue({
+			name: "blocker",
+			issueKey: "owner/repo#1",
+			issueTitle: "Blocker",
+			handler: () =>
+				new Promise((r) => {
+					resolveBlocker = r;
+				}),
+		});
+
+		// Second job sits in the pending queue — not yet executing
+		const { runId } = runner.enqueue({
+			name: "queued-job",
+			issueKey: "owner/repo#2",
+			issueTitle: "Queued issue",
+			handler: async () => ({ status: "completed" as const, durationMs: 0 }),
+		});
+
+		expect(runner.queue.pendingCount).toBe(1);
+
+		// DB record must exist even though the job hasn't started executing
+		const run = getRun(db, runId);
+		expect(run).toEqual({
+			id: runId,
+			agentName: "queued-job",
+			status: "running",
+			error: null,
+			issueKey: "owner/repo#2",
+			issueTitle: "Queued issue",
+			startedAt: expect.any(String),
+			completedAt: null,
+			durationMs: null,
+			sessionId: null,
+			attempt: 1,
+			parentRunId: null,
+		});
+
+		resolveBlocker({ status: "completed", durationMs: 0 });
+		await runner.queue.waitForIdle();
+	});
+
 	it("marks run as completed with duration on success", async () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 

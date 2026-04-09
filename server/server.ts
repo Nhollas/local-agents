@@ -1,8 +1,8 @@
 import { serve } from "@hono/node-server";
-import { createApi } from "./api/api.ts";
+import { createApi, type HealthCheck } from "./api/api.ts";
 import { githubCodeHostAdapter } from "./code-hosts/github.ts";
 import { loadConfig } from "./config.ts";
-import { getDb } from "./db/db.ts";
+import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
 import { loadEnv } from "./env.ts";
 import { createGitHubClient } from "./github-client.ts";
@@ -44,17 +44,38 @@ const orchestrator = createOrchestrator({
 	runner,
 });
 
+const checkHealth: HealthCheck = () => {
+	const checks: Record<string, { status: "pass" | "fail"; message?: string }> =
+		{};
+
+	try {
+		repo.getRuns({ limit: 1 });
+		checks["database"] = { status: "pass" };
+	} catch (err) {
+		checks["database"] = {
+			status: "fail",
+			message: err instanceof Error ? err.message : String(err),
+		};
+	}
+
+	const allHealthy = Object.values(checks).every((c) => c.status === "pass");
+	return { status: allHealthy ? "healthy" : "unhealthy", checks };
+};
+
 const app = createApi({
 	runner,
 	repo,
 	retryRun: orchestrator.retryRun,
+	checkHealth,
 });
 
 // Start polling + workflow refresh
 workflowCache.start();
 orchestrator.start();
 
-serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+const DRAIN_TIMEOUT_MS = 30_000;
+
+const httpServer = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 	logger.info(
 		{
 			port: info.port,
@@ -65,3 +86,33 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 		"orchestrator.started",
 	);
 });
+
+let shuttingDown = false;
+
+async function shutdown(signal: string) {
+	if (shuttingDown) return;
+	shuttingDown = true;
+	logger.info({ signal }, "shutdown.start");
+
+	orchestrator.stop();
+	workflowCache.stop();
+	httpServer.close();
+
+	// Drain in-flight runs with a timeout
+	const drainResult = await Promise.race([
+		orchestrator.settled().then(() => "drained" as const),
+		new Promise<"timeout">((resolve) =>
+			setTimeout(() => resolve("timeout"), DRAIN_TIMEOUT_MS),
+		),
+	]);
+
+	if (drainResult === "timeout") {
+		logger.warn("shutdown.drain_timeout");
+	}
+
+	closeDb();
+	logger.info("shutdown.complete");
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
