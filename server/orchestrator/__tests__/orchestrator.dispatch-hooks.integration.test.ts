@@ -1,26 +1,17 @@
-import { access } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
-import { createGitHubClient } from "../../github-client.ts";
-import { createRunRepository } from "../../run-repository.ts";
-import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
 	createTestWorkflow,
 	GITHUB_API,
-	noopAgent,
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
-import { createTestConfig } from "../../testing/support/test-config.ts";
-import { createTestDb } from "../../testing/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
-import { githubTrackerAdapter } from "../../trackers/github.ts";
-import type { RepoWorkflow } from "../../workflow/workflow.ts";
-import { createOrchestrator } from "../orchestrator.ts";
+import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 
 describe("Orchestrator dispatch hooks and completion", () => {
 	it("before_run hook executes before agent starts", async () => {
@@ -30,38 +21,26 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
 		// Custom agent that checks marker file exists during execution
 		let markerExistedDuringRun = false;
-		// biome-ignore lint/correctness/useYield: agent only needs side effects, no messages to yield
-		async function* checkMarkerAgent() {
-			const wsDir = join(workspace.root, "test-owner_test-repo_1");
-			try {
-				await access(join(wsDir, "marker"));
-				markerExistedDuringRun = true;
-			} catch {
-				markerExistedDuringRun = false;
-			}
-		}
 
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([
+		await using ctx = await createTestOrchestrator({
+			workflows: new Map([
 				[REPO, createTestWorkflow({ hooks: { before_run: "touch marker" } })],
 			]),
-			runner,
-			runAgent: checkMarkerAgent,
+			// biome-ignore lint/correctness/useYield: agent only needs side effects, no messages to yield
+			runAgent: async function* checkMarkerAgent() {
+				const wsDir = join(ctx.workspace.root, "test-owner_test-repo_1");
+				try {
+					await access(join(wsDir, "marker"));
+					markerExistedDuringRun = true;
+				} catch {
+					markerExistedDuringRun = false;
+				}
+			},
 		});
+		const { orchestrator, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -77,24 +56,12 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
 		// The after_run hook writes a marker file outside the workspace root
 		// so it survives workspace cleanup by onFinally
-		const sentinelPath = join(workspace.root, "after_marker_sentinel");
+		const sentinelPath = join(tmpdir(), `after_marker_sentinel-${Date.now()}`);
 
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([
+		await using ctx = await createTestOrchestrator({
+			workflows: new Map([
 				[
 					REPO,
 					createTestWorkflow({
@@ -102,15 +69,16 @@ describe("Orchestrator dispatch hooks and completion", () => {
 					}),
 				],
 			]),
-			runner,
-			runAgent: noopAgent,
 		});
+		const { orchestrator, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
 		await expect(access(sentinelPath)).resolves.toBeUndefined();
+		await rm(sentinelPath, { force: true });
 	});
 
 	it("before_run failure prevents dispatch", async () => {
@@ -120,30 +88,13 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([
-				[
-					REPO,
-					createTestWorkflow({
-						hooks: { before_run: "exit 1" },
-					}),
-				],
+		await using ctx = await createTestOrchestrator({
+			workflows: new Map([
+				[REPO, createTestWorkflow({ hooks: { before_run: "exit 1" } })],
 			]),
-			runner,
-			runAgent: noopAgent,
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -170,23 +121,9 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -228,30 +165,13 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([
-				[
-					REPO,
-					createTestWorkflow({
-						hooks: { after_run: "exit 1" },
-					}),
-				],
+		await using ctx = await createTestOrchestrator({
+			workflows: new Map([
+				[REPO, createTestWorkflow({ hooks: { after_run: "exit 1" } })],
 			]),
-			runner,
-			runAgent: noopAgent,
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -307,23 +227,9 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -355,23 +261,9 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, runner, workspace } = ctx;
 		const wsDir = await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();

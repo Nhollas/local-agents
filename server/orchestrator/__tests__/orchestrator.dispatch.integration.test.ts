@@ -1,23 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
+import { HttpResponse, http } from "msw";
+import { describe, expect, it, vi } from "vitest";
 import { runs } from "../../db/schema.ts";
-import { createGitHubClient } from "../../github-client.ts";
-import { createRunRepository } from "../../run-repository.ts";
-import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
-	createTestWorkflow,
+	GITHUB_API,
 	hangingAgent,
-	noopAgent,
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
-import { createTestConfig } from "../../testing/support/test-config.ts";
-import { createTestDb } from "../../testing/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
-import { githubTrackerAdapter } from "../../trackers/github.ts";
-import type { RepoWorkflow } from "../../workflow/workflow.ts";
-import { createOrchestrator } from "../orchestrator.ts";
+import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 
 describe("Orchestrator dispatch", () => {
 	it("dispatches agent for a pending issue, swaps label, and creates DB record", async () => {
@@ -31,23 +22,9 @@ describe("Orchestrator dispatch", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -86,23 +63,9 @@ describe("Orchestrator dispatch", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#5`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -129,28 +92,15 @@ describe("Orchestrator dispatch", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 1 },
+			runAgent: hangingAgent,
+		});
+		const { orchestrator, db, workspace } = ctx;
 		for (const num of [1, 2, 3]) {
 			await workspace.preCreateWorkspace(`${REPO}#${num}`);
 		}
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 1,
-			}),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: hangingAgent,
-		});
 
 		await orchestrator.tick();
 
@@ -184,28 +134,14 @@ describe("Orchestrator dispatch", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 2 },
+		});
+		const { orchestrator, db, runner, workspace } = ctx;
 		for (const num of [42, 77, 99]) {
 			await workspace.preCreateWorkspace(`${REPO}#${num}`);
 		}
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 2,
-			}),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -258,23 +194,12 @@ describe("Orchestrator dispatch", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
 			runAgent: hangingAgent,
 		});
+		const { orchestrator, db, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		// First tick: dispatches the agent
 		await orchestrator.tick();
@@ -317,25 +242,13 @@ describe("Orchestrator dispatch", () => {
 
 		// DON'T pre-create workspace — let ensureWorkspace try git clone against
 		// MSW's fake URL, which will fail because it's not a real git remote
-		await using workspace = await createTestWorkspaceRoot();
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const codeHost = githubCodeHostAdapter(github);
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			// Override cloneUrl to a non-existent local path so git clone fails
-			// instantly instead of waiting for a network timeout
-			codeHost: { ...codeHost, cloneUrl: () => "/nonexistent/repo.git" },
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
+		await using ctx = await createTestOrchestrator({
+			codeHost: (defaults) => ({
+				...defaults,
+				cloneUrl: () => "/nonexistent/repo.git",
+			}),
 		});
+		const { orchestrator, db, runner } = ctx;
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -350,5 +263,81 @@ describe("Orchestrator dispatch", () => {
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(0);
+	});
+
+	it("start() triggers polling and stop() halts it", async () => {
+		vi.useFakeTimers();
+
+		let tickCount = 0;
+
+		server.use(
+			...githubHandlers({
+				resolveIssues: () => {
+					tickCount++;
+					return [];
+				},
+			}),
+		);
+
+		await using ctx = await createTestOrchestrator({
+			configOverrides: { polling_interval_ms: 1000 },
+		});
+		const { orchestrator } = ctx;
+
+		orchestrator.start();
+
+		await vi.advanceTimersByTimeAsync(0);
+		expect(tickCount).toBe(2);
+
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(tickCount).toBe(4);
+
+		orchestrator.stop();
+
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(tickCount).toBe(4);
+
+		vi.useRealTimers();
+	});
+
+	it("start() keeps polling when tick() throws on a label swap failure", async () => {
+		vi.useFakeTimers();
+
+		let tickCount = 0;
+
+		server.use(
+			...githubHandlers({
+				resolveIssues: () => {
+					tickCount++;
+					return [createGitHubIssue(1, ["agent"])];
+				},
+			}),
+		);
+		// Label delete always fails, so the initial swap (pending → running) throws
+		server.use(
+			http.delete(
+				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
+				() => new HttpResponse(null, { status: 500 }),
+			),
+		);
+
+		await using ctx = await createTestOrchestrator({
+			configOverrides: { polling_interval_ms: 1000 },
+		});
+		const { orchestrator, db } = ctx;
+
+		orchestrator.start();
+
+		await vi.advanceTimersByTimeAsync(0);
+		expect(tickCount).toBe(2);
+
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(tickCount).toBe(4);
+
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toHaveLength(0);
+
+		orchestrator.stop();
+		vi.useRealTimers();
 	});
 });

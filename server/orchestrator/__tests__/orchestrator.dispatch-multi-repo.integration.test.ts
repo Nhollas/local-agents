@@ -1,26 +1,17 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
-import { createGitHubClient } from "../../github-client.ts";
-import { createRunRepository } from "../../run-repository.ts";
-import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
 	createSessionAgent,
 	createTestWorkflow,
 	GITHUB_API,
 	hangingAgent,
-	noopAgent,
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
-import { createTestConfig } from "../../testing/support/test-config.ts";
-import { createTestDb } from "../../testing/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
-import { githubTrackerAdapter } from "../../trackers/github.ts";
+import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
-import { createOrchestrator } from "../orchestrator.ts";
 
 describe("Orchestrator dispatch multi-repo", () => {
 	it("ticking guard prevents concurrent ticks", async () => {
@@ -38,23 +29,12 @@ describe("Orchestrator dispatch multi-repo", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
 			runAgent: hangingAgent,
 		});
+		const { orchestrator, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await Promise.all([orchestrator.tick(), orchestrator.tick()]);
 
@@ -97,26 +77,15 @@ describe("Orchestrator dispatch multi-repo", () => {
 			),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO2}#10`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
 			workflows: new Map<string, RepoWorkflow>([
 				[REPO, createTestWorkflow()],
 				[REPO2, createTestWorkflow()],
 			]),
-			runner,
-			runAgent: noopAgent,
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO2}#10`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -183,30 +152,17 @@ describe("Orchestrator dispatch multi-repo", () => {
 			),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-		await workspace.preCreateWorkspace(`${REPO2}#2`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 5,
-			}),
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 5 },
 			workflows: new Map<string, RepoWorkflow>([
 				[REPO, createTestWorkflow()],
 				[REPO2, createTestWorkflow()],
 			]),
-			runner,
-			runAgent: noopAgent,
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+		await workspace.preCreateWorkspace(`${REPO2}#2`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -255,25 +211,13 @@ describe("Orchestrator dispatch multi-repo", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
 			runAgent: createSessionAgent("test-sess-abc", [
 				{ type: "text", text: "Working on it" },
 			]),
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
@@ -305,14 +249,6 @@ describe("Orchestrator dispatch multi-repo", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
 		// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's message shape
 		async function* mixedMessageAgent(): AsyncGenerator<any> {
 			yield { type: "system" };
@@ -325,15 +261,11 @@ describe("Orchestrator dispatch multi-repo", () => {
 			};
 		}
 
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
 			runAgent: mixedMessageAgent,
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();

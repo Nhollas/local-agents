@@ -1,25 +1,15 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
-import { createGitHubClient } from "../../github-client.ts";
-import { createRunRepository } from "../../run-repository.ts";
-import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
-	createTestWorkflow,
 	GITHUB_API,
 	hangingAgent,
 	noopAgent,
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
-import { createTestConfig } from "../../testing/support/test-config.ts";
-import { createTestDb } from "../../testing/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
-import { githubTrackerAdapter } from "../../trackers/github.ts";
-import type { RepoWorkflow } from "../../workflow/workflow.ts";
-import { createOrchestrator } from "../orchestrator.ts";
+import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 
 describe("Orchestrator reconciliation", () => {
 	it("kills agent when issue no longer has the running label", async () => {
@@ -36,26 +26,13 @@ describe("Orchestrator reconciliation", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 5,
-			}),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 5 },
 			runAgent: hangingAgent,
 		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		// First tick: dispatches the agent
 		await orchestrator.tick();
@@ -119,26 +96,13 @@ describe("Orchestrator reconciliation", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#2`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 5,
-			}),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 5 },
 			runAgent: hangingAgent,
 		});
+		const { orchestrator, db, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#2`);
 
 		// Dispatch
 		await orchestrator.tick();
@@ -185,22 +149,10 @@ describe("Orchestrator reconciliation", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
 		});
+		const { orchestrator } = ctx;
 
 		// No running agents — tick should still fetch running issues to detect orphans
 		await orchestrator.tick();
@@ -238,26 +190,13 @@ describe("Orchestrator reconciliation", () => {
 			),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 5,
-			}),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 5 },
 			runAgent: hangingAgent,
 		});
+		const { orchestrator, db, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		// First tick: dispatches the agent
 		await orchestrator.tick();
@@ -318,26 +257,13 @@ describe("Orchestrator reconciliation", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({
-				workspace_root: workspace.root,
-				max_concurrent: 5,
-			}),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+			configOverrides: { max_concurrent: 5 },
 			runAgent: noopAgent,
 		});
+		const { orchestrator, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		// Tick 1: dispatches the agent. Handler completes instantly (noopAgent),
 		// but onSettled blocks on PR creation (barrier).
@@ -368,12 +294,10 @@ describe("Orchestrator reconciliation", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 5 });
+		await using ctx = await createTestOrchestrator({
+			maxConcurrency: 5,
+		});
+		const { orchestrator, db } = ctx;
 
 		// Seed a "running" record with no actual process (simulates server restart)
 		db.insert(runs)
@@ -387,16 +311,6 @@ describe("Orchestrator reconciliation", () => {
 				attempt: 1,
 			})
 			.run();
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		await orchestrator.tick();
 
