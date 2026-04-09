@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import * as canonicalLog from "../canonical-log.ts";
+import { logger } from "../logger.ts";
 import type { AppEnv } from "./types.ts";
 
 export const canonicalLogMiddleware: MiddlewareHandler<AppEnv> = async (
@@ -21,5 +22,6 @@ export const canonicalLogMiddleware: MiddlewareHandler<AppEnv> = async (
 			await next();
 			canonicalLog.set({ status: c.res.status });
 		},
+		logger,
 	);
 };

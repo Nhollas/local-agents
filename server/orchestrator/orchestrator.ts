@@ -267,6 +267,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 						return result;
 					},
+					logger,
 				);
 			},
 		});
