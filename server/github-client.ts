@@ -1,6 +1,17 @@
 import { z } from "zod";
 
 const BASE_URL = "https://api.github.com";
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_BASE_DELAY_MS = 1_000;
+
+function isRetryableStatus(status: number): boolean {
+	return status === 429 || status >= 500;
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const githubUserSchema = z.object({ login: z.string() });
 
@@ -59,7 +70,28 @@ export type GitHubClient = {
 	): Promise<void>;
 };
 
-export function createGitHubClient(token: string): GitHubClient {
+type GitHubClientOptions = {
+	maxAttempts?: number;
+	baseDelayMs?: number;
+	requestTimeoutMs?: number;
+};
+
+export function createGitHubClient(
+	token: string,
+	options?: GitHubClientOptions,
+): GitHubClient {
+	const maxAttempts = Math.max(1, options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
+	const baseDelayMs = options?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+	const requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+	function retryDelay(response: Response, attempt: number): number {
+		if (response.status === 429) {
+			const retryAfter = response.headers.get("Retry-After");
+			if (retryAfter) return Number.parseInt(retryAfter, 10) * 1000;
+		}
+		return baseDelayMs * 2 ** (attempt - 1);
+	}
+
 	async function request<T extends z.ZodType>(
 		path: string,
 		options: { method?: string; body?: Record<string, unknown>; schema: T },
@@ -77,6 +109,7 @@ export function createGitHubClient(token: string): GitHubClient {
 		} = {},
 	) {
 		const { method = "GET", body, schema } = options;
+		const url = `${BASE_URL}${path}`;
 
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${token}`,
@@ -93,19 +126,45 @@ export function createGitHubClient(token: string): GitHubClient {
 			init.body = JSON.stringify(body);
 		}
 
-		const response = await fetch(`${BASE_URL}${path}`, init);
+		let lastError: unknown;
 
-		if (!response.ok) {
+		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+			let response: Response;
+			try {
+				response = await fetch(url, {
+					...init,
+					signal: AbortSignal.timeout(requestTimeoutMs),
+				});
+			} catch (err) {
+				lastError = err;
+				if (attempt < maxAttempts) {
+					await sleep(baseDelayMs * 2 ** (attempt - 1));
+					continue;
+				}
+				throw new Error(
+					`GitHub API ${method} ${path} failed after ${maxAttempts} attempts: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+
+			if (response.ok) {
+				if (!schema) return;
+				const text = await response.text();
+				return schema.parse(JSON.parse(text));
+			}
+
+			if (isRetryableStatus(response.status) && attempt < maxAttempts) {
+				await sleep(retryDelay(response, attempt));
+				continue;
+			}
+
 			const text = await response.text();
 			throw new Error(
 				`GitHub API ${method} ${path} failed (${response.status}): ${text}`,
 			);
 		}
 
-		if (!schema) return;
-
-		const text = await response.text();
-		return schema.parse(JSON.parse(text));
+		/* v8 ignore next -- defensive: loop always returns or throws */
+		throw lastError;
 	}
 
 	return {

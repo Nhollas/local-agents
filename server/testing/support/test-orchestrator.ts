@@ -25,7 +25,7 @@ export async function createTestOrchestrator(
 	const workspace = await createTestWorkspaceRoot();
 	const db = createTestDb();
 	const repo = createRunRepository(db);
-	const github = createGitHubClient("test-token");
+	const github = createGitHubClient("test-token", { maxAttempts: 1 });
 	const runner = createRunner({
 		repo,
 		maxConcurrency: options.maxConcurrency ?? 2,

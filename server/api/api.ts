@@ -27,14 +27,23 @@ export type RetryFn = (
 	failedRunId: string,
 ) => Promise<{ runId: string } | { error: string }>;
 
+type HealthCheckResult = {
+	status: "healthy" | "unhealthy";
+	checks: Record<string, { status: "pass" | "fail"; message?: string }>;
+};
+
+export type HealthCheck = () => HealthCheckResult;
+
 export function createApi({
 	runner,
 	repo,
 	retryRun,
+	checkHealth,
 }: {
 	runner: Runner;
 	repo: RunRepository;
 	retryRun: RetryFn;
+	checkHealth: HealthCheck;
 }) {
 	const app = new Hono<AppEnv>();
 	app.onError(problemDetailsHandler);
@@ -111,7 +120,10 @@ export function createApi({
 		},
 	);
 
-	app.get("/health", (c) => c.text("OK"));
+	app.get("/health", (c) => {
+		const result = checkHealth();
+		return c.json(result, result.status === "healthy" ? 200 : 503);
+	});
 
 	return app;
 }
