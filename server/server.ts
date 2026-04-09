@@ -8,6 +8,7 @@ import { loadEnv } from "./env.ts";
 import { createGitHubClient } from "./github-client.ts";
 import { logger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
+import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
 import { githubTrackerAdapter } from "./trackers/github.ts";
 import { createWorkflowCache } from "./workflow/workflow-cache.ts";
@@ -23,9 +24,10 @@ migrate(db);
 const github = createGitHubClient(env.GITHUB_TOKEN);
 const tracker = githubTrackerAdapter(github);
 const codeHost = githubCodeHostAdapter(github);
+const repo = createRunRepository(db);
 
 const runner = createRunner({
-	db,
+	repo,
 	maxConcurrency: config.defaults.max_concurrent,
 });
 
@@ -34,7 +36,7 @@ const workflowCache = createWorkflowCache(codeHost, config.repos);
 await workflowCache.refresh();
 
 const orchestrator = createOrchestrator({
-	db,
+	runRepo: repo,
 	tracker,
 	codeHost,
 	config,
@@ -44,7 +46,7 @@ const orchestrator = createOrchestrator({
 
 const app = createApi({
 	runner,
-	db,
+	repo,
 	retryRun: orchestrator.retryRun,
 });
 

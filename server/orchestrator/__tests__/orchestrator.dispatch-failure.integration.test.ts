@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
@@ -33,11 +34,12 @@ describe("Orchestrator dispatch failure and polling", () => {
 		const wsDir = await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -86,11 +88,12 @@ describe("Orchestrator dispatch failure and polling", () => {
 		const wsDir = await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -125,11 +128,12 @@ describe("Orchestrator dispatch failure and polling", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -174,11 +178,12 @@ describe("Orchestrator dispatch failure and polling", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -238,12 +243,13 @@ describe("Orchestrator dispatch failure and polling", () => {
 		// Don't pre-create workspace so git clone fails → dispatch fails → rollback fires
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		const codeHost = githubCodeHostAdapter(github);
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: { ...codeHost, cloneUrl: () => "/nonexistent/repo.git" },
 			config: createTestConfig({
@@ -277,11 +283,12 @@ describe("Orchestrator dispatch failure and polling", () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -333,11 +340,12 @@ describe("Orchestrator dispatch failure and polling", () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({

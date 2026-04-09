@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import type { Db } from "../db/db.ts";
-import { runEvents, runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
+import type { RunRepository } from "../run-repository.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
 
 export const ABORT_ERROR = "Run killed by user";
@@ -40,12 +38,12 @@ export type Runner = {
 };
 
 type RunnerConfig = {
-	db: Db;
+	repo: RunRepository;
 	maxConcurrency?: number;
 };
 
 export function createRunner(config: RunnerConfig): Runner {
-	const { db } = config;
+	const { repo } = config;
 	const queue = createJobQueue(
 		config.maxConcurrency != null
 			? { maxConcurrency: config.maxConcurrency }
@@ -64,15 +62,12 @@ export function createRunner(config: RunnerConfig): Runner {
 		createdAt = new Date().toISOString(),
 	): void {
 		const fullEvent = { ...event, runId, agentName, createdAt } as RunEvent;
-		db.insert(runEvents)
-			.values({
-				id: randomUUID().slice(0, 8),
-				runId,
-				type: event.type,
-				data: event.data,
-				createdAt,
-			})
-			.run();
+		repo.insertEvent({
+			runId,
+			type: event.type,
+			data: event.data,
+			createdAt,
+		});
 		eventBus.emit(fullEvent);
 	}
 
@@ -97,18 +92,15 @@ export function createRunner(config: RunnerConfig): Runner {
 			const startTime = Date.now();
 			const startedAt = new Date(startTime).toISOString();
 
-			db.insert(runs)
-				.values({
-					id: runId,
-					agentName: job.name,
-					status: "running",
-					issueKey: job.issueKey,
-					issueTitle: job.issueTitle,
-					startedAt,
-					attempt: job.attempt ?? 1,
-					parentRunId: job.parentRunId ?? null,
-				})
-				.run();
+			repo.insertRun({
+				id: runId,
+				agentName: job.name,
+				issueKey: job.issueKey,
+				issueTitle: job.issueTitle,
+				startedAt,
+				attempt: job.attempt ?? 1,
+				parentRunId: job.parentRunId ?? null,
+			});
 
 			emitEvent(
 				runId,
@@ -124,7 +116,7 @@ export function createRunner(config: RunnerConfig): Runner {
 			const setSessionId = (id: string) => {
 				if (sessionCaptured) return;
 				sessionCaptured = true;
-				db.update(runs).set({ sessionId: id }).where(eq(runs.id, runId)).run();
+				repo.setSessionId(runId, id);
 			};
 
 			const emitToolUse = (tool: string, target: string) => {
@@ -157,14 +149,7 @@ export function createRunner(config: RunnerConfig): Runner {
 			const completedAt = new Date().toISOString();
 
 			if (result.status === "completed") {
-				db.update(runs)
-					.set({
-						status: "completed",
-						completedAt,
-						durationMs: result.durationMs,
-					})
-					.where(eq(runs.id, runId))
-					.run();
+				repo.completeRun(runId, { completedAt, durationMs: result.durationMs });
 
 				emitEvent(
 					runId,
@@ -173,15 +158,11 @@ export function createRunner(config: RunnerConfig): Runner {
 					completedAt,
 				);
 			} else {
-				db.update(runs)
-					.set({
-						status: "failed",
-						completedAt,
-						durationMs: result.durationMs,
-						error: result.error,
-					})
-					.where(eq(runs.id, runId))
-					.run();
+				repo.failRun(runId, {
+					error: result.error,
+					completedAt,
+					durationMs: result.durationMs,
+				});
 
 				emitEvent(
 					runId,

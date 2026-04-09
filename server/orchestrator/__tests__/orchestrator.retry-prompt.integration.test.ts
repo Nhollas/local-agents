@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
@@ -38,10 +39,11 @@ describe("Orchestrator retry prompt fidelity", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "failed-prompt" });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 		const { spyAgent, getCaptured } = createPromptSpyAgent();
 
 		const workflow: RepoWorkflow = {
@@ -52,7 +54,7 @@ describe("Orchestrator retry prompt fidelity", () => {
 		};
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -82,10 +84,11 @@ describe("Orchestrator retry prompt fidelity", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "failed-meta" });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 		const { spyAgent, getCaptured } = createPromptSpyAgent();
 
 		const workflow: RepoWorkflow = {
@@ -96,7 +99,7 @@ describe("Orchestrator retry prompt fidelity", () => {
 		};
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),

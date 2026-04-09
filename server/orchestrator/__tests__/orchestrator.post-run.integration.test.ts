@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
@@ -35,6 +36,7 @@ describe("Orchestrator post-run recovery", () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, {
 			id: "completed-orphan",
 			agentName: "issue-1",
@@ -47,10 +49,10 @@ describe("Orchestrator post-run recovery", () => {
 		});
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
@@ -41,13 +42,14 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "failed-1" });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -91,6 +93,7 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, {
 			...failedRunDefaults,
 			id: "failed-2",
@@ -98,12 +101,12 @@ describe("Orchestrator retryRun", () => {
 		});
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const { spyAgent, getCaptured } = createPromptSpyAgent();
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -129,11 +132,12 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig(),
@@ -157,6 +161,7 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, {
 			...failedRunDefaults,
 			id: "no-title",
@@ -164,10 +169,10 @@ describe("Orchestrator retryRun", () => {
 		});
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -204,6 +209,7 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, {
 			...failedRunDefaults,
 			id: "completed-1",
@@ -212,10 +218,10 @@ describe("Orchestrator retryRun", () => {
 		});
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig(),
@@ -232,13 +238,14 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "no-sess", sessionId: null });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig(),
@@ -255,13 +262,14 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "maxed-out", attempt: 4 });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ max_retries: 3 }),
@@ -278,13 +286,14 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "no-issue", issueKey: null });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig(),
@@ -301,13 +310,14 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "no-workflow" });
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig(),
@@ -325,6 +335,7 @@ describe("Orchestrator retryRun", () => {
 		server.use(...githubHandlers());
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "failed-dup" });
 		seedRun(db, {
 			id: "running-1",
@@ -334,10 +345,10 @@ describe("Orchestrator retryRun", () => {
 		});
 
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig(),
