@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { logger } from "./logger.ts";
 
 type LogFields = Record<string, unknown>;
 
@@ -50,7 +49,7 @@ export function increment(key: string, delta = 1): void {
 export async function run<T>(
 	initialFields: LogFields,
 	fn: () => Promise<T>,
-	flush?: (bag: LogFields) => void,
+	log: { info(obj: LogFields, msg: string): void },
 ): Promise<T> {
 	const bag: LogFields = { ...initialFields };
 	const start = Date.now();
@@ -59,6 +58,6 @@ export async function run<T>(
 		return await storage.run(bag, fn);
 	} finally {
 		bag["duration_ms"] = Date.now() - start;
-		flush ? flush(bag) : logger.info(bag, "canonical");
+		log.info(bag, "canonical");
 	}
 }

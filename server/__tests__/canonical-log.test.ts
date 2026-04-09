@@ -3,14 +3,16 @@ import * as canonicalLog from "../canonical-log.ts";
 
 type LogFields = Record<string, unknown>;
 
-function capturingFlush(): {
-	flush: (bag: LogFields) => void;
+function capturingLogger(): {
+	logger: { info(obj: LogFields, msg: string): void };
 	bag: () => LogFields;
 } {
 	let captured: LogFields = {};
 	return {
-		flush: (bag: LogFields) => {
-			captured = bag;
+		logger: {
+			info(obj: LogFields) {
+				captured = obj;
+			},
 		},
 		bag: () => captured,
 	};
@@ -27,7 +29,7 @@ describe("canonicalLog", () => {
 
 	describe("set", () => {
 		it("merges fields into the flushed bag", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "test" },
@@ -35,7 +37,7 @@ describe("canonicalLog", () => {
 					canonicalLog.set({ user: "alice" });
 					canonicalLog.set({ action: "login" });
 				},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(
@@ -48,7 +50,7 @@ describe("canonicalLog", () => {
 		});
 
 		it("overwrites earlier values for the same key", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "test" },
@@ -56,7 +58,7 @@ describe("canonicalLog", () => {
 					canonicalLog.set({ status: "pending" });
 					canonicalLog.set({ status: "completed" });
 				},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(expect.objectContaining({ status: "completed" }));
@@ -65,7 +67,7 @@ describe("canonicalLog", () => {
 
 	describe("append", () => {
 		it("builds an array field across multiple calls", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "test" },
@@ -73,7 +75,7 @@ describe("canonicalLog", () => {
 					canonicalLog.append("warnings", "slow_query");
 					canonicalLog.append("warnings", "deprecated_api");
 				},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(
@@ -84,14 +86,14 @@ describe("canonicalLog", () => {
 		});
 
 		it("creates a single-element array on first call", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "test" },
 				async () => {
 					canonicalLog.append("items", "only");
 				},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(
@@ -104,7 +106,7 @@ describe("canonicalLog", () => {
 
 	describe("increment", () => {
 		it("counts up from zero across multiple calls", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "test" },
@@ -113,7 +115,7 @@ describe("canonicalLog", () => {
 					canonicalLog.increment("tool_use_count");
 					canonicalLog.increment("tool_use_count");
 				},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(
@@ -124,7 +126,7 @@ describe("canonicalLog", () => {
 		});
 
 		it("accepts a custom delta", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "test" },
@@ -132,21 +134,164 @@ describe("canonicalLog", () => {
 					canonicalLog.increment("bytes", 512);
 					canonicalLog.increment("bytes", 256);
 				},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(expect.objectContaining({ bytes: 768 }));
 		});
 	});
 
+	describe("scenarios", () => {
+		it("successful agent run with PR creation", async () => {
+			const { logger, bag } = capturingLogger();
+
+			await canonicalLog.run(
+				{
+					scope: "run",
+					run_id: "run_abc123",
+					agent: "issue-42",
+					issue_key: "owner/repo#42",
+					attempt: 1,
+				},
+				async () => {
+					// Agent processes tool calls
+					canonicalLog.increment("tool_use_count");
+					canonicalLog.increment("tool_use_count");
+					canonicalLog.increment("tool_use_count");
+
+					// Tracker fetches the issue
+					canonicalLog.set({ tracker_fetch_issue: "owner/repo#42" });
+
+					// Run completes
+					canonicalLog.set({ status: "completed" });
+
+					// PR created, label swapped
+					canonicalLog.set({ pr_url: "https://github.com/owner/repo/pull/99" });
+					canonicalLog.append("label_swaps", {
+						from: "agent:running",
+						to: "agent:completed",
+					});
+				},
+				logger,
+			);
+
+			expect(bag()).toEqual(
+				expect.objectContaining({
+					scope: "run",
+					run_id: "run_abc123",
+					agent: "issue-42",
+					issue_key: "owner/repo#42",
+					attempt: 1,
+					tool_use_count: 3,
+					tracker_fetch_issue: "owner/repo#42",
+					status: "completed",
+					pr_url: "https://github.com/owner/repo/pull/99",
+					label_swaps: [{ from: "agent:running", to: "agent:completed" }],
+				}),
+			);
+			expect(bag()["duration_ms"]).toEqual(expect.any(Number));
+		});
+
+		it("failed run with cascading post-run failures", async () => {
+			const { logger, bag } = capturingLogger();
+
+			await canonicalLog.run(
+				{
+					scope: "run",
+					run_id: "run_def456",
+					agent: "issue-7",
+					issue_key: "owner/repo#7",
+					attempt: 3,
+				},
+				async () => {
+					canonicalLog.increment("tool_use_count");
+
+					// Agent crashes
+					canonicalLog.set({
+						status: "failed",
+						error: "Claude exited with code 1",
+					});
+
+					// PR creation fails
+					canonicalLog.append(
+						"warnings",
+						"on_complete_failed: GitHub API rate limited",
+					);
+
+					// Label recovery also fails
+					canonicalLog.append(
+						"warnings",
+						"label_recovery_failed: GitHub API rate limited",
+					);
+				},
+				logger,
+			);
+
+			expect(bag()).toEqual(
+				expect.objectContaining({
+					scope: "run",
+					run_id: "run_def456",
+					agent: "issue-7",
+					issue_key: "owner/repo#7",
+					attempt: 3,
+					tool_use_count: 1,
+					status: "failed",
+					error: "Claude exited with code 1",
+					warnings: [
+						"on_complete_failed: GitHub API rate limited",
+						"label_recovery_failed: GitHub API rate limited",
+					],
+				}),
+			);
+			expect(bag()["duration_ms"]).toEqual(expect.any(Number));
+		});
+
+		it("http request that hits an error", async () => {
+			const { logger, bag } = capturingLogger();
+
+			await canonicalLog.run(
+				{
+					scope: "http",
+					request_id: "req_abc123",
+					method: "POST",
+					path: "/api/dispatch",
+				},
+				async () => {
+					// Handler throws, problem-details middleware catches it
+					canonicalLog.set({
+						error: "Repository not found",
+						error_type: "https://local-agents/not-found",
+					});
+
+					// Response middleware sets status
+					canonicalLog.set({ status: 404 });
+				},
+				logger,
+			);
+
+			expect(bag()).toEqual(
+				expect.objectContaining({
+					scope: "http",
+					request_id: "req_abc123",
+					method: "POST",
+					path: "/api/dispatch",
+					error: "Repository not found",
+					error_type: "https://local-agents/not-found",
+					status: 404,
+				}),
+			);
+			expect(bag()["duration_ms"]).toEqual(expect.any(Number));
+		});
+	});
+
 	describe("run", () => {
 		it("includes initial fields and duration_ms in the flushed bag", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await canonicalLog.run(
 				{ scope: "http", method: "GET" },
 				async () => {},
-				flush,
+				logger,
 			);
 
 			expect(bag()).toEqual(
@@ -159,12 +304,17 @@ describe("canonicalLog", () => {
 		});
 
 		it("returns the value from the wrapped function", async () => {
-			const result = await canonicalLog.run({ scope: "test" }, async () => 42);
+			const { logger } = capturingLogger();
+			const result = await canonicalLog.run(
+				{ scope: "test" },
+				async () => 42,
+				logger,
+			);
 			expect(result).toBe(42);
 		});
 
 		it("flushes the bag even when the function throws", async () => {
-			const { flush, bag } = capturingFlush();
+			const { logger, bag } = capturingLogger();
 
 			await expect(
 				canonicalLog.run(
@@ -173,7 +323,7 @@ describe("canonicalLog", () => {
 						canonicalLog.set({ status: "failed" });
 						throw new Error("boom");
 					},
-					flush,
+					logger,
 				),
 			).rejects.toThrow("boom");
 
