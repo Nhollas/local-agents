@@ -69,7 +69,7 @@ export function createRunner(config: RunnerConfig): Runner {
 				id: randomUUID().slice(0, 8),
 				runId,
 				type: event.type,
-				data: event.data as Record<string, unknown>,
+				data: event.data,
 				createdAt,
 			})
 			.run();

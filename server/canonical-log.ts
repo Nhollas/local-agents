@@ -38,7 +38,8 @@ export function append(key: string, value: unknown): void {
 export function increment(key: string, delta = 1): void {
 	const bag = getBag();
 	if (!bag) return;
-	bag[key] = ((bag[key] as number) || 0) + delta;
+	const current = bag[key];
+	bag[key] = (typeof current === "number" ? current : 0) + delta;
 }
 
 /**
