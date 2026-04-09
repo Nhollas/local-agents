@@ -1,23 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
-import { createGitHubClient } from "../../github-client.ts";
-import { createRunRepository } from "../../run-repository.ts";
-import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
 	createPromptSpyAgent,
-	createTestWorkflow,
-	noopAgent,
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
-import { createTestConfig } from "../../testing/support/test-config.ts";
-import { createTestDb, seedRun } from "../../testing/support/test-db.ts";
-import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
-import { githubTrackerAdapter } from "../../trackers/github.ts";
+import { seedRun } from "../../testing/support/test-db.ts";
+import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
-import { createOrchestrator } from "../orchestrator.ts";
 
 const failedRunDefaults = {
 	agentName: "issue-1",
@@ -38,25 +29,10 @@ describe("Orchestrator retryRun", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
 		seedRun(db, { ...failedRunDefaults, id: "failed-1" });
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		const result = await orchestrator.retryRun("failed-1");
 		expect(result).toEqual({ runId: expect.any(String) });
@@ -89,30 +65,17 @@ describe("Orchestrator retryRun", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
-		await workspace.preCreateWorkspace(`${REPO}#1`);
+		const { spyAgent, getCaptured } = createPromptSpyAgent();
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
+		await using ctx = await createTestOrchestrator({
+			runAgent: spyAgent,
+		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 		seedRun(db, {
 			...failedRunDefaults,
 			id: "failed-2",
 			sessionId: "sess-resume-me",
-		});
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const { spyAgent, getCaptured } = createPromptSpyAgent();
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: spyAgent,
 		});
 
 		await orchestrator.retryRun("failed-2");
@@ -131,20 +94,8 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when run does not exist", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig(),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator } = ctx;
 
 		const result = await orchestrator.retryRun("nonexistent-id");
 		expect(result).toEqual({ error: "Run not found" });
@@ -157,28 +108,13 @@ describe("Orchestrator retryRun", () => {
 			}),
 		);
 
-		await using workspace = await createTestWorkspaceRoot();
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		const db = createTestDb();
-		const repo = createRunRepository(db);
 		seedRun(db, {
 			...failedRunDefaults,
 			id: "no-title",
 			issueTitle: null,
-		});
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ workspace_root: workspace.root }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
 		});
 
 		const result = await orchestrator.retryRun("no-title");
@@ -208,26 +144,13 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when run is not failed", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db } = ctx;
 		seedRun(db, {
 			...failedRunDefaults,
 			id: "completed-1",
 			status: "completed",
 			error: undefined,
-		});
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig(),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
 		});
 
 		const result = await orchestrator.retryRun("completed-1");
@@ -237,22 +160,9 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when run has no sessionId", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db } = ctx;
 		seedRun(db, { ...failedRunDefaults, id: "no-sess", sessionId: null });
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig(),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		const result = await orchestrator.retryRun("no-sess");
 		expect(result).toEqual({ error: "No session to resume" });
@@ -261,22 +171,11 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when max retries exceeded", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		seedRun(db, { ...failedRunDefaults, id: "maxed-out", attempt: 4 });
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig({ max_retries: 3 }),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
+		await using ctx = await createTestOrchestrator({
+			configOverrides: { max_retries: 3 },
 		});
+		const { orchestrator, db } = ctx;
+		seedRun(db, { ...failedRunDefaults, id: "maxed-out", attempt: 4 });
 
 		const result = await orchestrator.retryRun("maxed-out");
 		expect(result).toEqual({ error: "Max retries exceeded" });
@@ -285,22 +184,9 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when run has no issue key", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db } = ctx;
 		seedRun(db, { ...failedRunDefaults, id: "no-issue", issueKey: null });
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig(),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
-		});
 
 		const result = await orchestrator.retryRun("no-issue");
 		expect(result).toEqual({ error: "No issue key" });
@@ -309,23 +195,12 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when no workflow exists for the repo", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		seedRun(db, { ...failedRunDefaults, id: "no-workflow" });
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig(),
+		await using ctx = await createTestOrchestrator({
 			// Empty workflows map — no workflow for the repo
 			workflows: new Map<string, RepoWorkflow>(),
-			runner,
-			runAgent: noopAgent,
 		});
+		const { orchestrator, db } = ctx;
+		seedRun(db, { ...failedRunDefaults, id: "no-workflow" });
 
 		const result = await orchestrator.retryRun("no-workflow");
 		expect(result).toEqual({ error: "No workflow for repo" });
@@ -334,27 +209,14 @@ describe("Orchestrator retryRun", () => {
 	it("rejects retry when issue already has a running agent", async () => {
 		server.use(...githubHandlers());
 
-		const db = createTestDb();
-		const repo = createRunRepository(db);
+		await using ctx = await createTestOrchestrator();
+		const { orchestrator, db } = ctx;
 		seedRun(db, { ...failedRunDefaults, id: "failed-dup" });
 		seedRun(db, {
 			id: "running-1",
 			agentName: "issue-1",
 			status: "running",
 			issueKey: `${REPO}#1`,
-		});
-
-		const github = createGitHubClient("test-token");
-		const runner = createRunner({ repo, maxConcurrency: 2 });
-
-		const orchestrator = createOrchestrator({
-			runRepo: repo,
-			tracker: githubTrackerAdapter(github),
-			codeHost: githubCodeHostAdapter(github),
-			config: createTestConfig(),
-			workflows: new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
-			runner,
-			runAgent: noopAgent,
 		});
 
 		const result = await orchestrator.retryRun("failed-dup");
