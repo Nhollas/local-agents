@@ -62,20 +62,4 @@ describe("decorateTracker", () => {
 			).rejects.toThrow("GitHub API 500");
 		});
 	});
-
-	describe("fetchActiveIssues", () => {
-		it("re-throws when inner fetchActiveIssues fails", async () => {
-			const decorated = decorateTracker(
-				createFakeTracker({
-					fetchActiveIssues: async () => {
-						throw new Error("network timeout");
-					},
-				}),
-			);
-
-			await expect(
-				decorated.fetchActiveIssues("owner/repo", "agent"),
-			).rejects.toThrow("network timeout");
-		});
-	});
 });

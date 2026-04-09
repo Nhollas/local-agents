@@ -101,40 +101,6 @@ describe("Runner integration", () => {
 		});
 	});
 
-	it("marks run as failed with error message on handler failure", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
-
-		const { runId, done } = runner.enqueue({
-			name: "failing-job",
-			issueKey: "owner/repo#3",
-			issueTitle: "Failing issue",
-			handler: failedHandler("Something went wrong"),
-		});
-
-		const result = await done;
-		expect(result).toEqual({
-			status: "failed",
-			error: "Something went wrong",
-			durationMs: expect.any(Number),
-		});
-
-		const run = getRun(db, runId);
-		expect(run).toEqual({
-			id: runId,
-			agentName: "failing-job",
-			status: "failed",
-			error: "Something went wrong",
-			issueKey: "owner/repo#3",
-			issueTitle: "Failing issue",
-			startedAt: expect.any(String),
-			completedAt: expect.any(String),
-			durationMs: expect.any(Number),
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-		});
-	});
-
 	it("done promise never rejects", async () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 

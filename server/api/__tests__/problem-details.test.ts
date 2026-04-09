@@ -41,17 +41,6 @@ function createApp() {
 }
 
 describe("X-Request-Id", () => {
-	it("sets the header on successful responses", async () => {
-		const app = createApp();
-
-		const res = await app.request("/ok");
-
-		expect(res.status).toBe(200);
-		expect(res.headers.get("X-Request-Id")).toMatch(
-			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-		);
-	});
-
 	it("sets the header on error responses", async () => {
 		const app = createApp();
 

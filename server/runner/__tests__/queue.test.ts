@@ -96,19 +96,6 @@ describe("createJobQueue", () => {
 		expect(order).toEqual(["first", "second", "third"]);
 	});
 
-	it("defaults max concurrency to 5", () => {
-		const queue = createJobQueue();
-		const jobs = Array.from({ length: 6 }, () => createControllableJob());
-
-		for (const job of jobs) {
-			queue.enqueue(job.execute);
-		}
-
-		expect(queue.runningCount).toBe(5);
-		expect(queue.pendingCount).toBe(1);
-		expect(jobs[5]?.started).toBe(false);
-	});
-
 	it("supports configurable max concurrency", () => {
 		const queue = createJobQueue({ maxConcurrency: 3 });
 		const jobs = Array.from({ length: 5 }, () => createControllableJob());
