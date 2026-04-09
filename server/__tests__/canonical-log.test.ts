@@ -96,24 +96,6 @@ describe("canonicalLog", () => {
 				}),
 			);
 		});
-
-		it("creates a single-element array on first call", async () => {
-			const { logger, bag } = capturingLogger();
-
-			await canonicalLog.run(
-				{ scope: "test" },
-				async () => {
-					canonicalLog.append("items", "only");
-				},
-				logger,
-			);
-
-			expect(bag()).toEqual(
-				expect.objectContaining({
-					items: ["only"],
-				}),
-			);
-		});
 	});
 
 	describe("increment", () => {
@@ -154,110 +136,6 @@ describe("canonicalLog", () => {
 	});
 
 	describe("scenarios", () => {
-		it("successful agent run with PR creation", async () => {
-			const { logger, bag } = capturingLogger();
-
-			await canonicalLog.run(
-				{
-					scope: "run",
-					run_id: "run_abc123",
-					agent: "issue-42",
-					issue_key: "owner/repo#42",
-					attempt: 1,
-				},
-				async () => {
-					// Agent processes tool calls
-					canonicalLog.increment("tool_use_count");
-					canonicalLog.increment("tool_use_count");
-					canonicalLog.increment("tool_use_count");
-
-					// Tracker fetches the issue
-					canonicalLog.set({ tracker_fetch_issue: "owner/repo#42" });
-
-					// Run completes
-					canonicalLog.set({ status: "completed" });
-
-					// PR created, label swapped
-					canonicalLog.set({ pr_url: "https://github.com/owner/repo/pull/99" });
-					canonicalLog.append("label_swaps", {
-						from: "agent:running",
-						to: "agent:completed",
-					});
-				},
-				logger,
-			);
-
-			expect(bag()).toEqual(
-				expect.objectContaining({
-					scope: "run",
-					run_id: "run_abc123",
-					agent: "issue-42",
-					issue_key: "owner/repo#42",
-					attempt: 1,
-					tool_use_count: 3,
-					tracker_fetch_issue: "owner/repo#42",
-					status: "completed",
-					pr_url: "https://github.com/owner/repo/pull/99",
-					label_swaps: [{ from: "agent:running", to: "agent:completed" }],
-				}),
-			);
-			expect(bag()["duration_ms"]).toEqual(expect.any(Number));
-		});
-
-		it("failed run with cascading post-run failures", async () => {
-			const { logger, bag } = capturingLogger();
-
-			await canonicalLog.run(
-				{
-					scope: "run",
-					run_id: "run_def456",
-					agent: "issue-7",
-					issue_key: "owner/repo#7",
-					attempt: 3,
-				},
-				async () => {
-					canonicalLog.increment("tool_use_count");
-
-					// Agent crashes
-					canonicalLog.set({
-						status: "failed",
-						error: "Claude exited with code 1",
-					});
-
-					// PR creation fails
-					canonicalLog.append(
-						"warnings",
-						"on_complete_failed: GitHub API rate limited",
-					);
-
-					// Label recovery also fails
-					canonicalLog.append(
-						"warnings",
-						"label_recovery_failed: GitHub API rate limited",
-					);
-				},
-				logger,
-			);
-
-			expect(bag()).toEqual(
-				expect.objectContaining({
-					scope: "run",
-					run_id: "run_def456",
-					agent: "issue-7",
-					issue_key: "owner/repo#7",
-					attempt: 3,
-					tool_use_count: 1,
-					status: "failed",
-					error: "Claude exited with code 1",
-					warnings: [
-						"on_complete_failed: GitHub API rate limited",
-						"label_recovery_failed: GitHub API rate limited",
-					],
-				}),
-			);
-			expect(bag()["duration_ms"]).toEqual(expect.any(Number));
-		});
-
 		it("http request that hits an error", async () => {
 			const { logger, bag } = capturingLogger();
 

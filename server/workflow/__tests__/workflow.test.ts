@@ -48,20 +48,12 @@ describe("renderPrompt", () => {
 });
 
 describe("parseRepoWorkflow", () => {
-	it("applies default branch when omitted", () => {
+	it("applies defaults when branch and base_branch are omitted", () => {
 		const yaml = "prompt: Fix this issue\n";
 
 		const result = parseRepoWorkflow(yaml);
 
 		expect(result.branch).toBe("agent/issue-{{ issue.number }}");
-		expect(result.prompt).toBe("Fix this issue");
-	});
-
-	it("applies default base_branch when omitted", () => {
-		const yaml = "prompt: Fix this issue\n";
-
-		const result = parseRepoWorkflow(yaml);
-
 		expect(result.base_branch).toBe("main");
 		expect(result.prompt).toBe("Fix this issue");
 	});
