@@ -12,10 +12,10 @@ export default defineConfig({
 			provider: "v8",
 			exclude: ["**/testing/**", "**/*.css", "server/env.ts"],
 			thresholds: {
-				statements: 95,
-				branches: 95,
-				functions: 95,
-				lines: 95,
+				statements: 97.5,
+				branches: 97.5,
+				functions: 97.5,
+				lines: 97.5,
 			},
 		},
 		projects: [

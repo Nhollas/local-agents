@@ -16,6 +16,22 @@ function createFakeTracker(
 }
 
 describe("decorateTracker", () => {
+	describe("fetchIssue", () => {
+		it("re-throws when inner fetchIssue fails", async () => {
+			const decorated = decorateTracker(
+				createFakeTracker({
+					fetchIssue: async () => {
+						throw new Error("not found");
+					},
+				}),
+			);
+
+			await expect(decorated.fetchIssue("owner/repo", 42)).rejects.toThrow(
+				"not found",
+			);
+		});
+	});
+
 	describe("swapLabel", () => {
 		it("delegates to inner tracker on success", async () => {
 			const calls: { repo: string; issueNumber: number }[] = [];

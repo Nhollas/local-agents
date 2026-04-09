@@ -23,7 +23,6 @@ const LABELS = {
 
 function parseIssueKey(key: string): { repo: string; number: number } {
 	const hashIndex = key.lastIndexOf("#");
-	if (hashIndex === -1) throw new Error(`Invalid issue key: ${key}`);
 	return {
 		repo: key.slice(0, hashIndex),
 		number: Number.parseInt(key.slice(hashIndex + 1), 10),
@@ -71,7 +70,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
 	const pendingPostRuns = new Set<Promise<unknown>>();
-	const settlingIssues = new Set<string>();
 
 	const {
 		runRepo,
@@ -203,66 +201,61 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 						// Post-run work — inside the canonical scope so decorators
 						// and warnings are captured in the run's log line.
-						settlingIssues.add(issue.key);
-						try {
-							if (result.status === "completed") {
-								try {
-									const head = renderPrompt(workflow.branch, { issue });
-									await codeHost.createChangeRequest(
-										repo,
-										head,
-										workflow.base_branch,
-										issue.title,
-										`Closes ${issue.key}`,
-									);
+						if (result.status === "completed") {
+							try {
+								const head = renderPrompt(workflow.branch, { issue });
+								await codeHost.createChangeRequest(
+									repo,
+									head,
+									workflow.base_branch,
+									issue.title,
+									`Closes ${issue.key}`,
+								);
 
-									await tracker.swapLabel(
+								await tracker.swapLabel(
+									repo,
+									issue.number,
+									LABELS.running,
+									LABELS.completed,
+								);
+							} catch (err) {
+								canonicalLog.append(
+									"warnings",
+									`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
+								);
+								await tracker
+									.swapLabel(
 										repo,
 										issue.number,
 										LABELS.running,
 										LABELS.completed,
-									);
-								} catch (err) {
-									canonicalLog.append(
-										"warnings",
-										`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
-									);
-									await tracker
-										.swapLabel(
-											repo,
-											issue.number,
-											LABELS.running,
-											LABELS.completed,
-										)
-										.catch((labelErr) =>
-											canonicalLog.append(
-												"warnings",
-												`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
-											),
-										);
-								}
-							}
-
-							const retriesExhausted = defaults.max_retries - attempt < 0;
-							const shouldCleanup =
-								result.status === "completed" || retriesExhausted;
-
-							if (shouldCleanup) {
-								await removeWorkspace(ws.path);
-							}
-
-							if (result.status === "failed" && retriesExhausted) {
-								await tracker
-									.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
-									.catch((err) =>
+									)
+									.catch((labelErr) =>
 										canonicalLog.append(
 											"warnings",
-											`label_rollback_failed: ${canonicalLog.errorMessage(err)}`,
+											`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
 										),
 									);
 							}
-						} finally {
-							settlingIssues.delete(issue.key);
+						}
+
+						const retriesExhausted = defaults.max_retries - attempt < 0;
+						const shouldCleanup =
+							result.status === "completed" || retriesExhausted;
+
+						if (shouldCleanup) {
+							await removeWorkspace(ws.path);
+						}
+
+						if (result.status === "failed" && retriesExhausted) {
+							await tracker
+								.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+								.catch((err) =>
+									canonicalLog.append(
+										"warnings",
+										`label_rollback_failed: ${canonicalLog.errorMessage(err)}`,
+									),
+								);
 						}
 
 						return result;
@@ -360,7 +353,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		for (const [repo, keys] of state.stillRunning) {
 			for (const key of keys) {
 				if (state.runningByIssue.has(key)) continue;
-				if (settlingIssues.has(key)) continue;
 				const { number } = parseIssueKey(key);
 				logger.info({ key }, "orchestrator.reconcile_orphan");
 				await tracker
@@ -377,7 +369,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 		for (const { issue, repo, workflow } of state.pending) {
 			if (state.runningByIssue.has(issue.key)) continue;
-			if (settlingIssues.has(issue.key)) continue;
 			if (runningCount >= defaults.max_concurrent) break;
 
 			await tracker.swapLabel(
