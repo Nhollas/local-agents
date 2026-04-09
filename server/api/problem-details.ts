@@ -3,6 +3,7 @@ import type { Context, Env, ErrorHandler, ValidationTargets } from "hono";
 import { z } from "zod";
 import type { $ZodType } from "zod/v4/core";
 import * as canonicalLog from "../canonical-log.ts";
+import type { AppEnv } from "./types.ts";
 
 const STATUS_TITLES = {
 	400: "Bad Request",
@@ -32,23 +33,26 @@ export class ProblemDetailsError extends Error {
 }
 
 function buildProblemResponse(
-	c: Context,
+	c: Context<AppEnv>,
 	status: ProblemStatus,
 	detail: string,
 	extensions: Record<string, unknown> = {},
 ) {
+	const requestId = c.get("requestId");
+
 	const body = {
 		type: "about:blank",
 		status,
 		title: STATUS_TITLES[status],
 		detail,
+		...(requestId && { requestId }),
 		...extensions,
 	};
 
 	return c.json(body, status);
 }
 
-export const problemDetailsHandler: ErrorHandler = (err, c) => {
+export const problemDetailsHandler: ErrorHandler<AppEnv> = (err, c) => {
 	if (err instanceof ProblemDetailsError) {
 		return buildProblemResponse(c, err.status, err.detail, err.extensions);
 	}

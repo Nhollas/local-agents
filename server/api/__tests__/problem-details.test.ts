@@ -2,15 +2,20 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { canonicalLogMiddleware } from "../canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
 	problemDetailsHandler,
 	zodProblemHook,
 } from "../problem-details.ts";
+import type { AppEnv } from "../types.ts";
 
 function createApp() {
-	const app = new Hono();
+	const app = new Hono<AppEnv>();
+	app.use(canonicalLogMiddleware);
 	app.onError(problemDetailsHandler);
+
+	app.get("/ok", (c) => c.json({ ok: true }));
 
 	app.get("/known-error", () => {
 		throw new ProblemDetailsError(400, "Something was wrong");
@@ -18,6 +23,12 @@ function createApp() {
 
 	app.get("/unknown-error", () => {
 		throw new Error("kaboom");
+	});
+
+	app.get("/with-extensions", () => {
+		throw new ProblemDetailsError(404, "Not found", {
+			resourceId: "abc-123",
+		});
 	});
 
 	app.get(
@@ -28,6 +39,42 @@ function createApp() {
 
 	return app;
 }
+
+describe("X-Request-Id", () => {
+	it("sets the header on successful responses", async () => {
+		const app = createApp();
+
+		const res = await app.request("/ok");
+
+		expect(res.status).toBe(200);
+		expect(res.headers.get("X-Request-Id")).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+		);
+	});
+
+	it("sets the header on error responses", async () => {
+		const app = createApp();
+
+		const res = await app.request("/known-error");
+
+		expect(res.headers.get("X-Request-Id")).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+		);
+	});
+
+	it("generates a unique id per request", async () => {
+		const app = createApp();
+
+		const [first, second] = await Promise.all([
+			app.request("/ok"),
+			app.request("/ok"),
+		]);
+
+		expect(first.headers.get("X-Request-Id")).not.toBe(
+			second.headers.get("X-Request-Id"),
+		);
+	});
+});
 
 describe("problemDetailsHandler", () => {
 	it("formats ProblemDetailsError as RFC 9457 response", async () => {
@@ -42,6 +89,7 @@ describe("problemDetailsHandler", () => {
 			status: 400,
 			title: "Bad Request",
 			detail: "Something was wrong",
+			requestId: expect.any(String),
 		});
 	});
 
@@ -56,17 +104,12 @@ describe("problemDetailsHandler", () => {
 			status: 500,
 			title: "Internal Server Error",
 			detail: "Internal Server Error",
+			requestId: expect.any(String),
 		});
 	});
 
 	it("includes extensions in the response body", async () => {
-		const app = new Hono();
-		app.onError(problemDetailsHandler);
-		app.get("/with-extensions", () => {
-			throw new ProblemDetailsError(404, "Not found", {
-				resourceId: "abc-123",
-			});
-		});
+		const app = createApp();
 
 		const res = await app.request("/with-extensions");
 
@@ -77,7 +120,17 @@ describe("problemDetailsHandler", () => {
 			title: "Not Found",
 			detail: "Not found",
 			resourceId: "abc-123",
+			requestId: expect.any(String),
 		});
+	});
+
+	it("includes the same requestId in header and body", async () => {
+		const app = createApp();
+
+		const res = await app.request("/known-error");
+		const body = await res.json();
+
+		expect(body.requestId).toBe(res.headers.get("X-Request-Id"));
 	});
 });
 
@@ -99,6 +152,7 @@ describe("zodProblemHook", () => {
 					message: expect.stringContaining("expected string"),
 				},
 			],
+			requestId: expect.any(String),
 		});
 	});
 });
