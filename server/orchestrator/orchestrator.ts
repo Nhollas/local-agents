@@ -1,13 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { eq } from "drizzle-orm";
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
-import type { Db } from "../db/db.ts";
-import { runs } from "../db/schema.ts";
 import { logger } from "../logger.ts";
+import type { RunRepository } from "../run-repository.ts";
 import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
@@ -43,7 +41,7 @@ type RunAgent = (
 >;
 
 type OrchestratorConfig = {
-	db: Db;
+	runRepo: RunRepository;
 	tracker: TrackerAdapter;
 	codeHost: CodeHostAdapter;
 	config: Config;
@@ -52,7 +50,15 @@ type OrchestratorConfig = {
 	runAgent?: RunAgent;
 };
 
-type RunSnapshot = { id: string; issueKey: string };
+type Orchestrator = {
+	tick(): Promise<void>;
+	retryRun(failedRunId: string): Promise<{ runId: string } | { error: string }>;
+	/** Wait for all post-run work (PR creation, label swaps, cleanup) to finish. */
+	settled(): Promise<void>;
+	start(): void;
+	stop(): void;
+};
+
 type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
 type TickState = {
 	runningByIssue: Map<string, string[]>;
@@ -61,26 +67,14 @@ type TickState = {
 	stillRunning: Map<string, Set<string>>;
 };
 
-function getRunSnapshot(db: Db): RunSnapshot[] {
-	return db
-		.select({
-			id: runs.id,
-			issueKey: runs.issueKey,
-		})
-		.from(runs)
-		.where(eq(runs.status, "running"))
-		.all()
-		.filter((r): r is RunSnapshot => r.issueKey !== null);
-}
-
-export function createOrchestrator(opts: OrchestratorConfig) {
+export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
 	const pendingPostRuns = new Set<Promise<unknown>>();
 	const settlingIssues = new Set<string>();
 
 	const {
-		db,
+		runRepo,
 		tracker,
 		codeHost,
 		config,
@@ -286,7 +280,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	async function fetchTickState(): Promise<TickState> {
 		const entries = [...workflows.entries()];
 
-		const dbSnapshot = getRunSnapshot(db);
+		const dbSnapshot = runRepo.getRunningSnapshot();
 		const runningByIssue = new Map<string, string[]>();
 		for (const r of dbSnapshot) {
 			const ids = runningByIssue.get(r.issueKey) ?? [];
@@ -353,14 +347,10 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 				for (const id of runIds) {
 					const killed = runner.kill(id);
 					if (!killed) {
-						db.update(runs)
-							.set({
-								status: "failed",
-								error: "Stale run from previous session",
-								completedAt: new Date().toISOString(),
-							})
-							.where(eq(runs.id, id))
-							.run();
+						runRepo.failRun(id, {
+							error: "Stale run from previous session",
+							completedAt: new Date().toISOString(),
+						});
 					}
 				}
 			}
@@ -433,11 +423,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	async function retryRun(
 		failedRunId: string,
 	): Promise<{ runId: string } | { error: string }> {
-		const failedRun = db
-			.select()
-			.from(runs)
-			.where(eq(runs.id, failedRunId))
-			.get();
+		const failedRun = runRepo.getRunById(failedRunId);
 		if (!failedRun) return { error: "Run not found" };
 		if (failedRun.status !== "failed") return { error: "Run is not failed" };
 		if (!failedRun.sessionId) return { error: "No session to resume" };
@@ -447,7 +433,7 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 		if (attempt > defaults.max_retries + 1)
 			return { error: "Max retries exceeded" };
 
-		const snapshot = getRunSnapshot(db);
+		const snapshot = runRepo.getRunningSnapshot();
 		if (snapshot.some((r) => r.issueKey === failedRun.issueKey)) {
 			return { error: "Issue already has a running agent" };
 		}
@@ -478,7 +464,6 @@ export function createOrchestrator(opts: OrchestratorConfig) {
 	return {
 		tick,
 		retryRun,
-		/** Wait for all post-run work (PR creation, label swaps, cleanup) to finish. */
 		async settled() {
 			await Promise.all(pendingPostRuns);
 		},

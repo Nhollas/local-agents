@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
@@ -39,11 +40,12 @@ describe("Orchestrator reconciliation", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -121,11 +123,12 @@ describe("Orchestrator reconciliation", () => {
 		await workspace.preCreateWorkspace(`${REPO}#2`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -185,11 +188,12 @@ describe("Orchestrator reconciliation", () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -238,11 +242,12 @@ describe("Orchestrator reconciliation", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -317,11 +322,12 @@ describe("Orchestrator reconciliation", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({
@@ -365,8 +371,9 @@ describe("Orchestrator reconciliation", () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 5 });
+		const runner = createRunner({ repo, maxConcurrency: 5 });
 
 		// Seed a "running" record with no actual process (simulates server restart)
 		db.insert(runs)
@@ -382,7 +389,7 @@ describe("Orchestrator reconciliation", () => {
 			.run();
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),

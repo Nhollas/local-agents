@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import { runs } from "../../db/schema.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import {
 	createGitHubIssue,
@@ -33,8 +34,9 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		// Custom agent that checks marker file exists during execution
 		let markerExistedDuringRun = false;
@@ -50,7 +52,7 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		}
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -79,15 +81,16 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		// The after_run hook writes a marker file outside the workspace root
 		// so it survives workspace cleanup by onFinally
 		const sentinelPath = join(workspace.root, "after_marker_sentinel");
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -121,11 +124,12 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -170,11 +174,12 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -227,11 +232,12 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -305,11 +311,12 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),
@@ -352,11 +359,12 @@ describe("Orchestrator dispatch hooks and completion", () => {
 		const wsDir = await workspace.preCreateWorkspace(`${REPO}#1`);
 
 		const db = createTestDb();
+		const repo = createRunRepository(db);
 		const github = createGitHubClient("test-token");
-		const runner = createRunner({ db, maxConcurrency: 2 });
+		const runner = createRunner({ repo, maxConcurrency: 2 });
 
 		const orchestrator = createOrchestrator({
-			db,
+			runRepo: repo,
 			tracker: githubTrackerAdapter(github),
 			codeHost: githubCodeHostAdapter(github),
 			config: createTestConfig({ workspace_root: workspace.root }),

@@ -1,23 +1,6 @@
-import { z } from "zod";
-import type { GitHubClient } from "../github-client.ts";
+import type { GitHubClient, GitHubIssue } from "../github-client.ts";
 import { decorateTracker } from "./decorator.ts";
 import type { Issue, TrackerAdapter } from "./types.ts";
-
-const githubUserSchema = z.object({
-	login: z.string(),
-});
-
-const githubIssueSchema = z.object({
-	number: z.number(),
-	title: z.string(),
-	body: z.string().nullable(),
-	labels: z.array(z.object({ name: z.string() })),
-	html_url: z.string(),
-	created_at: z.string(),
-});
-
-type GitHubIssue = z.infer<typeof githubIssueSchema>;
-const githubIssuesSchema = z.array(githubIssueSchema);
 
 type IssueState = "open" | "closed" | "all";
 
@@ -37,16 +20,11 @@ export function githubTrackerAdapter(
 	client: GitHubClient,
 	activeStates: IssueState[] = ["open"],
 ): TrackerAdapter {
-	const usernamePromise = client
-		.get("/user", githubUserSchema)
-		.then((u) => u.login);
+	const usernamePromise = client.getAuthenticatedUser().then((u) => u.login);
 
 	return decorateTracker({
 		async fetchIssue(repo: string, issueNumber: number): Promise<Issue> {
-			const i = await client.get(
-				`/repos/${repo}/issues/${issueNumber}`,
-				githubIssueSchema,
-			);
+			const i = await client.getIssue(repo, issueNumber);
 			return mapGitHubIssue(repo, i);
 		},
 
@@ -54,18 +32,14 @@ export function githubTrackerAdapter(
 			const username = await usernamePromise;
 
 			const batches = await Promise.all(
-				activeStates.map((state) => {
-					const params = new URLSearchParams({
+				activeStates.map((state) =>
+					client.listIssues(repo, {
 						labels: label,
 						state,
 						creator: username,
 						per_page: "100",
-					});
-					return client.get(
-						`/repos/${repo}/issues?${params}`,
-						githubIssuesSchema,
-					);
-				}),
+					}),
+				),
 			);
 
 			const seen = new Set<number>();
@@ -87,12 +61,8 @@ export function githubTrackerAdapter(
 			add: string,
 		): Promise<void> {
 			await Promise.all([
-				client.delete(
-					`/repos/${repo}/issues/${issueNumber}/labels/${encodeURIComponent(remove)}`,
-				),
-				client.post(`/repos/${repo}/issues/${issueNumber}/labels`, {
-					labels: [add],
-				}),
+				client.removeIssueLabel(repo, issueNumber, remove),
+				client.addIssueLabels(repo, issueNumber, [add]),
 			]);
 		},
 	});

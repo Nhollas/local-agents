@@ -1,11 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, desc, eq, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import type { Db } from "../db/db.ts";
-import { runEvents, runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
+import type { RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
 import { canonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
@@ -30,11 +28,11 @@ export type RetryFn = (
 
 export function createApi({
 	runner,
-	db,
+	repo,
 	retryRun,
 }: {
 	runner: Runner;
-	db: Db;
+	repo: RunRepository;
 	retryRun: RetryFn;
 }) {
 	const app = new Hono();
@@ -71,23 +69,7 @@ export function createApi({
 		zValidator("query", runsQuerySchema, zodProblemHook),
 		(c) => {
 			const { agent, status, limit } = c.req.valid("query");
-
-			const conditions: SQL[] = [];
-			if (agent) conditions.push(eq(runs.agentName, agent));
-			if (status) conditions.push(eq(runs.status, status));
-
-			const query = db
-				.select()
-				.from(runs)
-				.orderBy(desc(runs.startedAt))
-				.limit(limit);
-
-			const result =
-				conditions.length > 0
-					? query.where(and(...conditions)).all()
-					: query.all();
-
-			return c.json(result);
+			return c.json(repo.getRuns({ agent, status, limit }));
 		},
 	);
 
@@ -97,16 +79,10 @@ export function createApi({
 		(c) => {
 			const { id } = c.req.valid("param");
 
-			const run = db.select().from(runs).where(eq(runs.id, id)).get();
+			const run = repo.getRunById(id);
 			if (!run) throw new ProblemDetailsError(404, "Not found");
 
-			const events = db
-				.select()
-				.from(runEvents)
-				.where(eq(runEvents.runId, id))
-				.orderBy(asc(runEvents.createdAt))
-				.all();
-
+			const events = repo.getRunEvents(id);
 			return c.json({ ...run, events });
 		},
 	);

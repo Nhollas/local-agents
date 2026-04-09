@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../../db/db.ts";
 import {
+	createRunRepository,
+	type RunRepository,
+} from "../../run-repository.ts";
+import {
 	createTestDb,
 	getEvents,
 	getRun,
@@ -22,13 +26,15 @@ const failedHandler = (error: string) => async (): Promise<RunResult> => ({
 
 describe("Runner integration", () => {
 	let db: Db;
+	let repo: RunRepository;
 
 	beforeEach(() => {
 		db = createTestDb();
+		repo = createRunRepository(db);
 	});
 
 	it("records a running status when a job is enqueued", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 		let resolveHandler!: (result: RunResult) => void;
 
 		const { runId } = runner.enqueue({
@@ -63,7 +69,7 @@ describe("Runner integration", () => {
 	});
 
 	it("marks run as completed with duration on success", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId, done } = runner.enqueue({
 			name: "fast-job",
@@ -96,7 +102,7 @@ describe("Runner integration", () => {
 	});
 
 	it("marks run as failed with error message on handler failure", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId, done } = runner.enqueue({
 			name: "failing-job",
@@ -130,7 +136,7 @@ describe("Runner integration", () => {
 	});
 
 	it("done promise never rejects", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { done } = runner.enqueue({
 			name: "crash-job",
@@ -149,7 +155,7 @@ describe("Runner integration", () => {
 	});
 
 	it("persists lifecycle events in order", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			name: "lifecycle-job",
@@ -180,7 +186,7 @@ describe("Runner integration", () => {
 	});
 
 	it("persists failure events", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			name: "fail-event-job",
@@ -211,7 +217,7 @@ describe("Runner integration", () => {
 	});
 
 	it("records tool_use events when emitToolUse is called", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			name: "tool-job",
@@ -260,7 +266,7 @@ describe("Runner integration", () => {
 	});
 
 	it("aborts a running job when killed", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId, done } = runner.enqueue({
 			name: "killable-job",
@@ -297,13 +303,13 @@ describe("Runner integration", () => {
 	});
 
 	it("kill returns false for unknown runId", () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		expect(runner.kill("nonexistent-id")).toBe(false);
 	});
 
 	it("stores attempt and parentRunId on the run record", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			name: "retry-job",
@@ -334,7 +340,7 @@ describe("Runner integration", () => {
 	});
 
 	it("only persists the first sessionId when handler calls setSessionId multiple times", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			name: "multi-session-job",
@@ -368,7 +374,7 @@ describe("Runner integration", () => {
 	});
 
 	it("uses default maxConcurrency when not specified", async () => {
-		const runner = createRunner({ db });
+		const runner = createRunner({ repo });
 
 		const { runId, done } = runner.enqueue({
 			name: "default-concurrency-job",
@@ -389,7 +395,7 @@ describe("Runner integration", () => {
 	});
 
 	it("captures sessionId via setSessionId callback", async () => {
-		const runner = createRunner({ db, maxConcurrency: 1 });
+		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			name: "session-job",
