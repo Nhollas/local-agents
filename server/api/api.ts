@@ -11,6 +11,7 @@ import {
 	problemDetailsHandler,
 	zodProblemHook,
 } from "./problem-details.ts";
+import type { AppEnv } from "./types.ts";
 
 const runsQuerySchema = z.object({
 	agent: z.string().optional(),
@@ -35,7 +36,7 @@ export function createApi({
 	repo: RunRepository;
 	retryRun: RetryFn;
 }) {
-	const app = new Hono();
+	const app = new Hono<AppEnv>();
 	app.onError(problemDetailsHandler);
 
 	app.get("/events", (c) => {

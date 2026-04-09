@@ -243,6 +243,7 @@ describe("GET /runs/:id", () => {
 			status: 404,
 			title: "Not Found",
 			detail: "Not found",
+			requestId: expect.any(String),
 		});
 	});
 });
@@ -276,6 +277,7 @@ describe("POST /runs/:id/kill", () => {
 			status: 404,
 			title: "Not Found",
 			detail: "Run not found or not running",
+			requestId: expect.any(String),
 		});
 	});
 });
@@ -307,6 +309,7 @@ describe("POST /runs/:id/retry", () => {
 			status: 400,
 			title: "Bad Request",
 			detail: "Run is not failed",
+			requestId: expect.any(String),
 		});
 	});
 
@@ -323,6 +326,7 @@ describe("POST /runs/:id/retry", () => {
 			status: 400,
 			title: "Bad Request",
 			detail: "Run not found",
+			requestId: expect.any(String),
 		});
 	});
 });
