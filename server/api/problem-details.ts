@@ -1,7 +1,7 @@
 import type { Hook } from "@hono/zod-validator";
 import type { Context, Env, ErrorHandler, ValidationTargets } from "hono";
 import { z } from "zod";
-import type { $ZodError, $ZodType } from "zod/v4/core";
+import type { $ZodType } from "zod/v4/core";
 import * as canonicalLog from "../canonical-log.ts";
 
 const STATUS_TITLES = {
@@ -71,7 +71,7 @@ export const zodProblemHook: Hook<
 > = (result) => {
 	if (result.success) return;
 
-	const flat = z.flattenError(result.error as $ZodError);
+	const flat = z.flattenError(result.error);
 	const errors: ValidationError[] = Object.entries(flat.fieldErrors).flatMap(
 		([field, messages]) =>
 			(messages as string[]).map((message) => ({ field, message })),

@@ -618,10 +618,10 @@ describe("Orchestrator dispatch", () => {
 		);
 		// Label delete succeeds for "agent" (dispatch) but fails for "agent:running" (recovery)
 		server.use(
-			http.delete(
+			http.delete<{ label: string }>(
 				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 				({ params }) => {
-					const label = decodeURIComponent(params["label"] as string);
+					const label = decodeURIComponent(params.label);
 					if (label === "agent:running") {
 						return new HttpResponse(null, { status: 500 });
 					}
@@ -1232,10 +1232,10 @@ describe("Orchestrator dispatch", () => {
 		// Override: label delete succeeds for "agent" (initial swap) but fails
 		// for "agent:running" (the rollback after dispatch failure)
 		server.use(
-			http.delete(
+			http.delete<{ label: string }>(
 				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 				({ params }) => {
-					const label = decodeURIComponent(params["label"] as string);
+					const label = decodeURIComponent(params.label);
 					if (label === "agent:running") {
 						return new HttpResponse(null, { status: 500 });
 					}

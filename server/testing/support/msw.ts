@@ -36,18 +36,19 @@ export function githubHandlers({
 			const label = url.searchParams.get("labels");
 			return HttpResponse.json(label ? resolve(label) : []);
 		}),
-		http.delete(
+		http.delete<{ label: string }>(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 			({ params }) => {
-				onLabelDelete?.(params["label"] as string);
+				onLabelDelete?.(params.label);
 				return new HttpResponse(null, { status: 204 });
 			},
 		),
-		http.post(
+		http.post<{ number: string }>(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
 			async ({ request }) => {
 				const body = (await request.json()) as { labels: string[] };
-				onLabelAdd?.(body.labels[0] as string);
+				const label = body.labels[0];
+				if (label) onLabelAdd?.(label);
 				return HttpResponse.json([]);
 			},
 		),
