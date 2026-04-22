@@ -24,7 +24,7 @@ export function App() {
 			.map(([name, agentRunList]) => ({
 				name,
 				runs: agentRunList.sort((a, b) =>
-					b.startedAt > a.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : 0,
+					b.startedAt.localeCompare(a.startedAt),
 				),
 			}));
 	}, [runs]);

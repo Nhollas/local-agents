@@ -263,6 +263,21 @@ describe("POST /runs/:id/kill", () => {
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ killed: true });
 	});
+
+	it("returns 404 when run is not running", async () => {
+		const { app } = createTestApi();
+
+		const res = await app.request("/runs/unknown/kill", { method: "POST" });
+
+		expect(res.status).toBe(404);
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 404,
+			title: "Not Found",
+			detail: "Run not found or not running",
+			requestId: expect.any(String),
+		});
+	});
 });
 
 describe("POST /runs/:id/retry", () => {

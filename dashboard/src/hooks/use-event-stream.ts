@@ -32,22 +32,20 @@ export function useEventStream(url: string) {
 					break;
 				case "run:completed":
 				case "run:failed":
-					queryClient.setQueryData<Run[]>(["runs"], (prev = []) => {
-						const idx = prev.findIndex((r) => r.id === event.runId);
-						const existing = prev[idx];
-						if (idx < 0 || !existing) return prev;
-						const runs = [...prev];
-						const error =
-							event.type === "run:failed" ? event.data.error : undefined;
-						runs[idx] = {
-							...existing,
-							status: event.type === "run:completed" ? "completed" : "failed",
-							completedAt: event.createdAt,
-							durationMs: event.data.durationMs,
-							...(error !== undefined && { error }),
-						};
-						return runs;
-					});
+					queryClient.setQueryData<Run[]>(["runs"], (prev = []) =>
+						prev.map((run) => {
+							if (run.id !== event.runId) return run;
+							const error =
+								event.type === "run:failed" ? event.data.error : undefined;
+							return {
+								...run,
+								status: event.type === "run:completed" ? "completed" : "failed",
+								completedAt: event.createdAt,
+								durationMs: event.data.durationMs,
+								...(error !== undefined && { error }),
+							};
+						}),
+					);
 					break;
 			}
 
@@ -108,25 +106,11 @@ export function useEventStream(url: string) {
 							const block = buffer.slice(0, boundary);
 							buffer = buffer.slice(boundary + 2);
 
-							let eventType = "message";
-							let data = "";
-
-							for (const line of block.split("\n")) {
-								if (line.startsWith("event:")) {
-									eventType = line.slice(6).trim();
-								} else if (line.startsWith("data:")) {
-									data = line.slice(5).trim();
-								}
-							}
-
-							if (eventType === "heartbeat") {
-								setConnected(true);
-								continue;
-							}
-
-							if (data) {
-								handleEvent(JSON.parse(data));
-							}
+							const dataLine = block
+								.split("\n")
+								.find((line) => line.startsWith("data:"));
+							const data = dataLine?.slice(5).trim();
+							if (data) handleEvent(JSON.parse(data));
 
 							boundary = buffer.indexOf("\n\n");
 						}
@@ -134,9 +118,6 @@ export function useEventStream(url: string) {
 				} catch {
 					if (cancelled) return;
 					setConnected(false);
-				}
-
-				if (!cancelled) {
 					await new Promise((r) => setTimeout(r, 3000));
 				}
 			}

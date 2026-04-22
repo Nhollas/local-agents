@@ -50,13 +50,15 @@ export function createApi({
 
 	app.get("/events", (c) => {
 		return streamSSE(c, async (stream) => {
-			const handler = (event: RunEvent) => {
-				stream
-					.writeSSE({
+			const handler = async (event: RunEvent) => {
+				try {
+					await stream.writeSSE({
 						event: event.type,
 						data: JSON.stringify(event),
-					})
-					.catch(() => {});
+					});
+				} catch {
+					// stream aborted; cleanup runs via onAbort
+				}
 			};
 
 			eventBus.on(handler);
