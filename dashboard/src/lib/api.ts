@@ -29,10 +29,7 @@ export type RunDetailFromApi = RunFromApi & {
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 	const res = await fetch(url, init);
-	if (!res.ok) {
-		const body = await res.json().catch(() => null);
-		throw new Error(body?.detail ?? `API request failed: ${res.status}`);
-	}
+	if (!res.ok) throw new Error(`API request failed: ${res.status}`);
 	return res;
 }
 
