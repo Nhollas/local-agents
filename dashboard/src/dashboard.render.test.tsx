@@ -1,4 +1,5 @@
 import { describe } from "vitest";
+import { createRunEvent } from "./testing/contract";
 import { expect, test } from "./testing/fixture";
 
 describe("Dashboard - render", () => {
@@ -58,7 +59,52 @@ describe("Dashboard - render", () => {
 		await dashboard.expectConnected();
 
 		sseStream.emitHeartbeat();
+		sseStream.emit(
+			createRunEvent("run:started", {
+				runId: "run-after-heartbeat",
+				agentName: "test-agent",
+			}),
+		);
 
+		await dashboard.expectRunVisible("run-after-heartbeat");
 		await dashboard.expectConnected();
+	});
+
+	test("reconnects after the SSE stream closes normally", async ({
+		dashboardPage,
+		sseStream,
+	}) => {
+		const dashboard = await dashboardPage.mount();
+
+		sseStream.emit(
+			createRunEvent("run:started", {
+				runId: "run-before",
+				agentName: "test-agent",
+			}),
+		);
+		await dashboard.expectRunVisible("run-before");
+
+		sseStream.close();
+
+		await expect
+			.poll(
+				() => {
+					try {
+						sseStream.emit(
+							createRunEvent("run:started", {
+								runId: "run-after",
+								agentName: "test-agent",
+							}),
+						);
+						return true;
+					} catch {
+						return false;
+					}
+				},
+				{ timeout: 5000 },
+			)
+			.toBe(true);
+
+		await dashboard.expectRunVisible("run-after");
 	});
 });

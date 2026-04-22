@@ -14,6 +14,7 @@ export const test = base
 		let client: {
 			send(payload: Record<string, unknown>): void;
 			error(): void;
+			close(): void;
 		} | null = null;
 		let resolveConnected: (() => void) | null = null;
 		const connected = new Promise<void>((r) => {
@@ -57,6 +58,14 @@ export const test = base
 					);
 				}
 				client.error();
+			},
+			close() {
+				if (!client) {
+					throw new Error(
+						"SSE client not connected — call waitForConnection() first",
+					);
+				}
+				client.close();
 			},
 		};
 	})

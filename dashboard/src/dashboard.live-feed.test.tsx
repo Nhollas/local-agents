@@ -35,8 +35,15 @@ describe("Dashboard - live feed", () => {
 				agentName: "pr-summary",
 			}),
 		);
+		sseStream.emit(
+			createRunEvent("run:started", {
+				runId: "run-xyz",
+				agentName: "pr-summary",
+			}),
+		);
 
 		await dashboard.expectRunVisible("run-abc");
+		await dashboard.expectRunVisible("run-xyz");
 
 		sseStream.emit(
 			createRunEvent("run:completed", {
@@ -48,6 +55,7 @@ describe("Dashboard - live feed", () => {
 
 		const section = dashboard.getAgentSection("pr-summary");
 		await expect.element(section).toHaveTextContent("completed");
+		await expect.element(section).toHaveTextContent("running");
 	});
 
 	test("updates run status when run:failed event arrives", async ({
