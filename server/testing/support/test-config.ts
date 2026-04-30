@@ -5,8 +5,10 @@ export function createTestConfig(
 ): Config {
 	return {
 		tracker: { kind: "github" },
-		code_host: { kind: "github" },
-		repos: ["test-owner/test-repo"],
+		code_host: {
+			kind: "github",
+			repos: ["test-owner/test-repo"],
+		},
 		defaults: {
 			polling_interval_ms: 100,
 			max_concurrent: 2,
