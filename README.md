@@ -37,11 +37,10 @@ defaults:
   workspace_root: /tmp/local-agent-workspaces
 ```
 
-Each target repo needs a `.agents/workflow.yaml` that defines the label, hooks, and prompt:
+Create `workflow.yaml` in the local-agents working directory to define hooks and
+the prompt used for every configured repo:
 
 ```yaml
-label: agent
-
 hooks:
   after_create: |
     git checkout -b agent/issue-{{ issue.number }}
@@ -69,12 +68,11 @@ This starts:
 ### Adding a New Repo
 
 1. Add the repo to the `code_host.repos` list in `config.yaml`
-2. Commit `.agents/workflow.yaml` to the repo with label, hooks, and prompt
-3. Create the label (e.g., `agent`) on the repo:
+2. Create the label (e.g., `agent`) on the repo:
    ```bash
    gh label create agent --repo your-org/your-repo
    ```
-4. Restart the orchestrator — it fetches workflows on startup
+3. Restart the orchestrator — it loads `./workflow.yaml` on startup
 
 ### Creating Work
 

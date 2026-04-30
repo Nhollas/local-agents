@@ -46,13 +46,12 @@ defaults:
   workspace_root: /tmp/local-agent-workspaces
 ```
 
-### 2. Per-repo workflow
+### 2. Global workflow
 
-Each target repo contains `.agents/workflow.yaml` with the label, hooks, and prompt:
+The local-agents working directory contains one `workflow.yaml` with hooks and
+the prompt. The same workflow is used for every configured repo:
 
 ```yaml
-label: agent
-
 hooks:
   after_create: |
     git checkout -b agent/issue-{{ issue.number }}
@@ -72,7 +71,7 @@ Hooks must use plain git commands, not platform-specific CLI tools. The orchestr
 
 Each tick:
 
-1. **Fetch** active issues from all repos with cached workflows (concurrent)
+1. **Fetch** active issues from all configured repos (concurrent)
 2. **Merge** all issues into a single list, sorted oldest-first for cross-repo fairness
 3. **Reconcile** — if a previously running issue is no longer active, kill the run
 4. **Dispatch** — for each unclaimed issue (up to `max_concurrent`), swap its label to mark it as running, create a workspace, and start a Claude agent
@@ -87,9 +86,10 @@ The orchestrator tracks issue state through label swaps on the issue tracker rat
 
 This keeps the issue tracker as the single source of truth for what's happening.
 
-### 5. Workflow caching
+### 5. Workflow loading
 
-The orchestrator fetches `.agents/workflow.yaml` from each repo via the code host adapter at startup. Workflows are cached and refreshed periodically. Repos without a workflow are skipped with a warning. Failed refreshes keep the last-known-good workflow.
+The orchestrator loads `./workflow.yaml` once from the local-agents working
+directory at startup. Restart the orchestrator to pick up workflow changes.
 
 ### 6. Workspaces and hooks
 

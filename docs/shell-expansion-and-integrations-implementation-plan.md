@@ -213,7 +213,23 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 2 — Global Local `workflow.yaml`
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-02-global-workflow`.
+
+**Completed changes:**
+
+- Replaced per-target-repo workflow fetching and refresh behavior with a one-shot local `workflow.yaml` loader.
+- Added a workflow map helper so the same loaded workflow applies to every configured repo.
+- Updated server startup and shutdown wiring to stop using workflow refresh timers or `codeHost.fetchFile()` for workflow loading.
+- Replaced workflow cache integration tests with local loader tests for successful load, missing file, invalid YAML, and shared workflow fan-out across repos.
+- Updated README and architecture docs to describe global workflow loading from the local-agents working directory.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
 **Purpose:** Replace per-target-repo workflow fetching with one workflow file owned by local-agents.
 
@@ -227,11 +243,11 @@ Use this handoff template when a slice is interrupted:
 
 **Natural code areas:**
 
-- `server/workflow/workflow-cache.ts`
+- `server/workflow/workflow-loader.ts`
 - `server/workflow/workflow.ts`
 - `server/server.ts`
 - `server/orchestrator/orchestrator.ts`
-- `server/workflow/__tests__/workflow-cache.integration.test.ts`
+- `server/workflow/__tests__/workflow-loader.test.ts`
 - Orchestrator test helpers that currently pass workflow maps.
 
 **Tests:**
