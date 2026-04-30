@@ -22,6 +22,8 @@ const envSchema = z.object({
 	LOG_LEVEL: z.string().default("info"),
 	GITHUB_TOKEN: z.string().optional(),
 	GITLAB_TOKEN: z.string().optional(),
+	JIRA_EMAIL: z.string().optional(),
+	JIRA_API_TOKEN: z.string().optional(),
 });
 
 function requireToken(env: z.infer<typeof envSchema>, name: keyof typeof env) {
@@ -45,6 +47,11 @@ export function loadEnv(config?: Pick<Config, "tracker" | "code_host">) {
 
 	if (config?.code_host.kind === "gitlab") {
 		requireToken(env, "GITLAB_TOKEN");
+	}
+
+	if (config?.tracker.kind === "jira") {
+		requireToken(env, "JIRA_EMAIL");
+		requireToken(env, "JIRA_API_TOKEN");
 	}
 
 	return env;

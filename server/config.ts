@@ -2,9 +2,20 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
 export type Config = {
-	tracker: {
-		kind: "github";
-	};
+	tracker:
+		| {
+				kind: "github";
+		  }
+		| {
+				kind: "jira";
+				base_url: string;
+				project: string;
+				statuses: {
+					pending: string;
+					running: string;
+					awaiting_review: string;
+				};
+		  };
 	code_host:
 		| {
 				kind: "github";
@@ -26,9 +37,32 @@ export type Config = {
 
 const configSchema = z
 	.object({
-		tracker: z.object({
-			kind: z.literal("github"),
-		}),
+		tracker: z.discriminatedUnion("kind", [
+			z
+				.object({
+					kind: z.literal("github"),
+				})
+				.strict(),
+			z
+				.object({
+					kind: z.literal("jira"),
+					base_url: z.string().url(),
+					project: z.string().min(1),
+					statuses: z
+						.object({
+							pending: z.string().default("To Do"),
+							running: z.string().default("In Progress"),
+							awaiting_review: z.string().default("In Review"),
+						})
+						.strict()
+						.default({
+							pending: "To Do",
+							running: "In Progress",
+							awaiting_review: "In Review",
+						}),
+				})
+				.strict(),
+		]),
 		code_host: z.discriminatedUnion("kind", [
 			z
 				.object({
@@ -64,7 +98,16 @@ const configSchema = z
 					},
 			),
 	})
-	.strict();
+	.strict()
+	.superRefine((config, ctx) => {
+		if (config.tracker.kind === "jira" && config.code_host.repos.length !== 1) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["code_host", "repos"],
+				message: "Jira tracker requires exactly one code_host.repos entry",
+			});
+		}
+	});
 
 export function loadConfig(filePath: string): Config {
 	const raw = readFileSync(filePath, "utf-8");
