@@ -10,7 +10,8 @@ function createFakeTracker(
 			throw new Error("not implemented");
 		},
 		fetchActiveIssues: async () => [],
-		swapLabel: async () => {},
+		transitionState: async () => {},
+		parseIssueKey: () => ({ repo: "owner/repo", number: 1 }),
 		...overrides,
 	};
 }
@@ -32,34 +33,61 @@ describe("decorateTracker", () => {
 		});
 	});
 
-	describe("swapLabel", () => {
+	describe("transitionState", () => {
 		it("delegates to inner tracker on success", async () => {
-			const calls: { repo: string; issueNumber: number }[] = [];
+			const calls: {
+				repo: string;
+				issueNumber: number;
+				from: string;
+				to: string;
+			}[] = [];
 
 			const decorated = decorateTracker(
 				createFakeTracker({
-					swapLabel: async (repo, issueNumber) => {
-						calls.push({ repo, issueNumber });
+					transitionState: async (repo, issueNumber, from, to) => {
+						calls.push({ repo, issueNumber, from, to });
 					},
 				}),
 			);
 
-			await decorated.swapLabel("owner/repo", 42, "old", "new");
-			expect(calls).toEqual([{ repo: "owner/repo", issueNumber: 42 }]);
+			await decorated.transitionState("owner/repo", 42, "pending", "running");
+			expect(calls).toEqual([
+				{
+					repo: "owner/repo",
+					issueNumber: 42,
+					from: "pending",
+					to: "running",
+				},
+			]);
 		});
 
-		it("re-throws when inner swapLabel fails", async () => {
+		it("re-throws when inner transitionState fails", async () => {
 			const decorated = decorateTracker(
 				createFakeTracker({
-					swapLabel: async () => {
+					transitionState: async () => {
 						throw new Error("GitHub API 500");
 					},
 				}),
 			);
 
 			await expect(
-				decorated.swapLabel("owner/repo", 1, "old", "new"),
+				decorated.transitionState("owner/repo", 1, "pending", "running"),
 			).rejects.toThrow("GitHub API 500");
+		});
+	});
+
+	describe("parseIssueKey", () => {
+		it("delegates to inner tracker", () => {
+			const decorated = decorateTracker(
+				createFakeTracker({
+					parseIssueKey: () => ({ repo: "owner/repo", number: 42 }),
+				}),
+			);
+
+			expect(decorated.parseIssueKey("owner/repo#42")).toEqual({
+				repo: "owner/repo",
+				number: 42,
+			});
 		});
 	});
 });

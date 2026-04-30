@@ -268,7 +268,24 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 3 — Tracker State Refactor
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-03-tracker-state`.
+
+**Completed changes:**
+
+- Introduced `TrackerState = "pending" | "running" | "awaiting_review"`.
+- Renamed `TrackerAdapter.swapLabel` to `transitionState` and updated orchestrator/decorator usage.
+- Moved GitHub label mapping into `server/trackers/github.ts`.
+- Replaced orchestrator-owned issue-key parsing with `tracker.parseIssueKey`.
+- Added GitHub tracker tests for logical-state label mapping and issue-key parsing.
+- Added an orchestrator dispatch test proving logical tracker states are passed to the tracker.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
 **Purpose:** Make tracker state platform-neutral before adding Jira.
 

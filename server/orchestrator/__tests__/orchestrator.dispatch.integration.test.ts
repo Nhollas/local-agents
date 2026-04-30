@@ -9,8 +9,49 @@ import {
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+import type { TrackerAdapter, TrackerState } from "../../trackers/types.ts";
 
 describe("Orchestrator dispatch", () => {
+	it("calls tracker transitions with logical states", async () => {
+		const transitions: { from: TrackerState; to: TrackerState }[] = [];
+		const issue = {
+			key: `${REPO}#1`,
+			number: 1,
+			title: "Issue 1",
+			description: "Description for issue 1",
+			labels: ["agent"],
+			url: `https://github.com/${REPO}/issues/1`,
+			createdAt: "2025-01-01T00:00:00Z",
+		};
+
+		const tracker: TrackerAdapter = {
+			fetchIssue: async () => issue,
+			fetchActiveIssues: async (_repo, state) =>
+				state === "pending" ? [issue] : [],
+			transitionState: async (_repo, _issueNumber, from, to) => {
+				transitions.push({ from, to });
+			},
+			parseIssueKey: (key) => {
+				const hashIndex = key.lastIndexOf("#");
+				return {
+					repo: key.slice(0, hashIndex),
+					number: Number.parseInt(key.slice(hashIndex + 1), 10),
+				};
+			},
+		};
+
+		await using ctx = await createTestOrchestrator({
+			runAgent: hangingAgent,
+			tracker: () => tracker,
+		});
+		const { orchestrator, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
+
+		await orchestrator.tick();
+
+		expect(transitions).toEqual([{ from: "pending", to: "running" }]);
+	});
+
 	it("dispatches agent for a pending issue, swaps label, and creates DB record", async () => {
 		const labelOps: { method: string; label: string }[] = [];
 

@@ -5,6 +5,7 @@ import { createOrchestrator } from "../../orchestrator/orchestrator.ts";
 import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import { githubTrackerAdapter } from "../../trackers/github.ts";
+import type { TrackerAdapter } from "../../trackers/types.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 import { createTestWorkflow, noopAgent, REPO } from "./fixtures.ts";
 import { createTestConfig } from "./test-config.ts";
@@ -17,6 +18,7 @@ type CreateTestOrchestratorOptions = {
 	workflows?: Map<string, RepoWorkflow>;
 	maxConcurrency?: number;
 	codeHost?: (defaults: CodeHostAdapter) => CodeHostAdapter;
+	tracker?: (defaults: TrackerAdapter) => TrackerAdapter;
 };
 
 export async function createTestOrchestrator(
@@ -32,10 +34,11 @@ export async function createTestOrchestrator(
 	});
 
 	const defaultCodeHost = githubCodeHostAdapter(github);
+	const defaultTracker = githubTrackerAdapter(github);
 
 	const orchestrator = createOrchestrator({
 		runRepo: repo,
-		tracker: githubTrackerAdapter(github),
+		tracker: options.tracker ? options.tracker(defaultTracker) : defaultTracker,
 		codeHost: options.codeHost
 			? options.codeHost(defaultCodeHost)
 			: defaultCodeHost,

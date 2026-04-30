@@ -15,20 +15,6 @@ import { ensureWorkspace, removeWorkspace } from "./workspace.ts";
 
 const exec = promisify(execFile);
 
-const LABELS = {
-	pending: "agent",
-	running: "agent:running",
-	completed: "agent:awaiting-review",
-} as const;
-
-function parseIssueKey(key: string): { repo: string; number: number } {
-	const hashIndex = key.lastIndexOf("#");
-	return {
-		repo: key.slice(0, hashIndex),
-		number: Number.parseInt(key.slice(hashIndex + 1), 10),
-	};
-}
-
 async function runShell(script: string, cwd: string): Promise<void> {
 	await exec("sh", ["-c", script], { cwd });
 }
@@ -212,11 +198,11 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 									`Closes ${issue.key}`,
 								);
 
-								await tracker.swapLabel(
+								await tracker.transitionState(
 									repo,
 									issue.number,
-									LABELS.running,
-									LABELS.completed,
+									"running",
+									"awaiting_review",
 								);
 							} catch (err) {
 								canonicalLog.append(
@@ -224,16 +210,16 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 									`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
 								);
 								await tracker
-									.swapLabel(
+									.transitionState(
 										repo,
 										issue.number,
-										LABELS.running,
-										LABELS.completed,
+										"running",
+										"awaiting_review",
 									)
 									.catch((labelErr) =>
 										canonicalLog.append(
 											"warnings",
-											`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
+											`state_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
 										),
 									);
 							}
@@ -249,11 +235,11 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 						if (result.status === "failed" && retriesExhausted) {
 							await tracker
-								.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+								.transitionState(repo, issue.number, "running", "pending")
 								.catch((err) =>
 									canonicalLog.append(
 										"warnings",
-										`label_rollback_failed: ${canonicalLog.errorMessage(err)}`,
+										`state_rollback_failed: ${canonicalLog.errorMessage(err)}`,
 									),
 								);
 						}
@@ -285,7 +271,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		const [pendingResults, runningResults] = await Promise.all([
 			Promise.allSettled(
 				entries.map(async ([repo, workflow]) => {
-					const issues = await tracker.fetchActiveIssues(repo, LABELS.pending);
+					const issues = await tracker.fetchActiveIssues(repo, "pending");
 					return issues.map(
 						(issue): TaggedIssue => ({ issue, repo, workflow }),
 					);
@@ -293,7 +279,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			),
 			Promise.allSettled(
 				entries.map(async ([repo]) => {
-					const issues = await tracker.fetchActiveIssues(repo, LABELS.running);
+					const issues = await tracker.fetchActiveIssues(repo, "running");
 					return { repo, keys: new Set(issues.map((i) => i.key)) };
 				}),
 			),
@@ -334,7 +320,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 	async function reconcileStaleRuns(state: TickState) {
 		for (const [key, runIds] of state.runningByIssue) {
-			const { repo } = parseIssueKey(key);
+			const { repo } = tracker.parseIssueKey(key);
 			const repoKeys = state.stillRunning.get(repo);
 			if (repoKeys && !repoKeys.has(key)) {
 				logger.info({ key }, "orchestrator.reconcile_terminal");
@@ -353,10 +339,10 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		for (const [repo, keys] of state.stillRunning) {
 			for (const key of keys) {
 				if (state.runningByIssue.has(key)) continue;
-				const { number } = parseIssueKey(key);
+				const { number } = tracker.parseIssueKey(key);
 				logger.info({ key }, "orchestrator.reconcile_orphan");
 				await tracker
-					.swapLabel(repo, number, LABELS.running, LABELS.pending)
+					.transitionState(repo, number, "running", "pending")
 					.catch((err) =>
 						logger.warn({ key, err }, "orchestrator.orphan_recovery_failed"),
 					);
@@ -371,19 +357,14 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			if (state.runningByIssue.has(issue.key)) continue;
 			if (runningCount >= defaults.max_concurrent) break;
 
-			await tracker.swapLabel(
-				repo,
-				issue.number,
-				LABELS.pending,
-				LABELS.running,
-			);
+			await tracker.transitionState(repo, issue.number, "pending", "running");
 
 			try {
 				await prepareAndDispatch({ issue, repo, workflow, attempt: 1 });
 			} catch (err) {
 				logger.warn({ issue: issue.key, err }, "orchestrator.dispatch_failed");
 				await tracker
-					.swapLabel(repo, issue.number, LABELS.running, LABELS.pending)
+					.transitionState(repo, issue.number, "running", "pending")
 					.catch((rollbackErr) =>
 						logger.warn(
 							{ issue: issue.key, err: rollbackErr },
@@ -430,7 +411,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			return { error: "Issue already has a running agent" };
 		}
 
-		const { repo, number: issueNumber } = parseIssueKey(failedRun.issueKey);
+		const { repo, number: issueNumber } = tracker.parseIssueKey(
+			failedRun.issueKey,
+		);
 		const workflow = workflows.get(repo);
 		if (!workflow) return { error: "No workflow for repo" };
 
