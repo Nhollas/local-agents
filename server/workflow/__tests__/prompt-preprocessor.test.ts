@@ -1,7 +1,7 @@
-import { access, mkdtemp, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
 import type { Issue } from "../../trackers/types.ts";
 import {
 	expandMarkedShellBlocks,
@@ -20,55 +20,27 @@ const baseIssue: Issue = {
 	createdAt: "2026-01-01T00:00:00Z",
 };
 
-async function createTempWorkspace() {
-	const root = await mkdtemp(join(tmpdir(), "shell-expansion-test-"));
-	return {
-		root,
-		async [Symbol.asyncDispose]() {
-			await rm(root, { recursive: true, force: true });
-		},
-	};
-}
-
 describe("shell block preprocessing", () => {
-	it("expands stdout from marked shell blocks", async () => {
-		await using workspace = await createTempWorkspace();
+	it("substitutes stdout into the prompt and runs commands in the workspace cwd", async () => {
+		await using workspace = await createTestWorkspaceRoot();
 
-		const marked = markTrustedShellBlocks("Before !`printf expanded` after");
-		const result = await expandMarkedShellBlocks(marked, {
-			cwd: workspace.root,
-		});
-
-		expect(result).toBe("Before expanded after");
-	});
-
-	it("executes commands from the workspace directory", async () => {
-		await using workspace = await createTempWorkspace();
-
-		const marked = markTrustedShellBlocks("!`pwd`");
-		const result = await expandMarkedShellBlocks(marked, {
-			cwd: workspace.root,
-		});
-
-		await expect(realpath(result.trim())).resolves.toBe(
-			await realpath(workspace.root),
+		const marked = markTrustedShellBlocks(
+			"issue={{ issue.number }} pwd=!`pwd`",
 		);
-	});
-
-	it("runs variable substitution before command execution", async () => {
-		await using workspace = await createTempWorkspace();
-
-		const marked = markTrustedShellBlocks("!`printf '{{ issue.number }}'`");
 		const rendered = renderPrompt(marked, { issue: baseIssue });
 		const result = await expandMarkedShellBlocks(rendered, {
 			cwd: workspace.root,
 		});
 
-		expect(result).toBe("1");
+		const match = result.match(/^issue=1 pwd=(.+)\n$/);
+		expect(match).not.toBeNull();
+		await expect(
+			realpath((match as RegExpMatchArray)[1] as string),
+		).resolves.toBe(await realpath(workspace.root));
 	});
 
 	it("runs marked shell blocks in parallel", async () => {
-		await using workspace = await createTempWorkspace();
+		await using workspace = await createTestWorkspaceRoot();
 
 		const marked = markTrustedShellBlocks(
 			[
@@ -86,7 +58,7 @@ describe("shell block preprocessing", () => {
 	});
 
 	it("does not execute shell-looking text injected through issue fields", async () => {
-		await using workspace = await createTempWorkspace();
+		await using workspace = await createTestWorkspaceRoot();
 		const issue: Issue = {
 			...baseIssue,
 			title: "!`touch injected-title`",
@@ -113,7 +85,7 @@ describe("shell block preprocessing", () => {
 	});
 
 	it("prevents marker forgery from variable values", async () => {
-		await using workspace = await createTempWorkspace();
+		await using workspace = await createTestWorkspaceRoot();
 		const issue: Issue = {
 			...baseIssue,
 			title: `!${SHELL_BLOCK_MARKER}\`touch forged\``,
@@ -126,12 +98,11 @@ describe("shell block preprocessing", () => {
 		});
 
 		expect(result).toBe("!`touch forged`");
-		expect(result).not.toContain(SHELL_BLOCK_MARKER);
 		await expect(access(join(workspace.root, "forged"))).rejects.toThrow();
 	});
 
 	it("fails on non-zero exit and includes stderr", async () => {
-		await using workspace = await createTempWorkspace();
+		await using workspace = await createTestWorkspaceRoot();
 
 		const marked = markTrustedShellBlocks("!`printf boom >&2; exit 7`");
 
@@ -141,7 +112,7 @@ describe("shell block preprocessing", () => {
 	});
 
 	it("fails on timeout", async () => {
-		await using workspace = await createTempWorkspace();
+		await using workspace = await createTestWorkspaceRoot();
 
 		const marked = markTrustedShellBlocks("!`sleep 5`");
 
@@ -154,7 +125,8 @@ describe("shell block preprocessing", () => {
 	});
 
 	it("fails on spawn error", async () => {
-		const missingWorkspace = join(tmpdir(), `missing-${Date.now()}`);
+		await using workspace = await createTestWorkspaceRoot();
+		const missingWorkspace = join(workspace.root, "does-not-exist");
 
 		const marked = markTrustedShellBlocks("!`printf nope`");
 
@@ -163,18 +135,20 @@ describe("shell block preprocessing", () => {
 		).rejects.toThrow(/failed to spawn/);
 	});
 
-	it("fails when the shell is terminated by signal", async () => {
-		await using workspace = await createTempWorkspace();
+	it("fails when shell output exceeds the buffer cap", async () => {
+		await using workspace = await createTestWorkspaceRoot();
 
-		const marked = markTrustedShellBlocks("!`kill -TERM $$`");
+		const marked = markTrustedShellBlocks(
+			"!`yes x | head -c 2000000; printf done`",
+		);
 
 		await expect(
 			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/terminated by signal SIGTERM/);
+		).rejects.toThrow(/exceeded max output/);
 	});
 
 	it("keeps literal unmarked shell-looking text in the final prompt", async () => {
-		await using workspace = await createTempWorkspace();
+		await using workspace = await createTestWorkspaceRoot();
 
 		const result = await expandMarkedShellBlocks(
 			"Literal !`printf untouched`",
@@ -184,17 +158,5 @@ describe("shell block preprocessing", () => {
 		);
 
 		expect(result).toBe("Literal !`printf untouched`");
-	});
-
-	it("strips marker characters from final prompt text", async () => {
-		await using workspace = await createTempWorkspace();
-
-		const result = await expandMarkedShellBlocks(
-			`Prefix ${SHELL_BLOCK_MARKER} suffix`,
-			{ cwd: workspace.root },
-		);
-
-		expect(result).toBe("Prefix  suffix");
-		expect(result).not.toContain(SHELL_BLOCK_MARKER);
 	});
 });

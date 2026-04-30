@@ -2,12 +2,10 @@ import { spawn } from "node:child_process";
 
 export const SHELL_BLOCK_MARKER = "\uE000";
 const SHELL_EXPANSION_TIMEOUT_MS = 30_000;
+const SHELL_EXPANSION_MAX_BUFFER = 1024 * 1024;
 
 const unmarkedShellBlockPattern = /!`([^`]*)`/g;
-const markedShellBlockPattern = new RegExp(
-	`!${SHELL_BLOCK_MARKER}\`([^\`]*)\``,
-	"g",
-);
+const markedShellBlockPattern = /!\uE000`([^`]*)`/g;
 
 export function stripShellBlockMarkers(value: string): string {
 	return value.replaceAll(SHELL_BLOCK_MARKER, "");
@@ -26,35 +24,21 @@ type ExpandShellBlocksOptions = {
 	timeoutMs?: number;
 };
 
-type ShellBlock = {
-	token: string;
-	command: string;
-};
-
 export async function expandMarkedShellBlocks(
 	prompt: string,
 	options: ExpandShellBlocksOptions,
 ): Promise<string> {
-	const blocks = findMarkedShellBlocks(prompt);
-	if (blocks.length === 0) return stripShellBlockMarkers(prompt);
+	const commands = [...prompt.matchAll(markedShellBlockPattern)].map(
+		(match) => match[1] as string,
+	);
+	if (commands.length === 0) return prompt;
 
 	const outputs = await Promise.all(
-		blocks.map((block) => runShellBlock(block.command, options)),
+		commands.map((command) => runShellBlock(command, options)),
 	);
 
-	let expanded = prompt;
-	for (const [index, block] of blocks.entries()) {
-		expanded = expanded.replace(block.token, outputs[index] as string);
-	}
-
-	return stripShellBlockMarkers(expanded);
-}
-
-function findMarkedShellBlocks(prompt: string): ShellBlock[] {
-	return [...prompt.matchAll(markedShellBlockPattern)].map((match) => ({
-		token: match[0],
-		command: match[1] as string,
-	}));
+	let i = 0;
+	return prompt.replace(markedShellBlockPattern, () => outputs[i++] as string);
 }
 
 async function runShellBlock(
@@ -71,10 +55,16 @@ async function runShellBlock(
 		let stderr = "";
 		let settled = false;
 
-		const timeout = setTimeout(() => {
+		function fail(error: Error) {
+			if (settled) return;
 			settled = true;
+			clearTimeout(timeout);
 			child.kill("SIGTERM");
-			reject(
+			reject(error);
+		}
+
+		const timeout = setTimeout(() => {
+			fail(
 				new Error(
 					formatShellFailure(command, `timed out after ${timeoutMs}ms`, stderr),
 				),
@@ -86,6 +76,17 @@ async function runShellBlock(
 		// biome-ignore lint/style/noNonNullAssertion: stdout is present because stdio is configured as "pipe"
 		child.stdout!.on("data", (chunk: string) => {
 			stdout += chunk;
+			if (stdout.length + stderr.length > SHELL_EXPANSION_MAX_BUFFER) {
+				fail(
+					new Error(
+						formatShellFailure(
+							command,
+							`exceeded max output of ${SHELL_EXPANSION_MAX_BUFFER} bytes`,
+							stderr,
+						),
+					),
+				);
+			}
 		});
 
 		// biome-ignore lint/style/noNonNullAssertion: stderr is present because stdio is configured as "pipe"
@@ -93,18 +94,24 @@ async function runShellBlock(
 		// biome-ignore lint/style/noNonNullAssertion: stderr is present because stdio is configured as "pipe"
 		child.stderr!.on("data", (chunk: string) => {
 			stderr += chunk;
+			if (stdout.length + stderr.length > SHELL_EXPANSION_MAX_BUFFER) {
+				fail(
+					new Error(
+						formatShellFailure(
+							command,
+							`exceeded max output of ${SHELL_EXPANSION_MAX_BUFFER} bytes`,
+							stderr,
+						),
+					),
+				);
+			}
 		});
 
 		child.on("error", (err) => {
-			/* v8 ignore next 3 -- defensive guard for child_process double events */
-			if (settled) return;
-			settled = true;
-			clearTimeout(timeout);
-			reject(formatSpawnError(command, err));
+			fail(formatSpawnError(command, err));
 		});
 
 		child.on("close", (code, signal) => {
-			/* v8 ignore next 3 -- close can follow a timeout or spawn error */
 			if (settled) return;
 			settled = true;
 			clearTimeout(timeout);
