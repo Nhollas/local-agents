@@ -30,7 +30,7 @@ describe("githubTrackerAdapter", () => {
 			const github = createGitHubClient("test-token");
 			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
 
-			const issues = await tracker.fetchActiveIssues(REPO, "agent");
+			const issues = await tracker.fetchActiveIssues(REPO, "pending");
 			expect(issues).toEqual([
 				{
 					key: `${REPO}#10`,
@@ -67,7 +67,7 @@ describe("githubTrackerAdapter", () => {
 			const github = createGitHubClient("test-token");
 			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
 
-			const issues = await tracker.fetchActiveIssues(REPO, "agent");
+			const issues = await tracker.fetchActiveIssues(REPO, "pending");
 			expect(issues).toEqual([
 				{
 					key: `${REPO}#1`,
@@ -108,7 +108,7 @@ describe("githubTrackerAdapter", () => {
 			const github = createGitHubClient("test-token");
 			const tracker = githubTrackerAdapter(github);
 
-			const issues = await tracker.fetchActiveIssues(REPO, "agent");
+			const issues = await tracker.fetchActiveIssues(REPO, "pending");
 			expect(issues).toEqual([
 				{
 					key: `${REPO}#5`,
@@ -120,6 +120,72 @@ describe("githubTrackerAdapter", () => {
 					createdAt: "2025-01-01T00:00:00Z",
 				},
 			]);
+		});
+	});
+
+	describe("transitionState", () => {
+		it("maps logical states to GitHub labels", async () => {
+			const labelOps: { method: string; label: string }[] = [];
+
+			server.use(
+				http.get(`${GITHUB_API}/user`, () =>
+					HttpResponse.json({ login: "test-user" }),
+				),
+				http.delete(
+					`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
+					({ params }) => {
+						labelOps.push({
+							method: "delete",
+							label: String(params["label"]),
+						});
+						return new HttpResponse(null, { status: 204 });
+					},
+				),
+				http.post(
+					`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+					async ({ request }) => {
+						const body = (await request.json()) as { labels: string[] };
+						labelOps.push({ method: "add", label: body.labels[0] ?? "" });
+						return HttpResponse.json([]);
+					},
+				),
+			);
+
+			const github = createGitHubClient("test-token");
+			const tracker = githubTrackerAdapter(github);
+
+			await tracker.transitionState(REPO, 42, "running", "awaiting_review");
+
+			expect(labelOps).toContainEqual({
+				method: "delete",
+				label: "agent:running",
+			});
+			expect(labelOps).toContainEqual({
+				method: "add",
+				label: "agent:awaiting-review",
+			});
+			expect(labelOps).toHaveLength(2);
+		});
+	});
+
+	describe("parseIssueKey", () => {
+		it("parses GitHub issue keys", () => {
+			const github = createGitHubClient("test-token");
+			const tracker = githubTrackerAdapter(github);
+
+			expect(tracker.parseIssueKey("owner/repo#42")).toEqual({
+				repo: "owner/repo",
+				number: 42,
+			});
+		});
+
+		it("rejects malformed GitHub issue keys", () => {
+			const github = createGitHubClient("test-token");
+			const tracker = githubTrackerAdapter(github);
+
+			expect(() => tracker.parseIssueKey("owner/repo#42abc")).toThrow(
+				"Invalid GitHub issue key",
+			);
 		});
 	});
 });

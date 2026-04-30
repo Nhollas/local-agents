@@ -16,9 +16,9 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 			}
 		},
 
-		async fetchActiveIssues(repo, label) {
+		async fetchActiveIssues(repo, state) {
 			try {
-				const issues = await inner.fetchActiveIssues(repo, label);
+				const issues = await inner.fetchActiveIssues(repo, state);
 				canonicalLog.set({
 					tracker_active_issues_count: issues.length,
 				});
@@ -29,17 +29,21 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 			}
 		},
 
-		async swapLabel(repo, issueNumber, remove, add) {
+		async transitionState(repo, issueNumber, from, to) {
 			try {
-				await inner.swapLabel(repo, issueNumber, remove, add);
-				canonicalLog.append("label_swaps", { from: remove, to: add });
+				await inner.transitionState(repo, issueNumber, from, to);
+				canonicalLog.append("state_transitions", { from, to });
 			} catch (err) {
 				canonicalLog.append(
 					"warnings",
-					`label_swap_failed: ${repo}#${issueNumber}`,
+					`state_transition_failed: ${repo}#${issueNumber}`,
 				);
 				throw err;
 			}
+		},
+
+		parseIssueKey(key) {
+			return inner.parseIssueKey(key);
 		},
 	};
 }

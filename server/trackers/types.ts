@@ -8,13 +8,16 @@ export type Issue = {
 	createdAt: string; // ISO 8601
 };
 
+export type TrackerState = "pending" | "running" | "awaiting_review";
+
 export type TrackerAdapter = {
 	fetchIssue(repo: string, issueNumber: number): Promise<Issue>;
-	fetchActiveIssues(repo: string, label: string): Promise<Issue[]>;
-	swapLabel(
+	fetchActiveIssues(repo: string, state: TrackerState): Promise<Issue[]>;
+	transitionState(
 		repo: string,
 		issueNumber: number,
-		remove: string,
-		add: string,
+		from: TrackerState,
+		to: TrackerState,
 	): Promise<void>;
+	parseIssueKey(key: string): { repo: string; number: number };
 };
