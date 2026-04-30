@@ -7,14 +7,10 @@ import { server } from "../testing/support/msw.ts";
 describe("GitHub client retry", () => {
 	it("retries on 500 and succeeds on the next attempt", async () => {
 		server.use(
-			http.get(
-				`${GITHUB_API}/user`,
-				() => new HttpResponse(null, { status: 500 }),
-				{ once: true },
-			),
-			http.get(`${GITHUB_API}/user`, () =>
-				HttpResponse.json({ login: "test-user" }),
-			),
+			http.get(`${GITHUB_API}/user`, function* () {
+				yield new HttpResponse(null, { status: 500 });
+				return HttpResponse.json({ login: "test-user" });
+			}),
 		);
 
 		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
@@ -25,14 +21,10 @@ describe("GitHub client retry", () => {
 
 	it("uses exponential backoff on 429 without Retry-After header", async () => {
 		server.use(
-			http.get(
-				`${GITHUB_API}/user`,
-				() => new HttpResponse(null, { status: 429 }),
-				{ once: true },
-			),
-			http.get(`${GITHUB_API}/user`, () =>
-				HttpResponse.json({ login: "test-user" }),
-			),
+			http.get(`${GITHUB_API}/user`, function* () {
+				yield new HttpResponse(null, { status: 429 });
+				return HttpResponse.json({ login: "test-user" });
+			}),
 		);
 
 		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
@@ -43,18 +35,13 @@ describe("GitHub client retry", () => {
 
 	it("retries on 429 and respects Retry-After header", async () => {
 		server.use(
-			http.get(
-				`${GITHUB_API}/user`,
-				() =>
-					new HttpResponse(null, {
-						status: 429,
-						headers: { "Retry-After": "0" },
-					}),
-				{ once: true },
-			),
-			http.get(`${GITHUB_API}/user`, () =>
-				HttpResponse.json({ login: "test-user" }),
-			),
+			http.get(`${GITHUB_API}/user`, function* () {
+				yield new HttpResponse(null, {
+					status: 429,
+					headers: { "Retry-After": "0" },
+				});
+				return HttpResponse.json({ login: "test-user" });
+			}),
 		);
 
 		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
@@ -83,21 +70,17 @@ describe("GitHub client retry", () => {
 
 	it("does not retry on 4xx errors", async () => {
 		server.use(
-			http.get(
-				`${GITHUB_API}/repos/${REPO}/issues/999`,
-				() => new HttpResponse("Not Found", { status: 404 }),
-				{ once: true },
-			),
-			http.get(`${GITHUB_API}/repos/${REPO}/issues/999`, () =>
-				HttpResponse.json({
+			http.get(`${GITHUB_API}/repos/${REPO}/issues/999`, function* () {
+				yield new HttpResponse("Not Found", { status: 404 });
+				return HttpResponse.json({
 					number: 999,
 					title: "should not be reached",
 					body: "",
 					labels: [],
 					html_url: "",
 					created_at: "2026-01-01T00:00:00Z",
-				}),
-			),
+				});
+			}),
 		);
 
 		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
@@ -107,12 +90,10 @@ describe("GitHub client retry", () => {
 
 	it("retries on network errors", async () => {
 		server.use(
-			http.get(`${GITHUB_API}/user`, () => HttpResponse.error(), {
-				once: true,
+			http.get(`${GITHUB_API}/user`, function* () {
+				yield HttpResponse.error();
+				return HttpResponse.json({ login: "test-user" });
 			}),
-			http.get(`${GITHUB_API}/user`, () =>
-				HttpResponse.json({ login: "test-user" }),
-			),
 		);
 
 		const client = createGitHubClient("test-token", { baseDelayMs: 1 });

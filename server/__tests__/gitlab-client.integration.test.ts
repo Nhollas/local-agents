@@ -9,14 +9,10 @@ const REPO = "group/project";
 describe("GitLab client retry", () => {
 	it("retries on 500 and succeeds on the next attempt", async () => {
 		server.use(
-			http.get(
-				`${GITLAB_API}/projects/:project/merge_requests`,
-				() => new HttpResponse(null, { status: 500 }),
-				{ once: true },
-			),
-			http.get(`${GITLAB_API}/projects/:project/merge_requests`, () =>
-				HttpResponse.json([]),
-			),
+			http.get(`${GITLAB_API}/projects/:project/merge_requests`, function* () {
+				yield new HttpResponse(null, { status: 500 });
+				return HttpResponse.json([]);
+			}),
 		);
 
 		const client = createGitLabClient("test-token", {
