@@ -125,8 +125,6 @@ describe("githubTrackerAdapter", () => {
 
 	describe("transitionState", () => {
 		it("maps logical states to GitHub labels", async () => {
-			const labelOps: { method: string; label: string }[] = [];
-
 			server.use(
 				http.get(`${GITHUB_API}/user`, () =>
 					HttpResponse.json({ login: "test-user" }),
@@ -134,18 +132,26 @@ describe("githubTrackerAdapter", () => {
 				http.delete(
 					`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 					({ params }) => {
-						labelOps.push({
-							method: "delete",
-							label: String(params["label"]),
-						});
+						if (
+							params["number"] !== "42" ||
+							params["label"] !== "agent:running"
+						) {
+							return new HttpResponse(null, { status: 400 });
+						}
 						return new HttpResponse(null, { status: 204 });
 					},
 				),
 				http.post(
 					`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
-					async ({ request }) => {
+					async ({ params, request }) => {
 						const body = (await request.json()) as { labels: string[] };
-						labelOps.push({ method: "add", label: body.labels[0] ?? "" });
+						if (
+							params["number"] !== "42" ||
+							JSON.stringify(body.labels) !==
+								JSON.stringify(["agent:awaiting-review"])
+						) {
+							return new HttpResponse(null, { status: 400 });
+						}
 						return HttpResponse.json([]);
 					},
 				),
@@ -154,17 +160,9 @@ describe("githubTrackerAdapter", () => {
 			const github = createGitHubClient("test-token");
 			const tracker = githubTrackerAdapter(github);
 
-			await tracker.transitionState(REPO, 42, "running", "awaiting_review");
-
-			expect(labelOps).toContainEqual({
-				method: "delete",
-				label: "agent:running",
-			});
-			expect(labelOps).toContainEqual({
-				method: "add",
-				label: "agent:awaiting-review",
-			});
-			expect(labelOps).toHaveLength(2);
+			await expect(
+				tracker.transitionState(REPO, 42, "running", "awaiting_review"),
+			).resolves.toBeUndefined();
 		});
 	});
 

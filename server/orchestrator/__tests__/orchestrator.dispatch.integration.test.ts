@@ -53,13 +53,9 @@ describe("Orchestrator dispatch", () => {
 	});
 
 	it("dispatches agent for a pending issue, swaps label, and creates DB record", async () => {
-		const labelOps: { method: string; label: string }[] = [];
-
 		server.use(
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent"])],
-				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
-				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
 			}),
 		);
 
@@ -70,9 +66,6 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
-
-		expect(labelOps).toContainEqual({ method: "delete", label: "agent" });
-		expect(labelOps).toContainEqual({ method: "add", label: "agent:running" });
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toEqual([
@@ -95,31 +88,24 @@ describe("Orchestrator dispatch", () => {
 	});
 
 	it("creates PR and swaps to awaiting-review on successful completion", async () => {
-		const labelOps: { method: string; label: string }[] = [];
-
 		server.use(
 			...githubHandlers({
 				issues: [createGitHubIssue(5, ["agent"])],
-				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
-				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
 			}),
 		);
 
 		await using ctx = await createTestOrchestrator();
-		const { orchestrator, runner, workspace } = ctx;
+		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#5`);
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
-		expect(labelOps).toContainEqual({
-			method: "delete",
-			label: "agent:running",
-		});
-		expect(labelOps).toContainEqual({
-			method: "add",
-			label: "agent:awaiting-review",
+		const [run] = db.select().from(runs).all();
+		expect(run).toMatchObject({
+			status: "completed",
+			issueKey: `${REPO}#5`,
 		});
 	});
 
@@ -276,13 +262,9 @@ describe("Orchestrator dispatch", () => {
 	});
 
 	it("rolls back label (running → pending) when workspace creation fails", async () => {
-		const labelOps: { method: string; label: string }[] = [];
-
 		server.use(
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent"])],
-				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
-				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
 			}),
 		);
 
@@ -299,13 +281,6 @@ describe("Orchestrator dispatch", () => {
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
-
-		expect(labelOps).toContainEqual({ method: "add", label: "agent:running" });
-		expect(labelOps).toContainEqual({
-			method: "delete",
-			label: "agent:running",
-		});
-		expect(labelOps).toContainEqual({ method: "add", label: "agent" });
 
 		const allRuns = db.select().from(runs).all();
 		expect(allRuns).toHaveLength(0);

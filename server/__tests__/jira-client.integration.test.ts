@@ -10,11 +10,17 @@ import { server } from "../testing/support/msw.ts";
 
 describe("Jira client", () => {
 	it("defaults search maxResults to 100", async () => {
-		let capturedBody: unknown;
-
 		server.use(
 			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
-				capturedBody = await request.json();
+				const body = (await request.json()) as Record<string, unknown>;
+				if (
+					body["jql"] !== 'project = "PROJ"' ||
+					body["maxResults"] !== 100 ||
+					JSON.stringify(body["fields"]) !==
+						JSON.stringify(["summary", "description", "status", "created"])
+				) {
+					return new HttpResponse(null, { status: 400 });
+				}
 				return HttpResponse.json({
 					issues: [createJiraIssue("PROJ-1", "To Do")],
 				});
@@ -30,11 +36,6 @@ describe("Jira client", () => {
 
 		const issues = await client.searchIssues({ jql: 'project = "PROJ"' });
 
-		expect(capturedBody).toMatchObject({
-			jql: 'project = "PROJ"',
-			maxResults: 100,
-			fields: ["summary", "description", "status", "created"],
-		});
 		expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 	});
 });

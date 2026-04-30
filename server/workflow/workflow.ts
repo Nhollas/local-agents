@@ -11,8 +11,8 @@ const workflowPhaseSchema = z.object({
 
 const repoWorkflowSchema = z
 	.object({
-		branch: z.string().default("agent/issue-{{ issue.number }}"),
-		base_branch: z.string().default("main"),
+		branch: z.string().min(1),
+		base_branch: z.string().min(1),
 		hooks: z
 			.object({
 				after_create: z.string().optional(),

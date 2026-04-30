@@ -105,19 +105,42 @@ describe("Orchestrator dispatch hooks and completion", () => {
 	});
 
 	it("transitions label to awaiting-review even when PR creation fails", async () => {
-		const labelOps: { method: string; label: string }[] = [];
-
-		server.use(
-			...githubHandlers({
-				issues: [createGitHubIssue(1, ["agent"])],
-				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
-				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
-			}),
+		// Strict one-shot label POST handlers in dispatch order:
+		// 1. initialPost: body must be agent:running (initial swap)
+		// 2. finalPost:   body must be agent:awaiting-review (post-success swap)
+		// Each is consumed by its turn; we assert finalPost.isUsed to confirm
+		// the post-success swap happened despite PR creation failing.
+		const initialPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:running") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
 		);
-		// PR 500 handler registered AFTER githubHandlers so MSW checks it FIRST (LIFO)
+		const finalPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:awaiting-review") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
+
 		server.use(
 			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, () => {
 				return new HttpResponse(null, { status: 500 });
+			}),
+			initialPost,
+			finalPost,
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent"])],
 			}),
 		);
 
@@ -148,21 +171,38 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			},
 		]);
 
-		// PR creation failed, but label should still transition to awaiting-review
-		expect(labelOps).toContainEqual({
-			method: "add",
-			label: "agent:awaiting-review",
-		});
+		expect(finalPost.isUsed).toBe(true);
 	});
 
 	it("after_run hook failure does not prevent completion", async () => {
-		const labelOps: { method: string; label: string }[] = [];
+		const initialPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:running") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
+		const finalPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:awaiting-review") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
 
 		server.use(
+			initialPost,
+			finalPost,
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent"])],
-				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
-				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
 			}),
 		);
 
@@ -197,10 +237,7 @@ describe("Orchestrator dispatch hooks and completion", () => {
 			},
 		]);
 
-		expect(labelOps).toContainEqual({
-			method: "add",
-			label: "agent:awaiting-review",
-		});
+		expect(finalPost.isUsed).toBe(true);
 	});
 
 	it("does not crash when both PR creation and label recovery fail", async () => {

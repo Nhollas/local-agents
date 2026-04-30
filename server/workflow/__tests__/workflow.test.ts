@@ -52,8 +52,12 @@ describe("renderPrompt", () => {
 });
 
 describe("parseRepoWorkflow", () => {
-	it("accepts a single-prompt workflow and applies defaults", () => {
-		const yaml = "prompt: Fix this issue\n";
+	it("accepts a single-prompt workflow", () => {
+		const yaml = `
+branch: "agent/issue-{{ issue.number }}"
+base_branch: main
+prompt: Fix this issue
+`;
 
 		const result = parseRepoWorkflow(yaml);
 
@@ -67,6 +71,8 @@ describe("parseRepoWorkflow", () => {
 
 	it("accepts a phased workflow", () => {
 		const yaml = `
+branch: "agent/issue-{{ issue.number }}"
+base_branch: main
 phases:
   - name: plan
     prompt: Write a plan
@@ -88,27 +94,35 @@ phases:
 		]);
 	});
 
-	it("rejects missing prompt", () => {
-		const yaml = "branch: my-branch\n";
+	it("rejects workflows missing branch", () => {
+		const yaml = "base_branch: main\nprompt: Fix it\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
-	it("rejects workflows with both prompt and phases", () => {
-		const yaml = `
-prompt: Fix this issue
-phases:
-  - name: plan
-    prompt: Write a plan
-`;
+	it("rejects workflows missing base_branch", () => {
+		const yaml = "branch: agent/x\nprompt: Fix it\n";
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects missing prompt", () => {
+		const yaml = "branch: my-branch\nbase_branch: main\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow(
 			/Workflow must define exactly one of prompt or phases/,
 		);
 	});
 
-	it("rejects workflows with neither prompt nor phases", () => {
-		const yaml = "branch: my-branch\n";
+	it("rejects workflows with both prompt and phases", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+prompt: Fix this issue
+phases:
+  - name: plan
+    prompt: Write a plan
+`;
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow(
 			/Workflow must define exactly one of prompt or phases/,

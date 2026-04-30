@@ -17,7 +17,7 @@ function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
 }
 
 const envSchema = z.object({
-	CONFIG_PATH: z.string().default("./config.yaml"),
+	CONFIG_PATH: z.string().min(1),
 	PORT: z.coerce.number().default(3000),
 	LOG_LEVEL: z.string().default("info"),
 	GITHUB_TOKEN: z.string().optional(),
