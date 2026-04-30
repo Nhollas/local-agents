@@ -120,15 +120,19 @@ describe("jiraTrackerAdapter", () => {
 	describe("fetchActiveIssues", () => {
 		it("builds safe JQL for the configured project and logical status", async () => {
 			let capturedJql = "";
+			let capturedMaxResults: unknown;
+			let capturedFields: unknown;
 
 			server.use(
-				http.get(`${JIRA_API}/search`, ({ request }) => {
-					const url = new URL(request.url);
-					capturedJql = url.searchParams.get("jql") ?? "";
-					expect(url.searchParams.get("maxResults")).toBe("100");
-					expect(url.searchParams.get("fields")).toBe(
-						"summary,description,status,created",
-					);
+				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+					const body = (await request.json()) as {
+						jql?: string;
+						maxResults?: unknown;
+						fields?: unknown;
+					};
+					capturedJql = body.jql ?? "";
+					capturedMaxResults = body.maxResults;
+					capturedFields = body.fields;
 					return HttpResponse.json({
 						issues: [createJiraIssue("PROJ-1", "To Do")],
 					});
@@ -141,6 +145,13 @@ describe("jiraTrackerAdapter", () => {
 			expect(capturedJql).toBe(
 				'project = "PROJ" AND status = "To Do" ORDER BY created ASC',
 			);
+			expect(capturedMaxResults).toBe(100);
+			expect(capturedFields).toEqual([
+				"summary",
+				"description",
+				"status",
+				"created",
+			]);
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 		});
 
@@ -148,8 +159,9 @@ describe("jiraTrackerAdapter", () => {
 			let capturedJql = "";
 
 			server.use(
-				http.get(`${JIRA_API}/search`, ({ request }) => {
-					capturedJql = new URL(request.url).searchParams.get("jql") ?? "";
+				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+					const body = (await request.json()) as { jql?: string };
+					capturedJql = body.jql ?? "";
 					return HttpResponse.json({ issues: [] });
 				}),
 			);

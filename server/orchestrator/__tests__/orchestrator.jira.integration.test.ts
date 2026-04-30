@@ -24,8 +24,9 @@ describe("Orchestrator Jira dispatch", () => {
 		const transitionTargets: string[] = [];
 
 		server.use(
-			http.get(`${JIRA_API}/search`, ({ request }) => {
-				const jql = new URL(request.url).searchParams.get("jql") ?? "";
+			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+				const body = (await request.json()) as { jql?: string };
+				const jql = body.jql ?? "";
 				if (jql.includes('status = "To Do"')) {
 					return HttpResponse.json({
 						issues: [createJiraIssue("PROJ-42", "To Do")],

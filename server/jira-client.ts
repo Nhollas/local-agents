@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
 
+const ISSUE_FIELDS = ["summary", "description", "status", "created"] as const;
+const DEFAULT_SEARCH_MAX_RESULTS = 100;
+
 const jiraIssueSchema = z.object({
 	key: z.string(),
 	fields: z.object({
@@ -78,7 +81,7 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 	return {
 		getIssue(key: string) {
 			const query = new URLSearchParams({
-				fields: "summary,description,status,created",
+				fields: ISSUE_FIELDS.join(","),
 			});
 			return request(`/issue/${encodeIssueKey(key)}?${query}`, {
 				schema: jiraIssueSchema,
@@ -86,12 +89,13 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 		},
 
 		async searchIssues(params: { jql: string; maxResults?: number }) {
-			const query = new URLSearchParams({
-				jql: params.jql,
-				maxResults: String(params.maxResults ?? 100),
-				fields: "summary,description,status,created",
-			});
-			const result = await request(`/search?${query}`, {
+			const result = await request("/search/jql", {
+				method: "POST",
+				body: {
+					jql: params.jql,
+					maxResults: params.maxResults ?? DEFAULT_SEARCH_MAX_RESULTS,
+					fields: [...ISSUE_FIELDS],
+				},
 				schema: jiraSearchSchema,
 			});
 			return result.issues;

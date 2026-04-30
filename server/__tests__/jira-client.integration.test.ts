@@ -10,12 +10,11 @@ import { server } from "../testing/support/msw.ts";
 
 describe("Jira client", () => {
 	it("defaults search maxResults to 100", async () => {
-		let capturedMaxResults = "";
+		let capturedBody: unknown;
 
 		server.use(
-			http.get(`${JIRA_API}/search`, ({ request }) => {
-				capturedMaxResults =
-					new URL(request.url).searchParams.get("maxResults") ?? "";
+			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+				capturedBody = await request.json();
 				return HttpResponse.json({
 					issues: [createJiraIssue("PROJ-1", "To Do")],
 				});
@@ -31,7 +30,11 @@ describe("Jira client", () => {
 
 		const issues = await client.searchIssues({ jql: 'project = "PROJ"' });
 
-		expect(capturedMaxResults).toBe("100");
+		expect(capturedBody).toMatchObject({
+			jql: 'project = "PROJ"',
+			maxResults: 100,
+			fields: ["summary", "description", "status", "created"],
+		});
 		expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 	});
 });
