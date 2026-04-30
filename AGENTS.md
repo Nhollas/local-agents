@@ -1,7 +1,3 @@
-# Local Agents
-
-Local autonomous agents powered by Claude Agent SDK — a polling orchestrator that dispatches Claude Code agents to work on GitHub issues and PRs.
-
 ## Commands
 
 ```bash
@@ -15,16 +11,16 @@ pnpm test                 # vitest across all projects
 
 ## Structure
 
-| Directory      | Purpose                                                          |
-| -------------- | ---------------------------------------------------------------- |
-| `server/`      | Orchestrator, queue, runner, code-host adapters, workflow engine |
-| `dashboard/`   | React + Vite dashboard UI with Tailwind                          |
-| `docs/`        | Architecture and pattern documentation                           |
+| Directory    | Purpose                                                          |
+| ------------ | ---------------------------------------------------------------- |
+| `server/`    | Orchestrator, queue, runner, code-host adapters, workflow engine |
+| `dashboard/` | React + Vite dashboard UI with Tailwind                          |
+| `docs/`      | Architecture, patterns, and coding standards                     |
 
 ## Before writing code
 
 - Read existing code in the area you're changing. Follow the patterns already there.
-- Read existing tests before writing new ones. The test helpers ARE the conventions.
+- Read `docs/coding-standards.md`.
 
 ## Before considering work complete
 
