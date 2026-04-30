@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { repoSlug } from "../../types/brands.ts";
 import { createWorkflowMap, loadWorkflow } from "../workflow-loader.ts";
 
 const validWorkflowYaml = `
@@ -59,7 +60,7 @@ describe("createWorkflowMap", () => {
 		const workflow = loadWorkflow(workflowFile.path);
 
 		const workflows = createWorkflowMap(
-			["test-owner/first-repo", "test-owner/second-repo"],
+			[repoSlug("test-owner/first-repo"), repoSlug("test-owner/second-repo")],
 			workflow,
 		);
 

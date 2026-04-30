@@ -78,7 +78,26 @@ Slice 6 is cleanup and can run in parallel with anything once 1–5 are done.
 
 ## Slice 2 — Brand the Rippling Primitives
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `refactor/typesafe-slice-2-brand-primitives`.
+
+**Completed changes:**
+
+- Added concrete brands and unchecked constructors to `server/types/brands.ts`: `RepoSlug`, `IssueKey`, `IssueNumber`, `BranchName`, `RunId`, `GitHubToken`, `GitLabToken`, `JiraApiToken`, `JiraEmail`.
+- Construction at boundaries: `config.ts` brands repo slugs via Zod `.transform`; `env.ts` brands tokens/email after Zod validation; `api/api.ts` brands run id via Zod `.transform`; tracker adapters brand `Issue.key` and parsed `repo`/`number`.
+- Updated signatures across `code-hosts/`, `trackers/`, `orchestrator/`, `runner/`, `api/`, `db/`, `event-bus.ts`, `workflow/workflow-loader.ts` to use brands. `tsc` drove the diff.
+- Tracker `parseIssueKey` now returns `Result<{ repo: RepoSlug; number: IssueNumber }, ParseIssueKeyError>` rather than throwing; orchestrator unwraps at call sites because input there comes from internal DB state.
+- Test helpers (`test-db.ts`, `test-orchestrator.ts`, `test-config.ts`, `fixtures.ts`) brand internally so tests still pass loose strings to `seedRun`/`seedEvent`. Tests that call production APIs directly (`runner.enqueue`, `orchestrator.retryRun`, `runner.kill`, HTTP clients, code-host adapters, tracker adapters) brand at the call site.
+- Tracker `parseIssueKey` tests rewritten to assert `Result` shape rather than throws.
+- `mapJiraIssue` defensive null-check covered with a `/* v8 ignore */` pragma — it can only fire if Jira returns keys outside its own search filter, which the schema parses anyway.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:coverage` — 100% across all `server/` files.
 
 **Purpose:** Replace primitive-typed parameters across `server/` with branded types, so the compiler enforces what is currently developer-remembered.
 
@@ -87,7 +106,7 @@ Slice 6 is cleanup and can run in parallel with anything once 1–5 are done.
 - Brand: `RepoSlug`, `IssueKey`, `BranchName`, `GitHubToken`, `GitLabToken`, `JiraApiToken`, `JiraEmail`, `RunId`, `IssueNumber`.
 - Construct at boundaries: `config.ts` (tokens, repo slugs), `env.ts` (tokens, email), API request parsers (issue keys, run ids), tracker `parseIssueKey` returns `IssueKey`.
 - Update signatures across `code-hosts/`, `trackers/`, `orchestrator/`, `runner/`, `api/`, `db/` to use brands. Let `tsc` drive the diff.
-- Tracker `parseIssueKey` returns `Result<IssueKey, ParseError>` rather than throwing; this is the only behavior change permitted in this slice and is required because we need a brand-returning parser.
+- Tracker `parseIssueKey` returns `Result<{ repo: RepoSlug; number: IssueNumber }, ParseIssueKeyError>` rather than throwing; this is the only behavior change permitted in this slice and is required because we need a brand-returning parser.
 
 **Natural code areas:**
 

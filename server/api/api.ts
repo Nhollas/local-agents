@@ -5,6 +5,7 @@ import { z } from "zod";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
+import { runId as brandRunId, type RunId } from "../types/brands.ts";
 import { canonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
@@ -20,12 +21,12 @@ const runsQuerySchema = z.object({
 });
 
 const runParamSchema = z.object({
-	id: z.string().min(1),
+	id: z.string().min(1).transform(brandRunId),
 });
 
 export type RetryFn = (
-	failedRunId: string,
-) => Promise<{ runId: string } | { error: string }>;
+	failedRunId: RunId,
+) => Promise<{ runId: RunId } | { error: string }>;
 
 type HealthCheckResult = {
 	status: "healthy" | "unhealthy";

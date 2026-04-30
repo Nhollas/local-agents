@@ -9,9 +9,10 @@ import type {
 	RunStartedData,
 	RunToolUseData,
 } from "./db/schema.ts";
+import type { RunId } from "./types/brands.ts";
 
 type RunEventBase = {
-	runId: string;
+	runId: RunId;
 	agentName: string;
 	createdAt: string;
 };

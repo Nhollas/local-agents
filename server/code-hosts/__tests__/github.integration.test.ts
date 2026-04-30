@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createGitHubClient } from "../../github-client.ts";
 import { GITHUB_API, REPO } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
+import { branchName, githubToken } from "../../types/brands.ts";
 import { githubCodeHostAdapter } from "../github.ts";
 
-const adapter = githubCodeHostAdapter(createGitHubClient("test-token"));
+const adapter = githubCodeHostAdapter(
+	createGitHubClient(githubToken("test-token")),
+);
 
 describe("fetchFile", () => {
 	it("fetches file content from the default branch", async () => {
@@ -72,8 +75,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			"agent/issue-1",
-			"main",
+			branchName("agent/issue-1"),
+			branchName("main"),
 			"Fix issue 1",
 			"Closes #1",
 		);
@@ -101,8 +104,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			"agent/issue-1",
-			"main",
+			branchName("agent/issue-1"),
+			branchName("main"),
 			"Fix issue 1",
 			"Closes #1",
 		);

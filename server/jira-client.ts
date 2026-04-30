@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
+import type { JiraApiToken, JiraEmail } from "./types/brands.ts";
 
 const ISSUE_FIELDS = ["summary", "description", "status", "created"] as const;
 const DEFAULT_SEARCH_MAX_RESULTS = 100;
@@ -50,8 +51,8 @@ export type JiraClient = {
 
 type JiraClientOptions = HttpClientOptions & {
 	baseUrl: string;
-	email: string;
-	apiToken: string;
+	email: JiraEmail;
+	apiToken: JiraApiToken;
 };
 
 function trimTrailingSlash(value: string): string {
@@ -62,7 +63,7 @@ function encodeIssueKey(key: string): string {
 	return encodeURIComponent(key);
 }
 
-function basicAuth(email: string, apiToken: string): string {
+function basicAuth(email: JiraEmail, apiToken: JiraApiToken): string {
 	return Buffer.from(`${email}:${apiToken}`, "utf8").toString("base64");
 }
 

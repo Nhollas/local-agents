@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../../testing/support/test-api.ts";
+import { issueKey } from "../../types/brands.ts";
 import type { HealthCheck } from "../api.ts";
 
 describe("GET /health", () => {
@@ -60,7 +61,7 @@ describe("GET /events", () => {
 
 			runner.enqueue({
 				name: "sse-agent",
-				issueKey: "test/repo#42",
+				issueKey: issueKey("test/repo#42"),
 				issueTitle: "SSE test issue",
 				handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 			});

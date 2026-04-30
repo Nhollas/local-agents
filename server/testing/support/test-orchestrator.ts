@@ -6,6 +6,7 @@ import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
 import { githubTrackerAdapter } from "../../trackers/github.ts";
 import type { TrackerAdapter } from "../../trackers/types.ts";
+import { githubToken, type RepoSlug } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 import { createTestWorkflow, noopAgent, REPO } from "./fixtures.ts";
 import { createTestConfig } from "./test-config.ts";
@@ -15,7 +16,7 @@ import { createTestWorkspaceRoot } from "./test-workspace.ts";
 type CreateTestOrchestratorOptions = {
 	runAgent?: Parameters<typeof createOrchestrator>[0]["runAgent"];
 	configOverrides?: Parameters<typeof createTestConfig>[0];
-	workflows?: Map<string, RepoWorkflow>;
+	workflows?: Map<RepoSlug, RepoWorkflow>;
 	maxConcurrency?: number;
 	codeHost?: (defaults: CodeHostAdapter) => CodeHostAdapter;
 	tracker?: (defaults: TrackerAdapter) => TrackerAdapter;
@@ -27,7 +28,9 @@ export async function createTestOrchestrator(
 	const workspace = await createTestWorkspaceRoot();
 	const db = createTestDb();
 	const repo = createRunRepository(db);
-	const github = createGitHubClient("test-token", { maxAttempts: 1 });
+	const github = createGitHubClient(githubToken("test-token"), {
+		maxAttempts: 1,
+	});
 	const runner = createRunner({
 		repo,
 		maxConcurrency: options.maxConcurrency ?? 2,
@@ -48,7 +51,7 @@ export async function createTestOrchestrator(
 		}),
 		workflows:
 			options.workflows ??
-			new Map<string, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+			new Map<RepoSlug, RepoWorkflow>([[REPO, createTestWorkflow()]]),
 		runner,
 		runAgent: options.runAgent ?? noopAgent,
 	});

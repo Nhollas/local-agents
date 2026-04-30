@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
+import type { BranchName, GitLabToken, RepoSlug } from "./types/brands.ts";
 
 const DEFAULT_BASE_URL = "https://gitlab.com";
 
@@ -14,19 +15,23 @@ const gitlabMergeRequestSchema = z.object({
 
 export type GitLabClient = {
 	getFileContent(
-		projectPath: string,
+		projectPath: RepoSlug,
 		filePath: string,
 		ref?: string,
 	): Promise<{ content: string }>;
 	listMergeRequests(
-		projectPath: string,
-		params: { source_branch: string; target_branch: string; state: string },
+		projectPath: RepoSlug,
+		params: {
+			source_branch: BranchName;
+			target_branch: BranchName;
+			state: string;
+		},
 	): Promise<{ iid: number; web_url: string }[]>;
 	createMergeRequest(
-		projectPath: string,
+		projectPath: RepoSlug,
 		params: {
-			source_branch: string;
-			target_branch: string;
+			source_branch: BranchName;
+			target_branch: BranchName;
 			title: string;
 			description: string;
 		},
@@ -41,7 +46,7 @@ function trimTrailingSlash(value: string): string {
 	return value.replace(/\/+$/, "");
 }
 
-function encodeProjectPath(projectPath: string): string {
+function encodeProjectPath(projectPath: RepoSlug): string {
 	return encodeURIComponent(projectPath);
 }
 
@@ -50,7 +55,7 @@ function encodeFilePath(filePath: string): string {
 }
 
 export function createGitLabClient(
-	token: string,
+	token: GitLabToken,
 	options: GitLabClientOptions = {},
 ): GitLabClient {
 	const baseUrl = trimTrailingSlash(options.baseUrl ?? DEFAULT_BASE_URL);
@@ -64,7 +69,7 @@ export function createGitLabClient(
 	});
 
 	return {
-		getFileContent(projectPath: string, filePath: string, ref = "HEAD") {
+		getFileContent(projectPath, filePath, ref = "HEAD") {
 			const query = new URLSearchParams({ ref });
 			return request(
 				`/projects/${encodeProjectPath(projectPath)}/repository/files/${encodeFilePath(filePath)}?${query}`,
@@ -72,10 +77,7 @@ export function createGitLabClient(
 			);
 		},
 
-		listMergeRequests(
-			projectPath: string,
-			params: { source_branch: string; target_branch: string; state: string },
-		) {
+		listMergeRequests(projectPath, params) {
 			const query = new URLSearchParams(params);
 			return request(
 				`/projects/${encodeProjectPath(projectPath)}/merge_requests?${query}`,
@@ -83,15 +85,7 @@ export function createGitLabClient(
 			);
 		},
 
-		createMergeRequest(
-			projectPath: string,
-			params: {
-				source_branch: string;
-				target_branch: string;
-				title: string;
-				description: string;
-			},
-		) {
+		createMergeRequest(projectPath, params) {
 			return request(
 				`/projects/${encodeProjectPath(projectPath)}/merge_requests`,
 				{

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { RepoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "./workflow.ts";
 import { parseRepoWorkflow } from "./workflow.ts";
 
@@ -10,8 +11,8 @@ export function loadWorkflow(path = WORKFLOW_PATH): RepoWorkflow {
 }
 
 export function createWorkflowMap(
-	repos: string[],
+	repos: RepoSlug[],
 	workflow: RepoWorkflow,
-): Map<string, RepoWorkflow> {
+): Map<RepoSlug, RepoWorkflow> {
 	return new Map(repos.map((repo) => [repo, workflow]));
 }

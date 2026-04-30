@@ -1,15 +1,17 @@
+import type { BranchName, RepoSlug } from "../types/brands.ts";
+
 export type ChangeRequest = {
 	number: number;
 	url: string;
 };
 
 export type CodeHostAdapter = {
-	fetchFile(repo: string, path: string, ref?: string): Promise<string | null>;
-	cloneUrl(repo: string): string;
+	fetchFile(repo: RepoSlug, path: string, ref?: string): Promise<string | null>;
+	cloneUrl(repo: RepoSlug): string;
 	createChangeRequest(
-		repo: string,
-		head: string,
-		base: string,
+		repo: RepoSlug,
+		head: BranchName,
+		base: BranchName,
 		title: string,
 		body: string,
 	): Promise<ChangeRequest>;

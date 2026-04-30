@@ -5,20 +5,21 @@ import {
 	sqliteTable,
 	text,
 } from "drizzle-orm/sqlite-core";
+import type { IssueKey, RunId } from "../types/brands.ts";
 
 export const runs = sqliteTable("runs", {
-	id: text("id").primaryKey(),
+	id: text("id").primaryKey().$type<RunId>(),
 	agentName: text("agent_name").notNull(),
 	status: text("status").notNull().$type<RunStatus>(),
 	error: text("error"),
-	issueKey: text("issue_key"),
+	issueKey: text("issue_key").$type<IssueKey>(),
 	issueTitle: text("issue_title"),
 	startedAt: text("started_at").notNull(),
 	completedAt: text("completed_at"),
 	durationMs: real("duration_ms"),
 	sessionId: text("session_id"),
 	attempt: integer("attempt").notNull().default(1),
-	parentRunId: text("parent_run_id"),
+	parentRunId: text("parent_run_id").$type<RunId>(),
 	phaseIndex: integer("phase_index").notNull().default(0),
 });
 
@@ -26,7 +27,7 @@ export const runEvents = sqliteTable(
 	"run_events",
 	{
 		id: text("id").primaryKey(),
-		runId: text("run_id").notNull(),
+		runId: text("run_id").notNull().$type<RunId>(),
 		type: text("type").notNull().$type<RunEventType>(),
 		data: text("data", { mode: "json" })
 			.notNull()
@@ -48,7 +49,7 @@ export type RunEventType =
 	| "run:completed"
 	| "run:failed";
 
-export type RunStartedData = { issueKey: string; issueTitle: string };
+export type RunStartedData = { issueKey: IssueKey; issueTitle: string };
 export type RunOutputData = Record<string, unknown>;
 export type RunToolUseData = { tool: string; target: string };
 export type PhaseStartedData = { name: string; index: number; total: number };

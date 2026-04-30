@@ -13,11 +13,7 @@ export function gitlabCodeHostAdapter(
 	const cloneBaseUrl = trimTrailingSlash(baseUrl);
 
 	return decorateCodeHost({
-		async fetchFile(
-			repo: string,
-			path: string,
-			ref?: string,
-		): Promise<string | null> {
+		async fetchFile(repo, path, ref): Promise<string | null> {
 			try {
 				const content = await client.getFileContent(repo, path, ref);
 				return Buffer.from(content.content, "base64").toString("utf-8");
@@ -26,16 +22,16 @@ export function gitlabCodeHostAdapter(
 			}
 		},
 
-		cloneUrl(repo: string): string {
+		cloneUrl(repo): string {
 			return `${cloneBaseUrl}/${repo}.git`;
 		},
 
 		async createChangeRequest(
-			repo: string,
-			head: string,
-			base: string,
-			title: string,
-			body: string,
+			repo,
+			head,
+			base,
+			title,
+			body,
 		): Promise<ChangeRequest> {
 			const [existing] = await client.listMergeRequests(repo, {
 				source_branch: head,

@@ -7,6 +7,7 @@ import {
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+import { runId as rid } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 const failedRunDefaults = {
@@ -45,7 +46,7 @@ describe("Orchestrator retry prompt fidelity", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 		seedRun(db, { ...failedRunDefaults, id: "failed-prompt" });
 
-		await orchestrator.retryRun("failed-prompt");
+		await orchestrator.retryRun(rid("failed-prompt"));
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
@@ -79,7 +80,7 @@ describe("Orchestrator retry prompt fidelity", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 		seedRun(db, { ...failedRunDefaults, id: "failed-meta" });
 
-		await orchestrator.retryRun("failed-meta");
+		await orchestrator.retryRun(rid("failed-meta"));
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 

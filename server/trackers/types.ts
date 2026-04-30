@@ -1,23 +1,34 @@
+import type { IssueKey, IssueNumber, RepoSlug } from "../types/brands.ts";
+import type { Result } from "../types/result.ts";
+
 export type Issue = {
-	key: string; // "nhollas/target-dummy#42"
-	number: number;
+	key: IssueKey;
+	number: IssueNumber;
 	title: string;
 	description: string;
 	labels: string[];
 	url: string;
-	createdAt: string; // ISO 8601
+	createdAt: string;
 };
 
 export type TrackerState = "pending" | "running" | "awaiting_review";
 
+export type ParseIssueKeyError = {
+	kind: "invalid_format";
+	input: string;
+	message: string;
+};
+
 export type TrackerAdapter = {
-	fetchIssue(repo: string, issueNumber: number): Promise<Issue>;
-	fetchActiveIssues(repo: string, state: TrackerState): Promise<Issue[]>;
+	fetchIssue(repo: RepoSlug, issueNumber: IssueNumber): Promise<Issue>;
+	fetchActiveIssues(repo: RepoSlug, state: TrackerState): Promise<Issue[]>;
 	transitionState(
-		repo: string,
-		issueNumber: number,
+		repo: RepoSlug,
+		issueNumber: IssueNumber,
 		from: TrackerState,
 		to: TrackerState,
 	): Promise<void>;
-	parseIssueKey(key: string): { repo: string; number: number };
+	parseIssueKey(
+		key: string,
+	): Result<{ repo: RepoSlug; number: IssueNumber }, ParseIssueKeyError>;
 };

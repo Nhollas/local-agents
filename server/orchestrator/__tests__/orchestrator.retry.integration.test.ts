@@ -8,6 +8,7 @@ import {
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+import { type RepoSlug, runId as rid } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 const failedRunDefaults = {
@@ -34,7 +35,7 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 		seedRun(db, { ...failedRunDefaults, id: "failed-1" });
 
-		const result = await orchestrator.retryRun("failed-1");
+		const result = await orchestrator.retryRun(rid("failed-1"));
 		expect(result).toEqual({ runId: expect.any(String) });
 
 		await runner.queue.waitForIdle();
@@ -79,7 +80,7 @@ describe("Orchestrator retryRun", () => {
 			sessionId: "sess-resume-me",
 		});
 
-		await orchestrator.retryRun("failed-2");
+		await orchestrator.retryRun(rid("failed-2"));
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
@@ -98,7 +99,7 @@ describe("Orchestrator retryRun", () => {
 		await using ctx = await createTestOrchestrator();
 		const { orchestrator } = ctx;
 
-		const result = await orchestrator.retryRun("nonexistent-id");
+		const result = await orchestrator.retryRun(rid("nonexistent-id"));
 		expect(result).toEqual({ error: "Run not found" });
 	});
 
@@ -118,7 +119,7 @@ describe("Orchestrator retryRun", () => {
 			issueTitle: null,
 		});
 
-		const result = await orchestrator.retryRun("no-title");
+		const result = await orchestrator.retryRun(rid("no-title"));
 		expect(result).toEqual({ runId: expect.any(String) });
 
 		await runner.queue.waitForIdle();
@@ -155,7 +156,7 @@ describe("Orchestrator retryRun", () => {
 			error: undefined,
 		});
 
-		const result = await orchestrator.retryRun("completed-1");
+		const result = await orchestrator.retryRun(rid("completed-1"));
 		expect(result).toEqual({ error: "Run is not failed" });
 	});
 
@@ -175,7 +176,7 @@ describe("Orchestrator retryRun", () => {
 		await workspace.preCreateWorkspace(`${REPO}#1`);
 		seedRun(db, { ...failedRunDefaults, id: "no-sess", sessionId: null });
 
-		const result = await orchestrator.retryRun("no-sess");
+		const result = await orchestrator.retryRun(rid("no-sess"));
 		expect(result).toEqual({ runId: expect.any(String) });
 
 		await runner.queue.waitForIdle();
@@ -193,7 +194,7 @@ describe("Orchestrator retryRun", () => {
 		const { orchestrator, db } = ctx;
 		seedRun(db, { ...failedRunDefaults, id: "maxed-out", attempt: 4 });
 
-		const result = await orchestrator.retryRun("maxed-out");
+		const result = await orchestrator.retryRun(rid("maxed-out"));
 		expect(result).toEqual({ error: "Max retries exceeded" });
 	});
 
@@ -204,7 +205,7 @@ describe("Orchestrator retryRun", () => {
 		const { orchestrator, db } = ctx;
 		seedRun(db, { ...failedRunDefaults, id: "no-issue", issueKey: null });
 
-		const result = await orchestrator.retryRun("no-issue");
+		const result = await orchestrator.retryRun(rid("no-issue"));
 		expect(result).toEqual({ error: "No issue key" });
 	});
 
@@ -213,12 +214,12 @@ describe("Orchestrator retryRun", () => {
 
 		await using ctx = await createTestOrchestrator({
 			// Empty workflows map — no workflow for the repo
-			workflows: new Map<string, RepoWorkflow>(),
+			workflows: new Map<RepoSlug, RepoWorkflow>(),
 		});
 		const { orchestrator, db } = ctx;
 		seedRun(db, { ...failedRunDefaults, id: "no-workflow" });
 
-		const result = await orchestrator.retryRun("no-workflow");
+		const result = await orchestrator.retryRun(rid("no-workflow"));
 		expect(result).toEqual({ error: "No workflow for repo" });
 	});
 
@@ -235,7 +236,7 @@ describe("Orchestrator retryRun", () => {
 			issueKey: `${REPO}#1`,
 		});
 
-		const result = await orchestrator.retryRun("failed-dup");
+		const result = await orchestrator.retryRun(rid("failed-dup"));
 		expect(result).toEqual({ error: "Issue already has a running agent" });
 	});
 });

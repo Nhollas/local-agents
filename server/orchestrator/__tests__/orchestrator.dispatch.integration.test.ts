@@ -10,13 +10,15 @@ import {
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 import type { TrackerAdapter, TrackerState } from "../../trackers/types.ts";
+import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
+import { ok } from "../../types/result.ts";
 
 describe("Orchestrator dispatch", () => {
 	it("calls tracker transitions with logical states", async () => {
 		const transitions: { from: TrackerState; to: TrackerState }[] = [];
 		const issue = {
-			key: `${REPO}#1`,
-			number: 1,
+			key: issueKey(`${REPO}#1`),
+			number: issueNumber(1),
 			title: "Issue 1",
 			description: "Description for issue 1",
 			labels: ["agent"],
@@ -33,10 +35,10 @@ describe("Orchestrator dispatch", () => {
 			},
 			parseIssueKey: (key) => {
 				const hashIndex = key.lastIndexOf("#");
-				return {
-					repo: key.slice(0, hashIndex),
-					number: Number.parseInt(key.slice(hashIndex + 1), 10),
-				};
+				return ok({
+					repo: repoSlug(key.slice(0, hashIndex)),
+					number: issueNumber(Number.parseInt(key.slice(hashIndex + 1), 10)),
+				});
 			},
 		};
 

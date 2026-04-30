@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createGitLabClient } from "../../gitlab-client.ts";
 import { GITLAB_API, GITLAB_BASE_URL } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
+import { branchName, gitlabToken, repoSlug } from "../../types/brands.ts";
 import { gitlabCodeHostAdapter } from "../gitlab.ts";
 
-const REPO = "group/subgroup/project";
+const REPO = repoSlug("group/subgroup/project");
 const adapter = gitlabCodeHostAdapter(
-	createGitLabClient("test-token", { baseUrl: GITLAB_BASE_URL }),
+	createGitLabClient(gitlabToken("test-token"), { baseUrl: GITLAB_BASE_URL }),
 	GITLAB_BASE_URL,
 );
 
@@ -20,7 +21,7 @@ describe("cloneUrl", () => {
 
 	it("defaults to gitlab.com when no base URL is configured", async () => {
 		const defaultAdapter = gitlabCodeHostAdapter(
-			createGitLabClient("test-token"),
+			createGitLabClient(gitlabToken("test-token")),
 		);
 
 		server.use(
@@ -129,8 +130,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			"agent/issue-1",
-			"main",
+			branchName("agent/issue-1"),
+			branchName("main"),
 			"Fix issue 1",
 			"Closes TEST-1",
 		);
@@ -158,8 +159,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			"agent/issue-1",
-			"main",
+			branchName("agent/issue-1"),
+			branchName("main"),
 			"Fix issue 1",
 			"Closes TEST-1",
 		);

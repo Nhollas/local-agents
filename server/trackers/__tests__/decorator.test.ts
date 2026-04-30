@@ -1,4 +1,11 @@
 import { describe, expect, it } from "vitest";
+import {
+	type IssueNumber,
+	issueNumber,
+	type RepoSlug,
+	repoSlug,
+} from "../../types/brands.ts";
+import { ok } from "../../types/result.ts";
 import { decorateTracker } from "../decorator.ts";
 import type { TrackerAdapter } from "../types.ts";
 
@@ -11,7 +18,8 @@ function createFakeTracker(
 		},
 		fetchActiveIssues: async () => [],
 		transitionState: async () => {},
-		parseIssueKey: () => ({ repo: "owner/repo", number: 1 }),
+		parseIssueKey: () =>
+			ok({ repo: repoSlug("owner/repo"), number: issueNumber(1) }),
 		...overrides,
 	};
 }
@@ -27,30 +35,35 @@ describe("decorateTracker", () => {
 				}),
 			);
 
-			await expect(decorated.fetchIssue("owner/repo", 42)).rejects.toThrow(
-				"not found",
-			);
+			await expect(
+				decorated.fetchIssue(repoSlug("owner/repo"), issueNumber(42)),
+			).rejects.toThrow("not found");
 		});
 	});
 
 	describe("transitionState", () => {
 		it("delegates to inner tracker on success", async () => {
 			const calls: {
-				repo: string;
-				issueNumber: number;
+				repo: RepoSlug;
+				issueNumber: IssueNumber;
 				from: string;
 				to: string;
 			}[] = [];
 
 			const decorated = decorateTracker(
 				createFakeTracker({
-					transitionState: async (repo, issueNumber, from, to) => {
-						calls.push({ repo, issueNumber, from, to });
+					transitionState: async (repo, issueNum, from, to) => {
+						calls.push({ repo, issueNumber: issueNum, from, to });
 					},
 				}),
 			);
 
-			await decorated.transitionState("owner/repo", 42, "pending", "running");
+			await decorated.transitionState(
+				repoSlug("owner/repo"),
+				issueNumber(42),
+				"pending",
+				"running",
+			);
 			expect(calls).toEqual([
 				{
 					repo: "owner/repo",
@@ -71,7 +84,12 @@ describe("decorateTracker", () => {
 			);
 
 			await expect(
-				decorated.transitionState("owner/repo", 1, "pending", "running"),
+				decorated.transitionState(
+					repoSlug("owner/repo"),
+					issueNumber(1),
+					"pending",
+					"running",
+				),
 			).rejects.toThrow("GitHub API 500");
 		});
 	});
@@ -80,13 +98,17 @@ describe("decorateTracker", () => {
 		it("delegates to inner tracker", () => {
 			const decorated = decorateTracker(
 				createFakeTracker({
-					parseIssueKey: () => ({ repo: "owner/repo", number: 42 }),
+					parseIssueKey: () =>
+						ok({ repo: repoSlug("owner/repo"), number: issueNumber(42) }),
 				}),
 			);
 
 			expect(decorated.parseIssueKey("owner/repo#42")).toEqual({
-				repo: "owner/repo",
-				number: 42,
+				ok: true,
+				value: {
+					repo: "owner/repo",
+					number: 42,
+				},
 			});
 		});
 	});

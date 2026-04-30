@@ -17,6 +17,7 @@ import { createRunner } from "./runner/runner.ts";
 import { githubTrackerAdapter } from "./trackers/github.ts";
 import { jiraTrackerAdapter } from "./trackers/jira.ts";
 import type { TrackerAdapter } from "./trackers/types.ts";
+import { githubToken } from "./types/brands.ts";
 import { createWorkflowMap, loadWorkflow } from "./workflow/workflow-loader.ts";
 
 const baseEnv = loadEnv();
@@ -28,7 +29,7 @@ const db = getDb();
 migrate(db);
 
 // Create components
-const github = createGitHubClient(env.GITHUB_TOKEN ?? "");
+const github = createGitHubClient(env.GITHUB_TOKEN ?? githubToken(""));
 let tracker: TrackerAdapter;
 if (config.tracker.kind === "github") {
 	tracker = githubTrackerAdapter(github);
@@ -37,10 +38,13 @@ if (config.tracker.kind === "github") {
 	if (!jiraRepo) {
 		throw new Error("Jira tracker requires exactly one code_host.repos entry");
 	}
+	if (!env.JIRA_EMAIL || !env.JIRA_API_TOKEN) {
+		throw new Error("JIRA_EMAIL and JIRA_API_TOKEN are required for Jira");
+	}
 	const jira = createJiraClient({
 		baseUrl: config.tracker.base_url,
-		email: env.JIRA_EMAIL ?? "",
-		apiToken: env.JIRA_API_TOKEN ?? "",
+		email: env.JIRA_EMAIL,
+		apiToken: env.JIRA_API_TOKEN,
 	});
 	tracker = jiraTrackerAdapter(jira, {
 		project: config.tracker.project,
@@ -53,7 +57,10 @@ let codeHost: CodeHostAdapter;
 if (config.code_host.kind === "github") {
 	codeHost = githubCodeHostAdapter(github);
 } else {
-	const gitlab = createGitLabClient(env.GITLAB_TOKEN ?? "", {
+	if (!env.GITLAB_TOKEN) {
+		throw new Error("GITLAB_TOKEN is required for GitLab code host");
+	}
+	const gitlab = createGitLabClient(env.GITLAB_TOKEN, {
 		baseUrl: config.code_host.base_url,
 	});
 	codeHost = gitlabCodeHostAdapter(gitlab, config.code_host.base_url);

@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
+import { type RepoSlug, repoSlug } from "./types/brands.ts";
+
 export type Config = {
 	tracker:
 		| {
@@ -19,11 +21,11 @@ export type Config = {
 	code_host:
 		| {
 				kind: "github";
-				repos: string[];
+				repos: RepoSlug[];
 		  }
 		| {
 				kind: "gitlab";
-				repos: string[];
+				repos: RepoSlug[];
 				base_url: string;
 		  };
 	defaults: {
@@ -34,6 +36,8 @@ export type Config = {
 		workspace_root: string;
 	};
 };
+
+const repoSlugSchema = z.string().min(1).transform(repoSlug);
 
 const configSchema = z
 	.object({
@@ -62,13 +66,13 @@ const configSchema = z
 			z
 				.object({
 					kind: z.literal("github"),
-					repos: z.array(z.string()).min(1),
+					repos: z.array(repoSlugSchema).min(1),
 				})
 				.strict(),
 			z
 				.object({
 					kind: z.literal("gitlab"),
-					repos: z.array(z.string()).min(1),
+					repos: z.array(repoSlugSchema).min(1),
 					base_url: z.url(),
 				})
 				.strict(),
