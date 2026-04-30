@@ -1,5 +1,6 @@
 import type { query } from "@anthropic-ai/claude-agent-sdk";
 import * as canonicalLog from "../canonical-log.ts";
+import type { PhaseEvent } from "../event-bus.ts";
 import type { RunContext } from "../runner/runner.ts";
 import type { Issue } from "../trackers/types.ts";
 import {
@@ -45,12 +46,12 @@ export async function runWorkflowPhases({
 	for (const [index, phase] of phases.entries()) {
 		if (index < startPhaseIndex) continue;
 
-		const phaseResumeSessionId =
-			index === startPhaseIndex && failedPhaseResumeSessionId
-				? failedPhaseResumeSessionId
-				: phase.resume_previous
-					? previousSessionId
-					: undefined;
+		let phaseResumeSessionId: string | undefined;
+		if (index === startPhaseIndex && failedPhaseResumeSessionId) {
+			phaseResumeSessionId = failedPhaseResumeSessionId;
+		} else if (phase.resume_previous) {
+			phaseResumeSessionId = previousSessionId;
+		}
 
 		const completedSessionId = await runWorkflowPhase({
 			ctx,
@@ -95,15 +96,14 @@ async function runWorkflowPhase({
 	resumeSessionId,
 }: RunWorkflowPhaseParams): Promise<string | undefined> {
 	const startedAt = Date.now();
+	let currentSessionId = resumeSessionId;
 	ctx.setPhaseIndex(phaseIndex);
-	ctx.setSessionId(resumeSessionId ?? null);
 	emitPhaseMarker(ctx, {
 		type: "phase.started",
 		data: { name: phase.name, index: phaseIndex, total: totalPhases },
 	});
 
 	try {
-		let currentSessionId = resumeSessionId;
 		const renderedPrompt = renderPrompt(markTrustedShellBlocks(phase.prompt), {
 			issue,
 			attempt,
@@ -123,9 +123,9 @@ async function runWorkflowPhase({
 			if (msg.type !== "assistant") continue;
 			logAgentMessage(msg, cwd, ctx.emitToolUse);
 			currentSessionId = msg.session_id;
-			ctx.setSessionId(msg.session_id);
 		}
 
+		ctx.setSessionId(currentSessionId ?? null);
 		emitPhaseMarker(ctx, {
 			type: "phase.completed",
 			data: {
@@ -136,6 +136,7 @@ async function runWorkflowPhase({
 		});
 		return currentSessionId;
 	} catch (err) {
+		ctx.setSessionId(currentSessionId ?? null);
 		emitPhaseMarker(ctx, {
 			type: "phase.failed",
 			data: {
@@ -148,10 +149,7 @@ async function runWorkflowPhase({
 	}
 }
 
-function emitPhaseMarker(
-	ctx: RunContext,
-	event: Parameters<RunContext["emitPhaseEvent"]>[0],
-): void {
+function emitPhaseMarker(ctx: RunContext, event: PhaseEvent): void {
 	ctx.emitPhaseEvent(event);
 	canonicalLog.append("phase_events", event);
 }

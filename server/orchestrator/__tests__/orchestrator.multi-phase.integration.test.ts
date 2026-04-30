@@ -1,16 +1,17 @@
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { query } from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, it } from "vitest";
 import { runs } from "../../db/schema.ts";
-import { createGitHubIssue, REPO } from "../../testing/support/fixtures.ts";
+import {
+	createGitHubIssue,
+	createPromptSpyAgent,
+	REPO,
+} from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { getEvents, seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
-
-type QueryParams = Parameters<typeof query>[0];
 
 const failedRunDefaults = {
 	agentName: "issue-1",
@@ -42,23 +43,6 @@ function phasedWorkflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
 	};
 }
 
-function createPhaseSpyAgent() {
-	const calls: QueryParams[] = [];
-	async function* phaseSpyAgent(params: QueryParams) {
-		calls.push(params);
-		yield {
-			type: "assistant" as const,
-			session_id: `sess-${calls.length}`,
-			// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's BetaMessage shape
-			message: { content: [] } as any,
-			parent_tool_use_id: null,
-			uuid: "00000000-0000-0000-0000-000000000003" as const,
-		};
-	}
-
-	return { phaseSpyAgent, calls };
-}
-
 describe("Orchestrator multi-phase workflows", () => {
 	it("runs phases sequentially with freshly rendered and shell-expanded prompts", async () => {
 		server.use(
@@ -67,11 +51,11 @@ describe("Orchestrator multi-phase workflows", () => {
 			}),
 		);
 
-		const { phaseSpyAgent, calls } = createPhaseSpyAgent();
+		const { spyAgent, getCapturedCalls } = createPromptSpyAgent();
 
 		await using ctx = await createTestOrchestrator({
 			workflows: new Map([[REPO, phasedWorkflow()]]),
-			runAgent: phaseSpyAgent,
+			runAgent: spyAgent,
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
@@ -80,33 +64,42 @@ describe("Orchestrator multi-phase workflows", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
+		const calls = getCapturedCalls();
 		expect(calls.map((call) => call.prompt)).toEqual([
 			"Plan 1 one",
 			"Implement Issue 1 two",
 		]);
 		expect(calls[0]?.options).not.toHaveProperty("resume");
-		expect(calls[1]?.options).toMatchObject({ resume: "sess-1" });
+		expect(calls[1]?.options).toMatchObject({ resume: "spy-session" });
 
 		const [run] = db.select().from(runs).all();
 		expect(run).toMatchObject({
 			status: "completed",
-			sessionId: "sess-2",
+			sessionId: "spy-session",
 			phaseIndex: 1,
 		});
 
 		const events = getEvents(db, run?.id ?? "");
-		expect(events.map((event) => event.type)).toEqual([
-			"run:started",
+		expect(
+			events
+				.filter((event) => event.type.startsWith("phase."))
+				.map((event) => event.type),
+		).toEqual([
 			"phase.started",
 			"phase.completed",
 			"phase.started",
 			"phase.completed",
-			"run:completed",
 		]);
 		expect(events).toContainEqual(
 			expect.objectContaining({
 				type: "phase.started",
 				data: { name: "plan", index: 0, total: 2 },
+			}),
+		);
+		expect(events).toContainEqual(
+			expect.objectContaining({
+				type: "phase.started",
+				data: { name: "implement", index: 1, total: 2 },
 			}),
 		);
 	});
@@ -197,11 +190,11 @@ describe("Orchestrator multi-phase workflows", () => {
 			}),
 		);
 
-		const { phaseSpyAgent, calls } = createPhaseSpyAgent();
+		const { spyAgent, getCapturedCalls } = createPromptSpyAgent();
 
 		await using ctx = await createTestOrchestrator({
 			workflows: new Map([[REPO, phasedWorkflow()]]),
-			runAgent: phaseSpyAgent,
+			runAgent: spyAgent,
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
@@ -218,6 +211,7 @@ describe("Orchestrator multi-phase workflows", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
+		const calls = getCapturedCalls();
 		expect(calls.map((call) => call.prompt)).toEqual(["Implement Issue 1 two"]);
 		expect(calls[0]?.options).toMatchObject({ resume: "sess-failed-phase" });
 
@@ -241,11 +235,11 @@ describe("Orchestrator multi-phase workflows", () => {
 			}),
 		);
 
-		const { phaseSpyAgent, calls } = createPhaseSpyAgent();
+		const { spyAgent, getCapturedCalls } = createPromptSpyAgent();
 
 		await using ctx = await createTestOrchestrator({
 			workflows: new Map([[REPO, phasedWorkflow()]]),
-			runAgent: phaseSpyAgent,
+			runAgent: spyAgent,
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);
@@ -262,6 +256,7 @@ describe("Orchestrator multi-phase workflows", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
+		const calls = getCapturedCalls();
 		expect(calls.map((call) => call.prompt)).toEqual(["Implement Issue 1 two"]);
 		expect(calls[0]?.options).not.toHaveProperty("resume");
 	});

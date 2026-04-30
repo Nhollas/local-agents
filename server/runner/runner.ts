@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eventBus, type RunEvent } from "../event-bus.ts";
+import { eventBus, type PhaseEvent, type RunEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
 
@@ -8,21 +8,7 @@ export const ABORT_ERROR = "Run killed by user";
 export type RunContext = {
 	runId: string;
 	emitToolUse: (tool: string, target: string) => void;
-	emitPhaseEvent: (
-		event:
-			| {
-					type: "phase.started";
-					data: { name: string; index: number; total: number };
-			  }
-			| {
-					type: "phase.completed";
-					data: { name: string; index: number; durationMs: number };
-			  }
-			| {
-					type: "phase.failed";
-					data: { name: string; index: number; error: string };
-			  },
-	) => void;
+	emitPhaseEvent: (event: PhaseEvent) => void;
 	setSessionId: (id: string | null) => void;
 	setPhaseIndex: (index: number) => void;
 	signal: AbortSignal;

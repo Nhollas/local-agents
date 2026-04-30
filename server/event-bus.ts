@@ -16,13 +16,16 @@ type RunEventBase = {
 	createdAt: string;
 };
 
+export type PhaseEvent =
+	| { type: "phase.started"; data: PhaseStartedData }
+	| { type: "phase.completed"; data: PhaseCompletedData }
+	| { type: "phase.failed"; data: PhaseFailedData };
+
 export type RunEvent =
 	| (RunEventBase & { type: "run:started"; data: RunStartedData })
 	| (RunEventBase & { type: "run:output"; data: RunOutputData })
 	| (RunEventBase & { type: "run:tool_use"; data: RunToolUseData })
-	| (RunEventBase & { type: "phase.started"; data: PhaseStartedData })
-	| (RunEventBase & { type: "phase.completed"; data: PhaseCompletedData })
-	| (RunEventBase & { type: "phase.failed"; data: PhaseFailedData })
+	| (RunEventBase & PhaseEvent)
 	| (RunEventBase & { type: "run:completed"; data: RunCompletedData })
 	| (RunEventBase & { type: "run:failed"; data: RunFailedData });
 
