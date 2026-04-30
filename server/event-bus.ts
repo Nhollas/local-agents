@@ -1,5 +1,8 @@
 import { EventEmitter } from "node:events";
 import type {
+	PhaseCompletedData,
+	PhaseFailedData,
+	PhaseStartedData,
 	RunCompletedData,
 	RunFailedData,
 	RunOutputData,
@@ -17,6 +20,9 @@ export type RunEvent =
 	| (RunEventBase & { type: "run:started"; data: RunStartedData })
 	| (RunEventBase & { type: "run:output"; data: RunOutputData })
 	| (RunEventBase & { type: "run:tool_use"; data: RunToolUseData })
+	| (RunEventBase & { type: "phase.started"; data: PhaseStartedData })
+	| (RunEventBase & { type: "phase.completed"; data: PhaseCompletedData })
+	| (RunEventBase & { type: "phase.failed"; data: PhaseFailedData })
 	| (RunEventBase & { type: "run:completed"; data: RunCompletedData })
 	| (RunEventBase & { type: "run:failed"; data: RunFailedData });
 

@@ -90,6 +90,7 @@ describe("Orchestrator shell expansion", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});

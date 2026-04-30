@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
-import { parseRepoWorkflow, renderPrompt } from "../workflow.ts";
+import {
+	getWorkflowPhases,
+	parseRepoWorkflow,
+	renderPrompt,
+} from "../workflow.ts";
 
 const baseIssue: Issue = {
 	key: "owner/repo#1",
@@ -48,7 +52,7 @@ describe("renderPrompt", () => {
 });
 
 describe("parseRepoWorkflow", () => {
-	it("applies defaults when branch and base_branch are omitted", () => {
+	it("accepts a single-prompt workflow and applies defaults", () => {
 		const yaml = "prompt: Fix this issue\n";
 
 		const result = parseRepoWorkflow(yaml);
@@ -56,12 +60,59 @@ describe("parseRepoWorkflow", () => {
 		expect(result.branch).toBe("agent/issue-{{ issue.number }}");
 		expect(result.base_branch).toBe("main");
 		expect(result.prompt).toBe("Fix this issue");
+		expect(getWorkflowPhases(result)).toEqual([
+			{ name: "prompt", prompt: "Fix this issue", resume_previous: false },
+		]);
+	});
+
+	it("accepts a phased workflow", () => {
+		const yaml = `
+phases:
+  - name: plan
+    prompt: Write a plan
+  - name: implement
+    prompt: Implement the plan
+    resume_previous: true
+`;
+
+		const result = parseRepoWorkflow(yaml);
+
+		expect(result.prompt).toBeUndefined();
+		expect(getWorkflowPhases(result)).toEqual([
+			{ name: "plan", prompt: "Write a plan", resume_previous: false },
+			{
+				name: "implement",
+				prompt: "Implement the plan",
+				resume_previous: true,
+			},
+		]);
 	});
 
 	it("rejects missing prompt", () => {
 		const yaml = "branch: my-branch\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects workflows with both prompt and phases", () => {
+		const yaml = `
+prompt: Fix this issue
+phases:
+  - name: plan
+    prompt: Write a plan
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow(
+			/Workflow must define exactly one of prompt or phases/,
+		);
+	});
+
+	it("rejects workflows with neither prompt nor phases", () => {
+		const yaml = "branch: my-branch\n";
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow(
+			/Workflow must define exactly one of prompt or phases/,
+		);
 	});
 
 	it("throws on invalid YAML", () => {

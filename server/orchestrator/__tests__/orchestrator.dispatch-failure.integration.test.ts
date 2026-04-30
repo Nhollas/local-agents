@@ -45,6 +45,7 @@ describe("Orchestrator dispatch failure and polling", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 
@@ -147,6 +148,7 @@ describe("Orchestrator dispatch failure and polling", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});

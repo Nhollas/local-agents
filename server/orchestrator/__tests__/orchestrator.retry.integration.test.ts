@@ -52,9 +52,10 @@ describe("Orchestrator retryRun", () => {
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
-			sessionId: null,
+			sessionId: "sess-abc",
 			attempt: 2,
 			parentRunId: "failed-1",
+			phaseIndex: 0,
 		});
 	});
 
@@ -135,9 +136,10 @@ describe("Orchestrator retryRun", () => {
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
-			sessionId: null,
+			sessionId: "sess-abc",
 			attempt: 2,
 			parentRunId: "no-title",
+			phaseIndex: 0,
 		});
 	});
 
@@ -157,15 +159,29 @@ describe("Orchestrator retryRun", () => {
 		expect(result).toEqual({ error: "Run is not failed" });
 	});
 
-	it("rejects retry when run has no sessionId", async () => {
-		server.use(...githubHandlers());
+	it("retries fresh when run has no sessionId", async () => {
+		server.use(
+			...githubHandlers({
+				issues: [createGitHubIssue(1, ["agent:running"])],
+			}),
+		);
 
-		await using ctx = await createTestOrchestrator();
-		const { orchestrator, db } = ctx;
+		const { spyAgent, getCaptured } = createPromptSpyAgent();
+
+		await using ctx = await createTestOrchestrator({
+			runAgent: spyAgent,
+		});
+		const { orchestrator, db, runner, workspace } = ctx;
+		await workspace.preCreateWorkspace(`${REPO}#1`);
 		seedRun(db, { ...failedRunDefaults, id: "no-sess", sessionId: null });
 
 		const result = await orchestrator.retryRun("no-sess");
-		expect(result).toEqual({ error: "No session to resume" });
+		expect(result).toEqual({ runId: expect.any(String) });
+
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		expect(getCaptured().options).not.toHaveProperty("resume");
 	});
 
 	it("rejects retry when max retries exceeded", async () => {

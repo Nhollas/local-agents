@@ -8,7 +8,23 @@ export const ABORT_ERROR = "Run killed by user";
 export type RunContext = {
 	runId: string;
 	emitToolUse: (tool: string, target: string) => void;
-	setSessionId: (id: string) => void;
+	emitPhaseEvent: (
+		event:
+			| {
+					type: "phase.started";
+					data: { name: string; index: number; total: number };
+			  }
+			| {
+					type: "phase.completed";
+					data: { name: string; index: number; durationMs: number };
+			  }
+			| {
+					type: "phase.failed";
+					data: { name: string; index: number; error: string };
+			  },
+	) => void;
+	setSessionId: (id: string | null) => void;
+	setPhaseIndex: (index: number) => void;
 	signal: AbortSignal;
 };
 
@@ -115,11 +131,12 @@ export function createRunner(config: RunnerConfig): Runner {
 		queue.enqueue(async () => {
 			const executionStart = Date.now();
 
-			let sessionCaptured = false;
-			const setSessionId = (id: string) => {
-				if (sessionCaptured) return;
-				sessionCaptured = true;
+			const setSessionId = (id: string | null) => {
 				repo.setSessionId(runId, id);
+			};
+
+			const setPhaseIndex = (index: number) => {
+				repo.setPhaseIndex(runId, index);
 			};
 
 			const emitToolUse = (tool: string, target: string) => {
@@ -127,6 +144,10 @@ export function createRunner(config: RunnerConfig): Runner {
 					type: "run:tool_use",
 					data: { tool, target },
 				});
+			};
+
+			const emitPhaseEvent: RunContext["emitPhaseEvent"] = (event) => {
+				emitEvent(runId, job.name, event);
 			};
 
 			const abortPromise = new Promise<RunResult>((resolve) => {
@@ -143,7 +164,9 @@ export function createRunner(config: RunnerConfig): Runner {
 				job.handler({
 					runId,
 					emitToolUse,
+					emitPhaseEvent,
 					setSessionId,
+					setPhaseIndex,
 					signal: controller.signal,
 				}),
 				abortPromise,

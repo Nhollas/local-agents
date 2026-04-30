@@ -22,6 +22,13 @@
 			"when": 1774701011961,
 			"tag": "0002_happy_echo",
 			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "6",
+			"when": 1777569002300,
+			"tag": "0003_careless_shiver_man",
+			"breakpoints": true
 		}
 	]
 }

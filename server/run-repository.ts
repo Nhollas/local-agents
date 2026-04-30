@@ -23,7 +23,8 @@ export type RunRepository = {
 		attempt: number;
 		parentRunId: string | null;
 	}): void;
-	setSessionId(runId: string, sessionId: string): void;
+	setSessionId(runId: string, sessionId: string | null): void;
+	setPhaseIndex(runId: string, phaseIndex: number): void;
 	completeRun(
 		runId: string,
 		params: { completedAt: string; durationMs: number },
@@ -58,6 +59,10 @@ export function createRunRepository(db: Db): RunRepository {
 
 		setSessionId(runId, sessionId) {
 			db.update(runs).set({ sessionId }).where(eq(runs.id, runId)).run();
+		},
+
+		setPhaseIndex(runId, phaseIndex) {
+			db.update(runs).set({ phaseIndex }).where(eq(runs.id, runId)).run();
 		},
 
 		completeRun(runId, params) {

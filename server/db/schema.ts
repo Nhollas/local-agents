@@ -19,6 +19,7 @@ export const runs = sqliteTable("runs", {
 	sessionId: text("session_id"),
 	attempt: integer("attempt").notNull().default(1),
 	parentRunId: text("parent_run_id"),
+	phaseIndex: integer("phase_index").notNull().default(0),
 });
 
 export const runEvents = sqliteTable(
@@ -41,11 +42,21 @@ export type RunEventType =
 	| "run:started"
 	| "run:output"
 	| "run:tool_use"
+	| "phase.started"
+	| "phase.completed"
+	| "phase.failed"
 	| "run:completed"
 	| "run:failed";
 
 export type RunStartedData = { issueKey: string; issueTitle: string };
 export type RunOutputData = Record<string, unknown>;
 export type RunToolUseData = { tool: string; target: string };
+export type PhaseStartedData = { name: string; index: number; total: number };
+export type PhaseCompletedData = {
+	name: string;
+	index: number;
+	durationMs: number;
+};
+export type PhaseFailedData = { name: string; index: number; error: string };
 export type RunCompletedData = { durationMs: number };
 export type RunFailedData = { error: string; durationMs: number };
