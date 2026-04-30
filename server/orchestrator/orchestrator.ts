@@ -8,6 +8,10 @@ import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
+import {
+	expandMarkedShellBlocks,
+	markTrustedShellBlocks,
+} from "../workflow/prompt-preprocessor.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import { logAgentMessage } from "./agent-logging.ts";
@@ -94,7 +98,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			await runShell(script, ws.path);
 		}
 
-		const prompt = renderPrompt(workflow.prompt, { issue, attempt });
+		const renderedPrompt = renderPrompt(
+			markTrustedShellBlocks(workflow.prompt),
+			{
+				issue,
+				attempt,
+			},
+		);
 
 		const { runId, done } = runner.enqueue({
 			name: `issue-${issue.number}`,
@@ -140,6 +150,10 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 											resume: params.resumeSessionId,
 										}),
 									};
+
+									const prompt = await expandMarkedShellBlocks(renderedPrompt, {
+										cwd: ws.path,
+									});
 
 									for await (const msg of runAgent({
 										prompt,

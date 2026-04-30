@@ -1,0 +1,150 @@
+import { spawn } from "node:child_process";
+
+export const SHELL_BLOCK_MARKER = "\uE000";
+const SHELL_EXPANSION_TIMEOUT_MS = 30_000;
+const SHELL_EXPANSION_MAX_BUFFER = 1024 * 1024;
+
+const unmarkedShellBlockPattern = /!`([^`]*)`/g;
+const markedShellBlockPattern = /!\uE000`([^`]*)`/g;
+
+export function stripShellBlockMarkers(value: string): string {
+	return value.replaceAll(SHELL_BLOCK_MARKER, "");
+}
+
+export function markTrustedShellBlocks(template: string): string {
+	const sanitizedTemplate = stripShellBlockMarkers(template);
+	return sanitizedTemplate.replace(
+		unmarkedShellBlockPattern,
+		(_match, command: string) => `!${SHELL_BLOCK_MARKER}\`${command}\``,
+	);
+}
+
+type ExpandShellBlocksOptions = {
+	cwd: string;
+	timeoutMs?: number;
+};
+
+export async function expandMarkedShellBlocks(
+	prompt: string,
+	options: ExpandShellBlocksOptions,
+): Promise<string> {
+	const commands = [...prompt.matchAll(markedShellBlockPattern)].map(
+		(match) => match[1] as string,
+	);
+	if (commands.length === 0) return prompt;
+
+	const outputs = await Promise.all(
+		commands.map((command) => runShellBlock(command, options)),
+	);
+
+	let i = 0;
+	return prompt.replace(markedShellBlockPattern, () => outputs[i++] as string);
+}
+
+async function runShellBlock(
+	command: string,
+	{ cwd, timeoutMs = SHELL_EXPANSION_TIMEOUT_MS }: ExpandShellBlocksOptions,
+): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const child = spawn("sh", ["-c", command], {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		let stdout = "";
+		let stderr = "";
+		let settled = false;
+
+		function fail(error: Error) {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
+			child.kill("SIGTERM");
+			reject(error);
+		}
+
+		const timeout = setTimeout(() => {
+			fail(
+				new Error(
+					formatShellFailure(command, `timed out after ${timeoutMs}ms`, stderr),
+				),
+			);
+		}, timeoutMs);
+
+		// biome-ignore lint/style/noNonNullAssertion: stdout is present because stdio is configured as "pipe"
+		child.stdout!.setEncoding("utf8");
+		// biome-ignore lint/style/noNonNullAssertion: stdout is present because stdio is configured as "pipe"
+		child.stdout!.on("data", (chunk: string) => {
+			stdout += chunk;
+			if (stdout.length + stderr.length > SHELL_EXPANSION_MAX_BUFFER) {
+				fail(
+					new Error(
+						formatShellFailure(
+							command,
+							`exceeded max output of ${SHELL_EXPANSION_MAX_BUFFER} bytes`,
+							stderr,
+						),
+					),
+				);
+			}
+		});
+
+		// biome-ignore lint/style/noNonNullAssertion: stderr is present because stdio is configured as "pipe"
+		child.stderr!.setEncoding("utf8");
+		// biome-ignore lint/style/noNonNullAssertion: stderr is present because stdio is configured as "pipe"
+		child.stderr!.on("data", (chunk: string) => {
+			stderr += chunk;
+			if (stdout.length + stderr.length > SHELL_EXPANSION_MAX_BUFFER) {
+				fail(
+					new Error(
+						formatShellFailure(
+							command,
+							`exceeded max output of ${SHELL_EXPANSION_MAX_BUFFER} bytes`,
+							stderr,
+						),
+					),
+				);
+			}
+		});
+
+		child.on("error", (err) => {
+			fail(formatSpawnError(command, err));
+		});
+
+		child.on("close", (code, signal) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
+
+			if (code === 0) {
+				resolve(stdout);
+				return;
+			}
+
+			const reason =
+				code == null
+					? `terminated by signal ${signal}`
+					: `exited with code ${code}`;
+			reject(new Error(formatShellFailure(command, reason, stderr)));
+		});
+	});
+}
+
+function formatSpawnError(command: string, err: Error): Error {
+	return new Error(
+		formatShellFailure(command, `failed to spawn: ${err.message}`),
+	);
+}
+
+function formatShellFailure(
+	command: string,
+	reason: string,
+	stderr?: string,
+): string {
+	const trimmedStderr = stderr?.trim();
+	return [
+		`Shell expansion command ${reason}`,
+		`Command: ${command}`,
+		...(trimmedStderr ? [`stderr: ${trimmedStderr}`] : []),
+	].join("\n");
+}

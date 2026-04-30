@@ -1,6 +1,7 @@
 import { parse } from "yaml";
 import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
+import { stripShellBlockMarkers } from "./prompt-preprocessor.ts";
 
 const repoWorkflowSchema = z.object({
 	branch: z.string().default("agent/issue-{{ issue.number }}"),
@@ -37,7 +38,10 @@ export function renderPrompt(
 			value = (value as Record<string, unknown>)[part];
 		}
 		if (value == null) return "";
-		if (Array.isArray(value)) return value.join(", ");
-		return String(value);
+		if (Array.isArray(value))
+			return stripShellBlockMarkers(
+				value.map((item) => String(item)).join(", "),
+			);
+		return stripShellBlockMarkers(String(value));
 	});
 }
