@@ -28,7 +28,8 @@ The issue tracker is the orchestration layer. Polling means the orchestrator is 
 ### 1. Central Config
 
 A `config.yaml` defines one tracker, one code host, the code-host repo list,
-and operational defaults:
+and operational settings. Every field below is required — the parser does not
+fall back to defaults, so misconfiguration fails loudly at startup:
 
 ```yaml
 tracker:
@@ -43,13 +44,14 @@ code_host:
 defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
+  max_retries: 3
   model: claude-sonnet-4-6
   workspace_root: /tmp/local-agent-workspaces
 ```
 
 GitLab code hosting uses the same `code_host.repos` list. `base_url` is
-optional and defaults to `https://gitlab.com`; it is commonly paired with Jira
-tracking in the current implementation:
+required so self-hosted instances do not silently target `gitlab.com`. It is
+commonly paired with Jira tracking in the current implementation:
 
 ```yaml
 code_host:
@@ -59,10 +61,10 @@ code_host:
     - group/project
 ```
 
-Jira tracking maps logical orchestrator states to Jira status names. Statuses
-default to `To Do`, `In Progress`, and `In Review`; override them when your
-Jira project uses different names. Because Jira issues do not identify a code
-repo, Jira mode requires exactly one configured code-host repo:
+Jira tracking maps logical orchestrator states to Jira status names. The
+`statuses` block is required — set it to whatever your Jira project uses.
+Because Jira issues do not identify a code repo, Jira mode requires exactly
+one configured code-host repo:
 
 ```yaml
 tracker:
@@ -84,9 +86,13 @@ code_host:
 ### 2. Global Workflow
 
 The local-agents working directory contains one `workflow.yaml` with hooks and
-the prompt. The same workflow is used for every configured repo:
+the prompt. The same workflow is used for every configured repo. `branch` and
+`base_branch` are required:
 
 ```yaml
+branch: "agent/issue-{{ issue.number }}"
+base_branch: main
+
 hooks:
   after_create: |
     git checkout -b agent/issue-{{ issue.number }}

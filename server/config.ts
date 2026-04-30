@@ -50,16 +50,11 @@ const configSchema = z
 					project: z.string().min(1),
 					statuses: z
 						.object({
-							pending: z.string().default("To Do"),
-							running: z.string().default("In Progress"),
-							awaiting_review: z.string().default("In Review"),
+							pending: z.string().min(1),
+							running: z.string().min(1),
+							awaiting_review: z.string().min(1),
 						})
-						.strict()
-						.default({
-							pending: "To Do",
-							running: "In Progress",
-							awaiting_review: "In Review",
-						}),
+						.strict(),
 				})
 				.strict(),
 		]),
@@ -74,29 +69,19 @@ const configSchema = z
 				.object({
 					kind: z.literal("gitlab"),
 					repos: z.array(z.string()).min(1),
-					base_url: z.url().default("https://gitlab.com"),
+					base_url: z.url(),
 				})
 				.strict(),
 		]),
 		defaults: z
 			.object({
-				polling_interval_ms: z.number().default(30000),
-				max_concurrent: z.number().default(2),
-				max_retries: z.number().default(3),
-				model: z.string().default("claude-sonnet-4-6"),
-				workspace_root: z.string().default("/tmp/local-agent-workspaces"),
+				polling_interval_ms: z.number().int().positive(),
+				max_concurrent: z.number().int().positive(),
+				max_retries: z.number().int().nonnegative(),
+				model: z.string().min(1),
+				workspace_root: z.string().min(1),
 			})
-			.optional()
-			.transform(
-				(v) =>
-					v ?? {
-						polling_interval_ms: 30000,
-						max_concurrent: 2,
-						max_retries: 3,
-						model: "claude-sonnet-4-6",
-						workspace_root: "/tmp/local-agent-workspaces",
-					},
-			),
+			.strict(),
 	})
 	.strict()
 	.superRefine((config, ctx) => {

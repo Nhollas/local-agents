@@ -40,14 +40,18 @@ code_host:
 defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
+  max_retries: 3
   model: claude-sonnet-4-6
   workspace_root: /tmp/local-agent-workspaces
 ```
 
+All `defaults` fields are required — there is no fallback if you omit one.
+
 For Jira tracking, configure native Jira statuses. Jira issues do not identify a
 code repo, so Jira mode currently requires exactly one `code_host.repos` entry.
-This example uses GitLab-hosted code; `code_host.base_url` is optional and
-defaults to `https://gitlab.com`:
+`code_host.base_url`, `tracker.statuses`, and the workflow `branch` /
+`base_branch` fields are all required — set them explicitly so misconfiguration
+fails loudly:
 
 ```yaml
 tracker:
@@ -67,9 +71,13 @@ code_host:
 ```
 
 Create `workflow.yaml` in the local-agents working directory to define hooks and
-the prompt used for every configured repo:
+the prompt used for every configured repo. `branch` and `base_branch` are
+required:
 
 ```yaml
+branch: "agent/issue-{{ issue.number }}"
+base_branch: main
+
 hooks:
   after_create: |
     git checkout -b agent/issue-{{ issue.number }}
