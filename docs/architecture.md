@@ -35,10 +35,9 @@ tracker:
 
 code_host:
   kind: github
-
-repos:
-  - org/repo-a
-  - org/repo-b
+  repos:
+    - org/repo-a
+    - org/repo-b
 
 defaults:
   polling_interval_ms: 30000

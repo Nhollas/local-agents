@@ -161,7 +161,23 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 1 — Move Repos Under `code_host`
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-01-code-host-repos`.
+
+**Completed changes:**
+
+- Moved repository configuration from top-level `repos` to `code_host.repos`.
+- Updated `Config` types, Zod parsing, server startup wiring, and test config helpers to use `code_host.repos`.
+- Chose no compatibility window for top-level `repos`; the parser rejects old top-level repo config.
+- Updated README and architecture config examples to show only the new nested shape.
+- Added focused config parser tests for accepted nested repos, missing `code_host.repos`, and rejected top-level `repos`.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
 **Purpose:** Make the config shape match the settled model before adding more provider options.
 

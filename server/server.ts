@@ -32,7 +32,7 @@ const runner = createRunner({
 });
 
 // Fetch workflows from all repos, then start
-const workflowCache = createWorkflowCache(codeHost, config.repos);
+const workflowCache = createWorkflowCache(codeHost, config.code_host.repos);
 await workflowCache.refresh();
 
 const orchestrator = createOrchestrator({
@@ -79,7 +79,7 @@ const httpServer = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 	logger.info(
 		{
 			port: info.port,
-			repos: config.repos,
+			repos: config.code_host.repos,
 			activeRepos: [...workflowCache.workflows.keys()],
 			interval: config.defaults.polling_interval_ms,
 		},

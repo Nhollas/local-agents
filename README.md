@@ -27,9 +27,8 @@ tracker:
 
 code_host:
   kind: github
-
-repos:
-  - your-org/your-repo
+  repos:
+    - your-org/your-repo
 
 defaults:
   polling_interval_ms: 30000
@@ -69,7 +68,7 @@ This starts:
 
 ### Adding a New Repo
 
-1. Add the repo to the `repos` list in `config.yaml`
+1. Add the repo to the `code_host.repos` list in `config.yaml`
 2. Commit `.agents/workflow.yaml` to the repo with label, hooks, and prompt
 3. Create the label (e.g., `agent`) on the repo:
    ```bash
