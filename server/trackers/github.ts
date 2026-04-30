@@ -1,4 +1,11 @@
 import type { GitHubClient, GitHubIssue } from "../github-client.ts";
+import {
+	issueKey,
+	issueNumber,
+	type RepoSlug,
+	repoSlug,
+} from "../types/brands.ts";
+import { err, ok } from "../types/result.ts";
 import { decorateTracker } from "./decorator.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
 
@@ -10,10 +17,10 @@ const LABELS: Record<TrackerState, string> = {
 	awaiting_review: "agent:awaiting-review",
 };
 
-function mapGitHubIssue(repo: string, i: GitHubIssue): Issue {
+function mapGitHubIssue(repo: RepoSlug, i: GitHubIssue): Issue {
 	return {
-		key: `${repo}#${i.number}`,
-		number: i.number,
+		key: issueKey(`${repo}#${i.number}`),
+		number: issueNumber(i.number),
 		title: i.title,
 		description: i.body ?? "",
 		labels: i.labels.map((l) => l.name),
@@ -33,15 +40,12 @@ export function githubTrackerAdapter(
 	}
 
 	return decorateTracker({
-		async fetchIssue(repo: string, issueNumber: number): Promise<Issue> {
-			const i = await client.getIssue(repo, issueNumber);
+		async fetchIssue(repo, issueNum): Promise<Issue> {
+			const i = await client.getIssue(repo, issueNum);
 			return mapGitHubIssue(repo, i);
 		},
 
-		async fetchActiveIssues(
-			repo: string,
-			state: TrackerState,
-		): Promise<Issue[]> {
+		async fetchActiveIssues(repo, state): Promise<Issue[]> {
 			const username = await getUsername();
 			const label = LABELS[state];
 
@@ -68,33 +72,36 @@ export function githubTrackerAdapter(
 				.map((i) => mapGitHubIssue(repo, i));
 		},
 
-		async transitionState(
-			repo: string,
-			issueNumber: number,
-			from: TrackerState,
-			to: TrackerState,
-		): Promise<void> {
+		async transitionState(repo, issueNum, from, to): Promise<void> {
 			await Promise.all([
-				client.removeIssueLabel(repo, issueNumber, LABELS[from]),
-				client.addIssueLabels(repo, issueNumber, [LABELS[to]]),
+				client.removeIssueLabel(repo, issueNum, LABELS[from]),
+				client.addIssueLabels(repo, issueNum, [LABELS[to]]),
 			]);
 		},
 
-		parseIssueKey(key: string): { repo: string; number: number } {
+		parseIssueKey(key) {
 			const hashIndex = key.lastIndexOf("#");
 			if (hashIndex <= 0 || hashIndex === key.length - 1) {
-				throw new Error(`Invalid GitHub issue key: ${key}`);
+				return err({
+					kind: "invalid_format",
+					input: key,
+					message: `Invalid GitHub issue key: ${key}`,
+				});
 			}
 
 			const rawNumber = key.slice(hashIndex + 1);
 			if (!/^\d+$/.test(rawNumber)) {
-				throw new Error(`Invalid GitHub issue key: ${key}`);
+				return err({
+					kind: "invalid_format",
+					input: key,
+					message: `Invalid GitHub issue key: ${key}`,
+				});
 			}
 
-			return {
-				repo: key.slice(0, hashIndex),
-				number: Number.parseInt(rawNumber, 10),
-			};
+			return ok({
+				repo: repoSlug(key.slice(0, hashIndex)),
+				number: issueNumber(Number.parseInt(rawNumber, 10)),
+			});
 		},
 	});
 }

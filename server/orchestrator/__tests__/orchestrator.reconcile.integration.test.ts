@@ -10,6 +10,7 @@ import {
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+import { issueKey, runId as rid } from "../../types/brands.ts";
 
 describe("Orchestrator reconciliation", () => {
 	it("kills agent when issue no longer has the running label", async () => {
@@ -348,10 +349,10 @@ describe("Orchestrator reconciliation", () => {
 		// Seed a "running" record with no actual process (simulates server restart)
 		db.insert(runs)
 			.values({
-				id: "stale-run",
+				id: rid("stale-run"),
 				agentName: "issue-5",
 				status: "running",
-				issueKey: `${REPO}#5`,
+				issueKey: issueKey(`${REPO}#5`),
 				issueTitle: "Stale issue",
 				startedAt: "2025-01-01T00:00:00Z",
 				attempt: 1,

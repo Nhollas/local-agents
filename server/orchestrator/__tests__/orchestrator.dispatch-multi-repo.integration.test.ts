@@ -11,6 +11,7 @@ import {
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+import { type RepoSlug, repoSlug } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 describe("Orchestrator dispatch multi-repo", () => {
@@ -43,7 +44,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 	});
 
 	it("fetch failure for one repo does not block other repos", async () => {
-		const REPO2 = "test-owner/second-repo";
+		const REPO2 = repoSlug("test-owner/second-repo");
 
 		server.use(
 			http.get(`${GITHUB_API}/user`, () =>
@@ -79,7 +80,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 
 		await using ctx = await createTestOrchestrator({
 			maxConcurrency: 5,
-			workflows: new Map<string, RepoWorkflow>([
+			workflows: new Map<RepoSlug, RepoWorkflow>([
 				[REPO, createTestWorkflow()],
 				[REPO2, createTestWorkflow()],
 			]),
@@ -112,7 +113,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 	});
 
 	it("dispatches issues across multiple repos", async () => {
-		const REPO2 = "test-owner/second-repo";
+		const REPO2 = repoSlug("test-owner/second-repo");
 
 		server.use(
 			http.get(`${GITHUB_API}/user`, () =>
@@ -156,7 +157,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 		await using ctx = await createTestOrchestrator({
 			maxConcurrency: 5,
 			configOverrides: { max_concurrent: 5 },
-			workflows: new Map<string, RepoWorkflow>([
+			workflows: new Map<RepoSlug, RepoWorkflow>([
 				[REPO, createTestWorkflow()],
 				[REPO2, createTestWorkflow()],
 			]),

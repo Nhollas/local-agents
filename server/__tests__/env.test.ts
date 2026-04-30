@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.ts";
 import { loadEnv } from "../env.ts";
+import { repoSlug } from "../types/brands.ts";
 
 const originalEnv = process.env;
 
@@ -9,7 +10,7 @@ function gitlabConfig(): Pick<Config, "tracker" | "code_host"> {
 		tracker: { kind: "github" },
 		code_host: {
 			kind: "gitlab",
-			repos: ["group/project"],
+			repos: [repoSlug("group/project")],
 			base_url: "https://gitlab.com",
 		},
 	};
@@ -29,7 +30,7 @@ function jiraConfig(): Pick<Config, "tracker" | "code_host"> {
 		},
 		code_host: {
 			kind: "gitlab",
-			repos: ["group/project"],
+			repos: [repoSlug("group/project")],
 			base_url: "https://gitlab.com",
 		},
 	};

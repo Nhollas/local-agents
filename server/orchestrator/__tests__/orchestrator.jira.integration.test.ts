@@ -11,6 +11,7 @@ import {
 import { server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 import { jiraTrackerAdapter } from "../../trackers/jira.ts";
+import { jiraApiToken, jiraEmail } from "../../types/brands.ts";
 
 const statuses = {
 	pending: "To Do",
@@ -73,8 +74,8 @@ describe("Orchestrator Jira dispatch", () => {
 		const tracker = jiraTrackerAdapter(
 			createJiraClient({
 				baseUrl: JIRA_BASE_URL,
-				email: "agent@example.test",
-				apiToken: "jira-token",
+				email: jiraEmail("agent@example.test"),
+				apiToken: jiraApiToken("jira-token"),
 				maxAttempts: 1,
 			}),
 			{ project: "PROJ", repo: REPO, baseUrl: JIRA_BASE_URL, statuses },

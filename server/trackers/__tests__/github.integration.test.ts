@@ -7,6 +7,7 @@ import {
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
+import { githubToken, issueNumber } from "../../types/brands.ts";
 import { githubTrackerAdapter } from "../github.ts";
 
 describe("githubTrackerAdapter", () => {
@@ -27,7 +28,7 @@ describe("githubTrackerAdapter", () => {
 				}),
 			);
 
-			const github = createGitHubClient("test-token");
+			const github = createGitHubClient(githubToken("test-token"));
 			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
 
 			const issues = await tracker.fetchActiveIssues(REPO, "pending");
@@ -64,7 +65,7 @@ describe("githubTrackerAdapter", () => {
 				}),
 			);
 
-			const github = createGitHubClient("test-token");
+			const github = createGitHubClient(githubToken("test-token"));
 			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
 
 			const issues = await tracker.fetchActiveIssues(REPO, "pending");
@@ -105,7 +106,7 @@ describe("githubTrackerAdapter", () => {
 				),
 			);
 
-			const github = createGitHubClient("test-token");
+			const github = createGitHubClient(githubToken("test-token"));
 			const tracker = githubTrackerAdapter(github);
 
 			const issues = await tracker.fetchActiveIssues(REPO, "pending");
@@ -157,36 +158,54 @@ describe("githubTrackerAdapter", () => {
 				),
 			);
 
-			const github = createGitHubClient("test-token");
+			const github = createGitHubClient(githubToken("test-token"));
 			const tracker = githubTrackerAdapter(github);
 
 			await expect(
-				tracker.transitionState(REPO, 42, "running", "awaiting_review"),
+				tracker.transitionState(
+					REPO,
+					issueNumber(42),
+					"running",
+					"awaiting_review",
+				),
 			).resolves.toBeUndefined();
 		});
 	});
 
 	describe("parseIssueKey", () => {
 		it("parses GitHub issue keys", () => {
-			const github = createGitHubClient("test-token");
+			const github = createGitHubClient(githubToken("test-token"));
 			const tracker = githubTrackerAdapter(github);
 
 			expect(tracker.parseIssueKey("owner/repo#42")).toEqual({
-				repo: "owner/repo",
-				number: 42,
+				ok: true,
+				value: {
+					repo: "owner/repo",
+					number: 42,
+				},
 			});
 		});
 
-		it("rejects malformed GitHub issue keys", () => {
-			const github = createGitHubClient("test-token");
+		it("returns Err for malformed GitHub issue keys", () => {
+			const github = createGitHubClient(githubToken("test-token"));
 			const tracker = githubTrackerAdapter(github);
 
-			expect(() => tracker.parseIssueKey("owner/repo")).toThrow(
-				"Invalid GitHub issue key",
-			);
-			expect(() => tracker.parseIssueKey("owner/repo#42abc")).toThrow(
-				"Invalid GitHub issue key",
-			);
+			expect(tracker.parseIssueKey("owner/repo")).toEqual({
+				ok: false,
+				error: {
+					kind: "invalid_format",
+					input: "owner/repo",
+					message: "Invalid GitHub issue key: owner/repo",
+				},
+			});
+			expect(tracker.parseIssueKey("owner/repo#42abc")).toEqual({
+				ok: false,
+				error: {
+					kind: "invalid_format",
+					input: "owner/repo#42abc",
+					message: "Invalid GitHub issue key: owner/repo#42abc",
+				},
+			});
 		});
 	});
 });

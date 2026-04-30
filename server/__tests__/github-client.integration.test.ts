@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createGitHubClient } from "../github-client.ts";
 import { GITHUB_API, REPO } from "../testing/support/fixtures.ts";
 import { server } from "../testing/support/msw.ts";
+import { githubToken, issueNumber } from "../types/brands.ts";
 
 describe("GitHub client retry", () => {
 	it("retries on 500 and succeeds on the next attempt", async () => {
@@ -13,7 +14,9 @@ describe("GitHub client retry", () => {
 			}),
 		);
 
-		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
 		const user = await client.getAuthenticatedUser();
 
 		expect(user).toEqual({ login: "test-user" });
@@ -27,7 +30,9 @@ describe("GitHub client retry", () => {
 			}),
 		);
 
-		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
 		const user = await client.getAuthenticatedUser();
 
 		expect(user).toEqual({ login: "test-user" });
@@ -44,7 +49,9 @@ describe("GitHub client retry", () => {
 			}),
 		);
 
-		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
 		const user = await client.getAuthenticatedUser();
 
 		expect(user).toEqual({ login: "test-user" });
@@ -58,7 +65,7 @@ describe("GitHub client retry", () => {
 			),
 		);
 
-		const client = createGitHubClient("test-token", {
+		const client = createGitHubClient(githubToken("test-token"), {
 			maxAttempts: 2,
 			baseDelayMs: 1,
 		});
@@ -83,9 +90,13 @@ describe("GitHub client retry", () => {
 			}),
 		);
 
-		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
 
-		await expect(client.getIssue(REPO, 999)).rejects.toThrow("failed (404)");
+		await expect(client.getIssue(REPO, issueNumber(999))).rejects.toThrow(
+			"failed (404)",
+		);
 	});
 
 	it("retries on network errors", async () => {
@@ -96,7 +107,9 @@ describe("GitHub client retry", () => {
 			}),
 		);
 
-		const client = createGitHubClient("test-token", { baseDelayMs: 1 });
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
 		const user = await client.getAuthenticatedUser();
 
 		expect(user).toEqual({ login: "test-user" });
@@ -105,7 +118,7 @@ describe("GitHub client retry", () => {
 	it("throws after exhausting all attempts on network errors", async () => {
 		server.use(http.get(`${GITHUB_API}/user`, () => HttpResponse.error()));
 
-		const client = createGitHubClient("test-token", {
+		const client = createGitHubClient(githubToken("test-token"), {
 			maxAttempts: 2,
 			baseDelayMs: 1,
 		});

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../../testing/support/test-api.ts";
 import { seedEvent, seedRun } from "../../testing/support/test-db.ts";
+import { issueKey, runId } from "../../types/brands.ts";
 
 describe("GET /runs", () => {
 	it("returns empty array when no runs exist", async () => {
@@ -260,7 +261,7 @@ describe("POST /runs/:id/kill", () => {
 		const { app, runner } = createTestApi();
 		const { runId } = runner.enqueue({
 			name: "long-job",
-			issueKey: "test/repo#1",
+			issueKey: issueKey("test/repo#1"),
 			issueTitle: "Long running job",
 			handler: () => new Promise(() => {}),
 		});
@@ -290,7 +291,7 @@ describe("POST /runs/:id/kill", () => {
 describe("POST /runs/:id/retry", () => {
 	it("returns 201 with new runId on successful retry", async () => {
 		const { app, db } = createTestApi({
-			retryRun: async () => ({ runId: "new-run-1" }),
+			retryRun: async () => ({ runId: runId("new-run-1") }),
 		});
 		seedRun(db, { id: "failed-1", status: "failed" });
 

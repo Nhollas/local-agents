@@ -9,44 +9,45 @@ import {
 	runEvents,
 	runs,
 } from "./db/schema.ts";
+import type { IssueKey, RunId } from "./types/brands.ts";
 
 export type Run = typeof runs.$inferSelect;
 export type RunEvent = typeof runEvents.$inferSelect;
 
 export type RunRepository = {
 	insertRun(run: {
-		id: string;
+		id: RunId;
 		agentName: string;
-		issueKey: string;
+		issueKey: IssueKey;
 		issueTitle: string;
 		startedAt: string;
 		attempt: number;
-		parentRunId: string | null;
+		parentRunId: RunId | null;
 	}): void;
-	setSessionId(runId: string, sessionId: string | null): void;
-	setPhaseIndex(runId: string, phaseIndex: number): void;
+	setSessionId(runId: RunId, sessionId: string | null): void;
+	setPhaseIndex(runId: RunId, phaseIndex: number): void;
 	completeRun(
-		runId: string,
+		runId: RunId,
 		params: { completedAt: string; durationMs: number },
 	): void;
 	failRun(
-		runId: string,
+		runId: RunId,
 		params: { error: string; completedAt: string; durationMs?: number },
 	): void;
 	insertEvent(event: {
-		runId: string;
+		runId: RunId;
 		type: RunEventType;
 		data: Record<string, unknown>;
 		createdAt: string;
 	}): void;
-	getRunningSnapshot(): { id: string; issueKey: string }[];
-	getRunById(id: string): Run | undefined;
+	getRunningSnapshot(): { id: RunId; issueKey: IssueKey }[];
+	getRunById(id: RunId): Run | undefined;
 	getRuns(filters: {
 		agent?: string | undefined;
 		status?: RunStatus | undefined;
 		limit: number;
 	}): Run[];
-	getRunEvents(runId: string): RunEvent[];
+	getRunEvents(runId: RunId): RunEvent[];
 };
 
 export function createRunRepository(db: Db): RunRepository {
@@ -95,7 +96,7 @@ export function createRunRepository(db: Db): RunRepository {
 				.select({ id: runs.id, issueKey: runs.issueKey })
 				.from(runs)
 				.where(and(eq(runs.status, "running"), isNotNull(runs.issueKey)))
-				.all() as { id: string; issueKey: string }[];
+				.all() as { id: RunId; issueKey: IssueKey }[];
 		},
 
 		getRunById(id) {

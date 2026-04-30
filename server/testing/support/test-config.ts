@@ -1,4 +1,5 @@
 import type { Config } from "../../config.ts";
+import { repoSlug } from "../../types/brands.ts";
 
 export function createTestConfig(
 	overrides: Partial<Config["defaults"]> = {},
@@ -7,7 +8,7 @@ export function createTestConfig(
 		tracker: { kind: "github" },
 		code_host: {
 			kind: "github",
-			repos: ["test-owner/test-repo"],
+			repos: [repoSlug("test-owner/test-repo")],
 		},
 		defaults: {
 			polling_interval_ms: 100,

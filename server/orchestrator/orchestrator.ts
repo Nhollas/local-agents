@@ -8,6 +8,8 @@ import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
+import { branchName, type RepoSlug, type RunId } from "../types/brands.ts";
+import { unwrap } from "../types/result.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import { type RunAgent, runWorkflowPhases } from "./phase-runner.ts";
@@ -24,26 +26,26 @@ type OrchestratorConfig = {
 	tracker: TrackerAdapter;
 	codeHost: CodeHostAdapter;
 	config: Config;
-	workflows: Map<string, RepoWorkflow>;
+	workflows: Map<RepoSlug, RepoWorkflow>;
 	runner: Runner;
 	runAgent?: RunAgent;
 };
 
 type Orchestrator = {
 	tick(): Promise<void>;
-	retryRun(failedRunId: string): Promise<{ runId: string } | { error: string }>;
+	retryRun(failedRunId: RunId): Promise<{ runId: RunId } | { error: string }>;
 	/** Wait for all post-run work (PR creation, label swaps, cleanup) to finish. */
 	settled(): Promise<void>;
 	start(): void;
 	stop(): void;
 };
 
-type TaggedIssue = { issue: Issue; repo: string; workflow: RepoWorkflow };
+type TaggedIssue = { issue: Issue; repo: RepoSlug; workflow: RepoWorkflow };
 type TickState = {
-	runningByIssue: Map<string, string[]>;
+	runningByIssue: Map<string, RunId[]>;
 	runningCount: number;
 	pending: TaggedIssue[];
-	stillRunning: Map<string, Set<string>>;
+	stillRunning: Map<RepoSlug, Set<string>>;
 };
 
 export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
@@ -64,13 +66,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 	async function prepareAndDispatch(params: {
 		issue: Issue;
-		repo: string;
+		repo: RepoSlug;
 		workflow: RepoWorkflow;
 		attempt: number;
-		parentRunId?: string;
+		parentRunId?: RunId;
 		startPhaseIndex?: number;
 		failedPhaseResumeSessionId?: string;
-	}): Promise<string> {
+	}): Promise<RunId> {
 		const { issue, repo, workflow, attempt } = params;
 
 		const cloneUrl = codeHost.cloneUrl(repo);
@@ -173,11 +175,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 						// and warnings are captured in the run's log line.
 						if (result.status === "completed") {
 							try {
-								const head = renderPrompt(workflow.branch, { issue });
+								const head = branchName(
+									renderPrompt(workflow.branch, { issue }),
+								);
 								await codeHost.createChangeRequest(
 									repo,
 									head,
-									workflow.base_branch,
+									branchName(workflow.base_branch),
 									issue.title,
 									`Closes ${issue.key}`,
 								);
@@ -245,7 +249,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		const entries = [...workflows.entries()];
 
 		const dbSnapshot = runRepo.getRunningSnapshot();
-		const runningByIssue = new Map<string, string[]>();
+		const runningByIssue = new Map<string, RunId[]>();
 		for (const r of dbSnapshot) {
 			const ids = runningByIssue.get(r.issueKey) ?? [];
 			ids.push(r.id);
@@ -264,7 +268,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			Promise.allSettled(
 				entries.map(async ([repo]) => {
 					const issues = await tracker.fetchActiveIssues(repo, "running");
-					return { repo, keys: new Set(issues.map((i) => i.key)) };
+					return { repo, keys: new Set(issues.map((i) => i.key as string)) };
 				}),
 			),
 		]);
@@ -282,7 +286,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		}
 		pending.sort((a, b) => a.issue.createdAt.localeCompare(b.issue.createdAt));
 
-		const stillRunning = new Map<string, Set<string>>();
+		const stillRunning = new Map<RepoSlug, Set<string>>();
 		for (const result of runningResults) {
 			if (result.status === "fulfilled") {
 				stillRunning.set(result.value.repo, result.value.keys);
@@ -304,7 +308,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 	async function reconcileStaleRuns(state: TickState) {
 		for (const [key, runIds] of state.runningByIssue) {
-			const { repo } = tracker.parseIssueKey(key);
+			const { repo } = unwrap(tracker.parseIssueKey(key));
 			const repoKeys = state.stillRunning.get(repo);
 			if (repoKeys && !repoKeys.has(key)) {
 				logger.info({ key }, "orchestrator.reconcile_terminal");
@@ -323,7 +327,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		for (const [repo, keys] of state.stillRunning) {
 			for (const key of keys) {
 				if (state.runningByIssue.has(key)) continue;
-				const { number } = tracker.parseIssueKey(key);
+				const { number } = unwrap(tracker.parseIssueKey(key));
 				logger.info({ key }, "orchestrator.reconcile_orphan");
 				await tracker
 					.transitionState(repo, number, "running", "pending")
@@ -378,8 +382,8 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	}
 
 	async function retryRun(
-		failedRunId: string,
-	): Promise<{ runId: string } | { error: string }> {
+		failedRunId: RunId,
+	): Promise<{ runId: RunId } | { error: string }> {
 		const failedRun = runRepo.getRunById(failedRunId);
 		if (!failedRun) return { error: "Run not found" };
 		if (failedRun.status !== "failed") return { error: "Run is not failed" };
@@ -394,8 +398,8 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			return { error: "Issue already has a running agent" };
 		}
 
-		const { repo, number: issueNumber } = tracker.parseIssueKey(
-			failedRun.issueKey,
+		const { repo, number: issueNumber } = unwrap(
+			tracker.parseIssueKey(failedRun.issueKey),
 		);
 		const workflow = workflows.get(repo);
 		if (!workflow) return { error: "No workflow for repo" };

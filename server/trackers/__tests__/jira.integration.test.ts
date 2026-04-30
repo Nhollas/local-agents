@@ -8,6 +8,7 @@ import {
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
+import { issueNumber, jiraApiToken, jiraEmail } from "../../types/brands.ts";
 import { jiraTrackerAdapter } from "../jira.ts";
 
 const statuses = {
@@ -20,8 +21,8 @@ function createTracker() {
 	return jiraTrackerAdapter(
 		createJiraClient({
 			baseUrl: JIRA_BASE_URL,
-			email: "agent@example.test",
-			apiToken: "jira-token",
+			email: jiraEmail("agent@example.test"),
+			apiToken: jiraApiToken("jira-token"),
 			maxAttempts: 1,
 		}),
 		{
@@ -52,7 +53,7 @@ describe("jiraTrackerAdapter", () => {
 
 			const tracker = createTracker();
 
-			await expect(tracker.fetchIssue(REPO, 42)).resolves.toEqual({
+			await expect(tracker.fetchIssue(REPO, issueNumber(42))).resolves.toEqual({
 				key: "PROJ-42",
 				number: 42,
 				title: "Issue PROJ-42",
@@ -77,7 +78,7 @@ describe("jiraTrackerAdapter", () => {
 			);
 
 			const tracker = createTracker();
-			const issue = await tracker.fetchIssue(REPO, 7);
+			const issue = await tracker.fetchIssue(REPO, issueNumber(7));
 
 			expect(issue.description).toBe("");
 		});
@@ -96,7 +97,7 @@ describe("jiraTrackerAdapter", () => {
 			);
 
 			const tracker = createTracker();
-			const issue = await tracker.fetchIssue(REPO, 8);
+			const issue = await tracker.fetchIssue(REPO, issueNumber(8));
 
 			expect(issue.description).toBe("Plain description");
 		});
@@ -115,7 +116,7 @@ describe("jiraTrackerAdapter", () => {
 			);
 
 			const tracker = createTracker();
-			const issue = await tracker.fetchIssue(REPO, 9);
+			const issue = await tracker.fetchIssue(REPO, issueNumber(9));
 
 			expect(issue.description).toBe("");
 		});
@@ -165,8 +166,8 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = jiraTrackerAdapter(
 				createJiraClient({
 					baseUrl: JIRA_BASE_URL,
-					email: "agent@example.test",
-					apiToken: "jira-token",
+					email: jiraEmail("agent@example.test"),
+					apiToken: jiraApiToken("jira-token"),
 					maxAttempts: 1,
 				}),
 				{
@@ -215,7 +216,12 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = createTracker();
 
 			await expect(
-				tracker.transitionState(REPO, 42, "running", "awaiting_review"),
+				tracker.transitionState(
+					REPO,
+					issueNumber(42),
+					"running",
+					"awaiting_review",
+				),
 			).resolves.toBeUndefined();
 		});
 
@@ -236,7 +242,12 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = createTracker();
 
 			await expect(
-				tracker.transitionState(REPO, 42, "running", "awaiting_review"),
+				tracker.transitionState(
+					REPO,
+					issueNumber(42),
+					"running",
+					"awaiting_review",
+				),
 			).rejects.toThrow("No Jira transition for PROJ-42 to status In Review");
 		});
 	});
@@ -246,20 +257,33 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = createTracker();
 
 			expect(tracker.parseIssueKey("PROJ-42")).toEqual({
-				repo: REPO,
-				number: 42,
+				ok: true,
+				value: {
+					repo: REPO,
+					number: 42,
+				},
 			});
 		});
 
-		it("rejects malformed Jira issue keys", () => {
+		it("returns Err for malformed Jira issue keys", () => {
 			const tracker = createTracker();
 
-			expect(() => tracker.parseIssueKey("PROJ#42")).toThrow(
-				"Invalid Jira issue key",
-			);
-			expect(() => tracker.parseIssueKey("OTHER-42")).toThrow(
-				"Invalid Jira issue key",
-			);
+			expect(tracker.parseIssueKey("PROJ#42")).toEqual({
+				ok: false,
+				error: {
+					kind: "invalid_format",
+					input: "PROJ#42",
+					message: "Invalid Jira issue key: PROJ#42",
+				},
+			});
+			expect(tracker.parseIssueKey("OTHER-42")).toEqual({
+				ok: false,
+				error: {
+					kind: "invalid_format",
+					input: "OTHER-42",
+					message: "Invalid Jira issue key: OTHER-42",
+				},
+			});
 		});
 	});
 });

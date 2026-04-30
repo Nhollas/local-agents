@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTestWorkspaceRoot } from "../../testing/support/test-workspace.ts";
 import type { Issue } from "../../trackers/types.ts";
+import { issueKey, issueNumber } from "../../types/brands.ts";
 import {
 	expandMarkedShellBlocks,
 	markTrustedShellBlocks,
@@ -11,8 +12,8 @@ import {
 import { renderPrompt } from "../workflow.ts";
 
 const baseIssue: Issue = {
-	key: "owner/repo#1",
-	number: 1,
+	key: issueKey("owner/repo#1"),
+	number: issueNumber(1),
 	title: "Fix the thing",
 	description: "Detailed description",
 	labels: ["bug", "urgent"],

@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
+import type {
+	BranchName,
+	GitHubToken,
+	IssueNumber,
+	RepoSlug,
+} from "./types/brands.ts";
 
 const BASE_URL = "https://api.github.com";
 
@@ -26,21 +32,26 @@ export type GitHubIssue = z.infer<typeof githubIssueSchema>;
 export type GitHubClient = {
 	getAuthenticatedUser(): Promise<{ login: string }>;
 	getFileContent(
-		repo: string,
+		repo: RepoSlug,
 		path: string,
 		ref?: string,
 	): Promise<{ content: string }>;
 	listPullRequests(
-		repo: string,
-		params: { head: string; base: string; state: string },
+		repo: RepoSlug,
+		params: { head: BranchName; base: BranchName; state: string },
 	): Promise<{ number: number; html_url: string }[]>;
 	createPullRequest(
-		repo: string,
-		params: { title: string; body: string; head: string; base: string },
+		repo: RepoSlug,
+		params: {
+			title: string;
+			body: string;
+			head: BranchName;
+			base: BranchName;
+		},
 	): Promise<{ number: number; html_url: string }>;
-	getIssue(repo: string, issueNumber: number): Promise<GitHubIssue>;
+	getIssue(repo: RepoSlug, issueNumber: IssueNumber): Promise<GitHubIssue>;
 	listIssues(
-		repo: string,
+		repo: RepoSlug,
 		params: {
 			labels: string;
 			state: string;
@@ -49,19 +60,19 @@ export type GitHubClient = {
 		},
 	): Promise<GitHubIssue[]>;
 	removeIssueLabel(
-		repo: string,
-		issueNumber: number,
+		repo: RepoSlug,
+		issueNumber: IssueNumber,
 		label: string,
 	): Promise<void>;
 	addIssueLabels(
-		repo: string,
-		issueNumber: number,
+		repo: RepoSlug,
+		issueNumber: IssueNumber,
 		labels: string[],
 	): Promise<void>;
 };
 
 export function createGitHubClient(
-	token: string,
+	token: GitHubToken,
 	options?: HttpClientOptions,
 ): GitHubClient {
 	const request = createJsonRequester({
@@ -80,7 +91,7 @@ export function createGitHubClient(
 			return request("/user", { schema: githubUserSchema });
 		},
 
-		getFileContent(repo: string, path: string, ref?: string) {
+		getFileContent(repo, path, ref) {
 			const encodedPath = path.split("/").map(encodeURIComponent).join("/");
 			const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
 			return request(`/repos/${repo}/contents/${encodedPath}${query}`, {
@@ -88,20 +99,14 @@ export function createGitHubClient(
 			});
 		},
 
-		listPullRequests(
-			repo: string,
-			params: { head: string; base: string; state: string },
-		) {
+		listPullRequests(repo, params) {
 			const query = new URLSearchParams(params);
 			return request(`/repos/${repo}/pulls?${query}`, {
 				schema: z.array(githubPullRequestSchema),
 			});
 		},
 
-		createPullRequest(
-			repo: string,
-			params: { title: string; body: string; head: string; base: string },
-		) {
+		createPullRequest(repo, params) {
 			return request(`/repos/${repo}/pulls`, {
 				method: "POST",
 				body: params,
@@ -109,35 +114,27 @@ export function createGitHubClient(
 			});
 		},
 
-		getIssue(repo: string, issueNumber: number) {
+		getIssue(repo, issueNumber) {
 			return request(`/repos/${repo}/issues/${issueNumber}`, {
 				schema: githubIssueSchema,
 			});
 		},
 
-		listIssues(
-			repo: string,
-			params: {
-				labels: string;
-				state: string;
-				creator: string;
-				per_page: string;
-			},
-		) {
+		listIssues(repo, params) {
 			const query = new URLSearchParams(params);
 			return request(`/repos/${repo}/issues?${query}`, {
 				schema: z.array(githubIssueSchema),
 			});
 		},
 
-		removeIssueLabel(repo: string, issueNumber: number, label: string) {
+		removeIssueLabel(repo, issueNumber, label) {
 			return request(
 				`/repos/${repo}/issues/${issueNumber}/labels/${encodeURIComponent(label)}`,
 				{ method: "DELETE" },
 			);
 		},
 
-		addIssueLabels(repo: string, issueNumber: number, labels: string[]) {
+		addIssueLabels(repo, issueNumber, labels) {
 			return request(`/repos/${repo}/issues/${issueNumber}/labels`, {
 				method: "POST",
 				body: { labels },

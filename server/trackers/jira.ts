@@ -1,4 +1,6 @@
 import type { JiraClient, JiraIssue } from "../jira-client.ts";
+import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
+import { err, ok } from "../types/result.ts";
 import { decorateTracker } from "./decorator.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
 
@@ -6,13 +8,13 @@ type JiraStatuses = Record<TrackerState, string>;
 
 type JiraTrackerOptions = {
 	project: string;
-	repo: string;
+	repo: RepoSlug;
 	baseUrl: string;
 	statuses: JiraStatuses;
 };
 
-function issueKey(project: string, issueNumber: number): string {
-	return `${project}-${issueNumber}`;
+function jiraIssueKey(project: string, num: number): string {
+	return `${project}-${num}`;
 }
 
 function trimTrailingSlash(value: string): string {
@@ -35,12 +37,12 @@ function extractText(value: unknown): string {
 	return "";
 }
 
-function parseJiraKey(project: string, key: string): number {
+function parseJiraKey(project: string, key: string): number | null {
 	const match = /^([A-Z][A-Z0-9_]*)-(\d+)$/.exec(key);
 	const matchedProject = match?.[1];
 	const matchedNumber = match?.[2];
 	if (!matchedProject || !matchedNumber || matchedProject !== project) {
-		throw new Error(`Invalid Jira issue key: ${key}`);
+		return null;
 	}
 	return Number.parseInt(matchedNumber, 10);
 }
@@ -50,9 +52,14 @@ function mapJiraIssue(
 	baseUrl: string,
 	issue: JiraIssue,
 ): Issue {
+	const num = parseJiraKey(project, issue.key);
+	/* v8 ignore next 3 -- defensive check; Jira API returns keys matching its own search filter */
+	if (num == null) {
+		throw new Error(`Invalid Jira issue key from API: ${issue.key}`);
+	}
 	return {
-		key: issue.key,
-		number: parseJiraKey(project, issue.key),
+		key: issueKey(issue.key),
+		number: issueNumber(num),
 		title: issue.fields.summary,
 		description: extractText(issue.fields.description),
 		labels: [issue.fields.status.name],
@@ -66,17 +73,14 @@ export function jiraTrackerAdapter(
 	options: JiraTrackerOptions,
 ): TrackerAdapter {
 	return decorateTracker({
-		async fetchIssue(_repo: string, issueNumber: number): Promise<Issue> {
+		async fetchIssue(_repo, issueNum): Promise<Issue> {
 			const issue = await client.getIssue(
-				issueKey(options.project, issueNumber),
+				jiraIssueKey(options.project, issueNum),
 			);
 			return mapJiraIssue(options.project, options.baseUrl, issue);
 		},
 
-		async fetchActiveIssues(
-			_repo: string,
-			state: TrackerState,
-		): Promise<Issue[]> {
+		async fetchActiveIssues(_repo, state): Promise<Issue[]> {
 			const filter = [
 				`project = ${quoteJqlString(options.project)}`,
 				`status = ${quoteJqlString(options.statuses[state])}`,
@@ -88,13 +92,8 @@ export function jiraTrackerAdapter(
 			);
 		},
 
-		async transitionState(
-			_repo: string,
-			issueNumber: number,
-			_from: TrackerState,
-			to: TrackerState,
-		): Promise<void> {
-			const key = issueKey(options.project, issueNumber);
+		async transitionState(_repo, issueNum, _from, to): Promise<void> {
+			const key = jiraIssueKey(options.project, issueNum);
 			const targetStatus = options.statuses[to];
 			const transitions = await client.listTransitions(key);
 			const transition = transitions.find((t) => t.to.name === targetStatus);
@@ -106,11 +105,19 @@ export function jiraTrackerAdapter(
 			await client.transitionIssue(key, transition.id);
 		},
 
-		parseIssueKey(key: string): { repo: string; number: number } {
-			return {
+		parseIssueKey(key) {
+			const num = parseJiraKey(options.project, key);
+			if (num == null) {
+				return err({
+					kind: "invalid_format",
+					input: key,
+					message: `Invalid Jira issue key: ${key}`,
+				});
+			}
+			return ok({
 				repo: options.repo,
-				number: parseJiraKey(options.project, key),
-			};
+				number: issueNumber(num),
+			});
 		},
 	});
 }

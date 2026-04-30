@@ -11,6 +11,7 @@ import {
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { getEvents, seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+import { runId as rid } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 const failedRunDefaults = {
@@ -205,7 +206,7 @@ describe("Orchestrator multi-phase workflows", () => {
 			phaseIndex: 1,
 		});
 
-		await expect(orchestrator.retryRun("failed-phase")).resolves.toEqual({
+		await expect(orchestrator.retryRun(rid("failed-phase"))).resolves.toEqual({
 			runId: expect.any(String),
 		});
 		await runner.queue.waitForIdle();
@@ -250,7 +251,9 @@ describe("Orchestrator multi-phase workflows", () => {
 			phaseIndex: 1,
 		});
 
-		await expect(orchestrator.retryRun("failed-no-session")).resolves.toEqual({
+		await expect(
+			orchestrator.retryRun(rid("failed-no-session")),
+		).resolves.toEqual({
 			runId: expect.any(String),
 		});
 		await runner.queue.waitForIdle();
