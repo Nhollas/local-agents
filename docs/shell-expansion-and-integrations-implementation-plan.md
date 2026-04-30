@@ -325,7 +325,25 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 4 — Shell Expansion
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-04-shell-expansion`.
+
+**Completed changes:**
+
+- Added trusted shell block marking and expansion helpers with a hard-coded 30-second timeout.
+- Expanded only template-authored marked shell blocks after prompt rendering and before `query()`.
+- Executed expansion commands in the workspace directory and in parallel.
+- Failed runs on shell non-zero exit, timeout, signal termination, and spawn errors.
+- Stripped internal marker characters from rendered variables and final prompts so issue title and description content cannot forge executable shell blocks.
+- Added workflow helper and orchestrator integration tests for expansion, workspace cwd, parallel execution, variable substitution, injection prevention, marker stripping, literal unmarked shell text, and strict failure behavior.
+
+**Verification:**
+
+- `pnpm test:coverage`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
 **Purpose:** Add trusted pre-prompt shell expansion with strict failure behavior.
 
