@@ -89,6 +89,7 @@ describe("Orchestrator dispatch", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -160,6 +161,7 @@ describe("Orchestrator dispatch", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -203,6 +205,7 @@ describe("Orchestrator dispatch", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 			{
 				id: expect.any(String),
@@ -217,6 +220,7 @@ describe("Orchestrator dispatch", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -260,6 +264,7 @@ describe("Orchestrator dispatch", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 

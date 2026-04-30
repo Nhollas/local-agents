@@ -52,8 +52,10 @@ type QueryParams = Parameters<typeof query>[0];
 
 export function createPromptSpyAgent() {
 	let captured: QueryParams | undefined;
+	const capturedCalls: QueryParams[] = [];
 	async function* spyAgent(params: QueryParams) {
 		captured = params;
+		capturedCalls.push(params);
 		yield {
 			type: "assistant" as const,
 			session_id: "spy-session",
@@ -68,7 +70,7 @@ export function createPromptSpyAgent() {
 		return captured;
 	}
 
-	return { spyAgent, getCaptured };
+	return { spyAgent, getCaptured, getCapturedCalls: () => capturedCalls };
 }
 
 export function createTestWorkflow(

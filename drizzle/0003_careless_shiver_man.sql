@@ -1,0 +1,1 @@
+ALTER TABLE `runs` ADD `phase_index` integer DEFAULT 0 NOT NULL;

@@ -106,6 +106,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -184,6 +185,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 					sessionId: null,
 					attempt: 1,
 					parentRunId: null,
+					phaseIndex: 0,
 				},
 				{
 					id: expect.any(String),
@@ -198,6 +200,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 					sessionId: null,
 					attempt: 1,
 					parentRunId: null,
+					phaseIndex: 0,
 				},
 			]),
 		);
@@ -238,6 +241,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 				sessionId: "test-sess-abc",
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -286,6 +290,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 				sessionId: "sess-mixed",
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});

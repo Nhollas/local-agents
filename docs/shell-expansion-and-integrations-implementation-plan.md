@@ -389,7 +389,25 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 5 — Multi-Phase Workflow Schema And Runner
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-05-multi-phase`.
+
+**Completed changes:**
+
+- Extended workflow parsing to accept either a single `prompt` or ordered `phases`, rejecting both/neither.
+- Added phase normalization so single-prompt workflows continue through the same execution path as a one-phase workflow.
+- Added `server/orchestrator/phase-runner.ts` for sequential phase execution with per-phase shell expansion, session capture, resume handling, and phase markers.
+- Added `runs.phaseIndex` plus a Drizzle migration and updated run serialization/test expectations.
+- Updated retry to start at the failed phase, resume the failed phase session when available, and run fresh when no failed-phase session exists.
+- Added focused multi-phase integration tests for sequencing, shell expansion, `resume_previous`, hooks, failure markers, phase progress, and retry behavior.
+
+**Verification:**
+
+- `pnpm test:coverage`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
 **Purpose:** Add simple staged prompts without completion signals or orchestrator-level iteration loops.
 

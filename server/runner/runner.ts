@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eventBus, type RunEvent } from "../event-bus.ts";
+import { eventBus, type PhaseEvent, type RunEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
 
@@ -8,7 +8,9 @@ export const ABORT_ERROR = "Run killed by user";
 export type RunContext = {
 	runId: string;
 	emitToolUse: (tool: string, target: string) => void;
-	setSessionId: (id: string) => void;
+	emitPhaseEvent: (event: PhaseEvent) => void;
+	setSessionId: (id: string | null) => void;
+	setPhaseIndex: (index: number) => void;
 	signal: AbortSignal;
 };
 
@@ -115,11 +117,12 @@ export function createRunner(config: RunnerConfig): Runner {
 		queue.enqueue(async () => {
 			const executionStart = Date.now();
 
-			let sessionCaptured = false;
-			const setSessionId = (id: string) => {
-				if (sessionCaptured) return;
-				sessionCaptured = true;
+			const setSessionId = (id: string | null) => {
 				repo.setSessionId(runId, id);
+			};
+
+			const setPhaseIndex = (index: number) => {
+				repo.setPhaseIndex(runId, index);
 			};
 
 			const emitToolUse = (tool: string, target: string) => {
@@ -127,6 +130,10 @@ export function createRunner(config: RunnerConfig): Runner {
 					type: "run:tool_use",
 					data: { tool, target },
 				});
+			};
+
+			const emitPhaseEvent: RunContext["emitPhaseEvent"] = (event) => {
+				emitEvent(runId, job.name, event);
 			};
 
 			const abortPromise = new Promise<RunResult>((resolve) => {
@@ -143,7 +150,9 @@ export function createRunner(config: RunnerConfig): Runner {
 				job.handler({
 					runId,
 					emitToolUse,
+					emitPhaseEvent,
 					setSessionId,
+					setPhaseIndex,
 					signal: controller.signal,
 				}),
 				abortPromise,

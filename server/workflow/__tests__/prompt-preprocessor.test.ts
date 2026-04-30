@@ -135,11 +135,33 @@ describe("shell block preprocessing", () => {
 		).rejects.toThrow(/failed to spawn/);
 	});
 
+	it("fails when the shell is terminated by signal", async () => {
+		await using workspace = await createTestWorkspaceRoot();
+
+		const marked = markTrustedShellBlocks("!`kill -TERM $$`");
+
+		await expect(
+			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
+		).rejects.toThrow(/terminated by signal SIGTERM/);
+	});
+
 	it("fails when shell output exceeds the buffer cap", async () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const marked = markTrustedShellBlocks(
 			"!`yes x | head -c 2000000; printf done`",
+		);
+
+		await expect(
+			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
+		).rejects.toThrow(/exceeded max output/);
+	});
+
+	it("fails when shell stderr exceeds the buffer cap", async () => {
+		await using workspace = await createTestWorkspaceRoot();
+
+		const marked = markTrustedShellBlocks(
+			"!`dd if=/dev/zero bs=1048577 count=1 1>&2 2>/dev/null`",
 		);
 
 		await expect(

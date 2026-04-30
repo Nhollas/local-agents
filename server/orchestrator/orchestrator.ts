@@ -8,13 +8,9 @@ import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import {
-	expandMarkedShellBlocks,
-	markTrustedShellBlocks,
-} from "../workflow/prompt-preprocessor.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
-import { logAgentMessage } from "./agent-logging.ts";
+import { type RunAgent, runWorkflowPhases } from "./phase-runner.ts";
 import { ensureWorkspace, removeWorkspace } from "./workspace.ts";
 
 const exec = promisify(execFile);
@@ -22,12 +18,6 @@ const exec = promisify(execFile);
 async function runShell(script: string, cwd: string): Promise<void> {
 	await exec("sh", ["-c", script], { cwd });
 }
-
-type RunAgent = (
-	params: Parameters<typeof query>[0],
-) => AsyncIterable<
-	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never
->;
 
 type OrchestratorConfig = {
 	runRepo: RunRepository;
@@ -78,7 +68,8 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		workflow: RepoWorkflow;
 		attempt: number;
 		parentRunId?: string;
-		resumeSessionId?: string;
+		startPhaseIndex?: number;
+		failedPhaseResumeSessionId?: string;
 	}): Promise<string> {
 		const { issue, repo, workflow, attempt } = params;
 
@@ -97,14 +88,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			});
 			await runShell(script, ws.path);
 		}
-
-		const renderedPrompt = renderPrompt(
-			markTrustedShellBlocks(workflow.prompt),
-			{
-				issue,
-				attempt,
-			},
-		);
 
 		const { runId, done } = runner.enqueue({
 			name: `issue-${issue.number}`,
@@ -134,35 +117,22 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 							await Promise.race([
 								(async () => {
-									const options = {
+									await runWorkflowPhases({
+										ctx,
+										runAgent,
+										workflow,
+										issue,
+										attempt,
 										cwd: ws.path,
 										model: defaults.model,
-										allowedTools: [
-											"Read",
-											"Write",
-											"Edit",
-											"Bash",
-											"Glob",
-											"Grep",
-										],
-										permissionMode: "dontAsk" as const,
-										...(params.resumeSessionId && {
-											resume: params.resumeSessionId,
+										...(params.startPhaseIndex != null && {
+											startPhaseIndex: params.startPhaseIndex,
 										}),
-									};
-
-									const prompt = await expandMarkedShellBlocks(renderedPrompt, {
-										cwd: ws.path,
+										...(params.failedPhaseResumeSessionId && {
+											failedPhaseResumeSessionId:
+												params.failedPhaseResumeSessionId,
+										}),
 									});
-
-									for await (const msg of runAgent({
-										prompt,
-										options,
-									})) {
-										if (msg.type !== "assistant") continue;
-										logAgentMessage(msg, ws.path, ctx.emitToolUse);
-										ctx.setSessionId(msg.session_id);
-									}
 
 									if (workflow.hooks?.after_run) {
 										const script = renderPrompt(workflow.hooks.after_run, {
@@ -413,7 +383,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		const failedRun = runRepo.getRunById(failedRunId);
 		if (!failedRun) return { error: "Run not found" };
 		if (failedRun.status !== "failed") return { error: "Run is not failed" };
-		if (!failedRun.sessionId) return { error: "No session to resume" };
 		if (!failedRun.issueKey) return { error: "No issue key" };
 
 		const attempt = failedRun.attempt + 1;
@@ -439,7 +408,10 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			workflow,
 			attempt,
 			parentRunId: failedRunId,
-			resumeSessionId: failedRun.sessionId,
+			startPhaseIndex: failedRun.phaseIndex,
+			...(failedRun.sessionId && {
+				failedPhaseResumeSessionId: failedRun.sessionId,
+			}),
 		});
 
 		logger.info(

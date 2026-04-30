@@ -36,6 +36,7 @@ describe("GET /runs", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 			{
 				id: "middle",
@@ -50,6 +51,7 @@ describe("GET /runs", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 			{
 				id: "oldest",
@@ -64,6 +66,7 @@ describe("GET /runs", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -99,6 +102,7 @@ describe("GET /runs", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -139,6 +143,7 @@ describe("GET /runs", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -167,6 +172,7 @@ describe("GET /runs", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
@@ -213,6 +219,7 @@ describe("GET /runs/:id", () => {
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
+			phaseIndex: 0,
 			events: [
 				{
 					id: "evt-1",

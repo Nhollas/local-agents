@@ -144,6 +144,7 @@ describe("Orchestrator dispatch hooks and completion", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 
@@ -192,6 +193,7 @@ describe("Orchestrator dispatch hooks and completion", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 
@@ -250,6 +252,7 @@ describe("Orchestrator dispatch hooks and completion", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
+				phaseIndex: 0,
 			},
 		]);
 	});
