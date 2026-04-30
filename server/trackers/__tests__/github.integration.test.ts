@@ -183,6 +183,9 @@ describe("githubTrackerAdapter", () => {
 			const github = createGitHubClient("test-token");
 			const tracker = githubTrackerAdapter(github);
 
+			expect(() => tracker.parseIssueKey("owner/repo")).toThrow(
+				"Invalid GitHub issue key",
+			);
 			expect(() => tracker.parseIssueKey("owner/repo#42abc")).toThrow(
 				"Invalid GitHub issue key",
 			);
