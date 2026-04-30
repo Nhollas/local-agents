@@ -592,7 +592,24 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 8 — Documentation And Architecture Refresh
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-08-docs-refresh`.
+
+**Completed changes:**
+
+- Refreshed README setup and configuration guidance for GitHub, Jira, GitLab code hosting, global `workflow.yaml`, multi-phase workflows, trusted shell expansion, and migration from old repo/workflow locations.
+- Updated architecture docs to describe current tracker/code-host responsibilities, global workflow loading, logical tracker states, multi-phase execution, shell expansion, retry behavior, and migration notes.
+- Kept the design and decisions docs linked from the README and corrected stale implementation-facing examples.
+
+**Verification:**
+
+- `pnpm test:coverage` before docs changes: 100% statements, 100% branches, 100% functions, and 100% lines.
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:coverage`
+- `bash -lc "! rg -n 'workflow\\.base_branch|Issue Tracker \\\\(GitHub Issues, GitLab|per-repo workflow caching|per-target-repo workflow loading|logical state completed|completion_signal|max_iterations|PROJ#42' README.md docs/architecture.md docs/design-shell-expansion-and-integrations.md -S"`
 
 **Purpose:** Bring user-facing docs in line with the implemented system.
 

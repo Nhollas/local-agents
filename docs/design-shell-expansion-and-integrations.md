@@ -39,7 +39,7 @@ The settled design adds:
 
 `config.yaml` owns service configuration and the code-host repo list.
 
-The config key is singular: `code_host`, not `code_hosts`. The application configures one code host provider at a time, and `code_host.repos` is the allow-list of repositories the orchestrator may clone, work in, and open PRs/MRs against. The existing top-level `repos` field should move under `code_host` as part of this change.
+The config key is singular: `code_host`, not `code_hosts`. The application configures one code host provider at a time, and `code_host.repos` is the allow-list of repositories the orchestrator may clone, work in, and open PRs/MRs against. The old top-level `repos` field is no longer accepted.
 
 ```yaml
 tracker:
@@ -113,13 +113,13 @@ phases:
   - name: review
     prompt: |
       Review the diff against the plan.
-      !`git diff {{ workflow.base_branch }}...HEAD`
+      !`git diff main...HEAD`
 ```
 
-Workflow loading becomes a one-shot local file load at startup:
+Workflow loading is a one-shot local file load at startup:
 
-- `server/workflow/workflow-loader.ts` should expose `loadWorkflow(path): RepoWorkflow`.
-- Polling refresh and last-known-good workflow cache logic should be removed.
+- `server/workflow/workflow-loader.ts` exposes `loadWorkflow(path): RepoWorkflow`.
+- Polling refresh and last-known-good workflow cache logic have been removed.
 - `codeHost.fetchFile()` is no longer used to load workflows from target repos.
 - Restarting the orchestrator is required to pick up workflow file changes.
 
@@ -378,7 +378,9 @@ Jira issue keys are native Jira keys, for example `PROJ-42`.
 | `transitionState(repo, number, from, to)` | Resolve the transition whose target status matches `to`, then POST it. |
 | `parseIssueKey(key)` | Parse native Jira keys such as `PROJ-42`. |
 
-For Jira, `repo` means the global `tracker.project` value.
+For Jira, the adapter derives the Jira issue key from the configured
+`tracker.project` and issue number. `parseIssueKey()` returns the single
+configured code-host repo because Jira issues do not identify a repo directly.
 
 Because Jira issues do not identify the code repo they belong to, Jira support is limited to one configured code-host repo per orchestrator instance.
 

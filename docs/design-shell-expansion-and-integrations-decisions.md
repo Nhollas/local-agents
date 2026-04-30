@@ -405,7 +405,7 @@ phases:
   - name: review
     prompt: |
       Review the diff against the plan.
-      !`git diff {{ workflow.base_branch }}...HEAD`
+      !`git diff main...HEAD`
 ```
 
 ### Environment variables
