@@ -219,7 +219,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 									.catch((labelErr) =>
 										canonicalLog.append(
 											"warnings",
-											`label_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
+											`state_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
 										),
 									);
 							}

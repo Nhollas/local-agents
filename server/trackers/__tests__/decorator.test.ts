@@ -35,18 +35,30 @@ describe("decorateTracker", () => {
 
 	describe("transitionState", () => {
 		it("delegates to inner tracker on success", async () => {
-			const calls: { repo: string; issueNumber: number }[] = [];
+			const calls: {
+				repo: string;
+				issueNumber: number;
+				from: string;
+				to: string;
+			}[] = [];
 
 			const decorated = decorateTracker(
 				createFakeTracker({
-					transitionState: async (repo, issueNumber) => {
-						calls.push({ repo, issueNumber });
+					transitionState: async (repo, issueNumber, from, to) => {
+						calls.push({ repo, issueNumber, from, to });
 					},
 				}),
 			);
 
 			await decorated.transitionState("owner/repo", 42, "pending", "running");
-			expect(calls).toEqual([{ repo: "owner/repo", issueNumber: 42 }]);
+			expect(calls).toEqual([
+				{
+					repo: "owner/repo",
+					issueNumber: 42,
+					from: "pending",
+					to: "running",
+				},
+			]);
 		});
 
 		it("re-throws when inner transitionState fails", async () => {
