@@ -2,6 +2,8 @@ import type { query } from "@anthropic-ai/claude-agent-sdk";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 export const GITHUB_API = "https://api.github.com";
+export const GITLAB_BASE_URL = "https://gitlab.example.test";
+export const GITLAB_API = `${GITLAB_BASE_URL}/api/v4`;
 export const REPO = "test-owner/test-repo";
 
 export function createGitHubIssue(

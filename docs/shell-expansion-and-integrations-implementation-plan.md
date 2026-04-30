@@ -460,7 +460,26 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 6 — GitLab Code Host Adapter
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-06-gitlab`.
+
+**Completed changes:**
+
+- Added a GitLab API client using `PRIVATE-TOKEN` authentication and encoded project/file paths.
+- Added `server/code-hosts/gitlab.ts` with clone URL generation, file fetching, and idempotent merge request creation.
+- Extended config parsing for `code_host.kind: gitlab` with optional `base_url` defaulting to `https://gitlab.com`.
+- Added startup env validation for `GITLAB_TOKEN` when GitLab is configured while preserving GitHub token validation.
+- Wired server startup to choose the GitHub or GitLab code-host adapter from config.
+- Updated config examples and docs for GitLab code hosting and corrected the checked-in `config.yaml` repo shape.
+- Added focused config, env, and GitLab adapter HTTP-level tests.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:coverage`
 
 **Purpose:** Add GitLab as a code host while preserving the `CodeHostAdapter` contract.
 

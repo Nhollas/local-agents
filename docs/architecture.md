@@ -46,6 +46,17 @@ defaults:
   workspace_root: /tmp/local-agent-workspaces
 ```
 
+GitLab code hosting uses the same `code_host.repos` list. `base_url` is optional
+and defaults to `https://gitlab.com`:
+
+```yaml
+code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.com
+  repos:
+    - group/project
+```
+
 ### 2. Global workflow
 
 The local-agents working directory contains one `workflow.yaml` with hooks and
@@ -112,9 +123,9 @@ The orchestrator detects when issues are closed or resolved and kills the corres
 The system uses two adapter interfaces to stay decoupled from any specific platform:
 
 - **TrackerAdapter** — fetches active issues from a tracker and manages label state
-- **CodeHostAdapter** — fetches files from repos, generates clone URLs, and creates pull requests
+- **CodeHostAdapter** — fetches files from repos, generates clone URLs, and creates pull requests or merge requests
 
-Both are currently implemented for GitHub (via the `gh` CLI and API). Adding support for another platform means implementing these two interfaces.
+GitHub is implemented as both a tracker and code host. GitLab is implemented as a code host. Adding full support for another platform means implementing the relevant adapter interface.
 
 ## Design Principles
 

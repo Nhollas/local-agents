@@ -5,10 +5,16 @@ export type Config = {
 	tracker: {
 		kind: "github";
 	};
-	code_host: {
-		kind: "github";
-		repos: string[];
-	};
+	code_host:
+		| {
+				kind: "github";
+				repos: string[];
+		  }
+		| {
+				kind: "gitlab";
+				repos: string[];
+				base_url: string;
+		  };
 	defaults: {
 		polling_interval_ms: number;
 		max_concurrent: number;
@@ -23,10 +29,21 @@ const configSchema = z
 		tracker: z.object({
 			kind: z.literal("github"),
 		}),
-		code_host: z.object({
-			kind: z.literal("github"),
-			repos: z.array(z.string()).min(1),
-		}),
+		code_host: z.discriminatedUnion("kind", [
+			z
+				.object({
+					kind: z.literal("github"),
+					repos: z.array(z.string()).min(1),
+				})
+				.strict(),
+			z
+				.object({
+					kind: z.literal("gitlab"),
+					repos: z.array(z.string()).min(1),
+					base_url: z.string().url().default("https://gitlab.com"),
+				})
+				.strict(),
+		]),
 		defaults: z
 			.object({
 				polling_interval_ms: z.number().default(30000),
