@@ -326,7 +326,7 @@ The dashboard already renders agent messages from the run; phase markers slot in
 | 6 | Jira adapter | Feature | 2 |
 
 **Refactor 1 (workflow relocation):**
-- `server/workflow/workflow-cache.ts` becomes a one-shot loader (`loadWorkflow(path): RepoWorkflow`).
+- `server/workflow/workflow-loader.ts` is a one-shot loader (`loadWorkflow(path): RepoWorkflow`).
 - Polling/refresh/last-known-good logic deleted.
 - `codeHost` no longer passed to the workflow loader.
 - Server bootstrap (`server.ts:35`) shrinks correspondingly.

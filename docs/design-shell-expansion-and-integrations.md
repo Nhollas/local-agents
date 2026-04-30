@@ -118,7 +118,7 @@ phases:
 
 Workflow loading becomes a one-shot local file load at startup:
 
-- `server/workflow/workflow-cache.ts` should be replaced or reduced to `loadWorkflow(path): RepoWorkflow`.
+- `server/workflow/workflow-loader.ts` should expose `loadWorkflow(path): RepoWorkflow`.
 - Polling refresh and last-known-good workflow cache logic should be removed.
 - `codeHost.fetchFile()` is no longer used to load workflows from target repos.
 - Restarting the orchestrator is required to pick up workflow file changes.

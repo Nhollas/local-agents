@@ -11,7 +11,7 @@ import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
 import { githubTrackerAdapter } from "./trackers/github.ts";
-import { createWorkflowCache } from "./workflow/workflow-cache.ts";
+import { createWorkflowMap, loadWorkflow } from "./workflow/workflow-loader.ts";
 
 const env = loadEnv();
 const config = loadConfig(env.CONFIG_PATH);
@@ -31,16 +31,16 @@ const runner = createRunner({
 	maxConcurrency: config.defaults.max_concurrent,
 });
 
-// Fetch workflows from all repos, then start
-const workflowCache = createWorkflowCache(codeHost, config.code_host.repos);
-await workflowCache.refresh();
+// Load the global workflow once at startup.
+const workflow = loadWorkflow();
+const workflows = createWorkflowMap(config.code_host.repos, workflow);
 
 const orchestrator = createOrchestrator({
 	runRepo: repo,
 	tracker,
 	codeHost,
 	config,
-	workflows: workflowCache.workflows,
+	workflows,
 	runner,
 });
 
@@ -69,8 +69,7 @@ const app = createApi({
 	checkHealth,
 });
 
-// Start polling + workflow refresh
-workflowCache.start();
+// Start polling
 orchestrator.start();
 
 const DRAIN_TIMEOUT_MS = 30_000;
@@ -80,7 +79,7 @@ const httpServer = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 		{
 			port: info.port,
 			repos: config.code_host.repos,
-			activeRepos: [...workflowCache.workflows.keys()],
+			activeRepos: [...workflows.keys()],
 			interval: config.defaults.polling_interval_ms,
 		},
 		"orchestrator.started",
@@ -95,7 +94,6 @@ async function shutdown(signal: string) {
 	logger.info({ signal }, "shutdown.start");
 
 	orchestrator.stop();
-	workflowCache.stop();
 	httpServer.close();
 
 	// Drain in-flight runs with a timeout
