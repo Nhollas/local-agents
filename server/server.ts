@@ -1,11 +1,14 @@
 import { serve } from "@hono/node-server";
 import { createApi, type HealthCheck } from "./api/api.ts";
 import { githubCodeHostAdapter } from "./code-hosts/github.ts";
+import { gitlabCodeHostAdapter } from "./code-hosts/gitlab.ts";
+import type { CodeHostAdapter } from "./code-hosts/types.ts";
 import { loadConfig } from "./config.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
 import { loadEnv } from "./env.ts";
 import { createGitHubClient } from "./github-client.ts";
+import { createGitLabClient } from "./gitlab-client.ts";
 import { logger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { createRunRepository } from "./run-repository.ts";
@@ -13,17 +16,26 @@ import { createRunner } from "./runner/runner.ts";
 import { githubTrackerAdapter } from "./trackers/github.ts";
 import { createWorkflowMap, loadWorkflow } from "./workflow/workflow-loader.ts";
 
-const env = loadEnv();
-const config = loadConfig(env.CONFIG_PATH);
+const baseEnv = loadEnv();
+const config = loadConfig(baseEnv.CONFIG_PATH);
+const env = loadEnv(config);
 
 // Initialize database
 const db = getDb();
 migrate(db);
 
 // Create components
-const github = createGitHubClient(env.GITHUB_TOKEN);
+const github = createGitHubClient(env.GITHUB_TOKEN ?? "");
 const tracker = githubTrackerAdapter(github);
-const codeHost = githubCodeHostAdapter(github);
+let codeHost: CodeHostAdapter;
+if (config.code_host.kind === "github") {
+	codeHost = githubCodeHostAdapter(github);
+} else {
+	const gitlab = createGitLabClient(env.GITLAB_TOKEN ?? "", {
+		baseUrl: config.code_host.base_url,
+	});
+	codeHost = gitlabCodeHostAdapter(gitlab, config.code_host.base_url);
+}
 const repo = createRunRepository(db);
 
 const runner = createRunner({
@@ -78,6 +90,7 @@ const httpServer = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 	logger.info(
 		{
 			port: info.port,
+			codeHost: config.code_host.kind,
 			repos: config.code_host.repos,
 			activeRepos: [...workflows.keys()],
 			interval: config.defaults.polling_interval_ms,

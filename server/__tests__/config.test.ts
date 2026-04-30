@@ -40,6 +40,45 @@ defaults:
 		expect(config.defaults.workspace_root).toBe("/tmp/workspaces");
 	});
 
+	it("accepts gitlab code host with default base URL", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: github
+code_host:
+  kind: gitlab
+  repos:
+    - group/project
+`);
+
+		const config = loadConfig(configFile.path);
+
+		expect(config.code_host).toEqual({
+			kind: "gitlab",
+			repos: ["group/project"],
+			base_url: "https://gitlab.com",
+		});
+	});
+
+	it("accepts gitlab code host with configured base URL", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: github
+code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.test
+  repos:
+    - platform/team/project
+`);
+
+		const config = loadConfig(configFile.path);
+
+		expect(config.code_host).toEqual({
+			kind: "gitlab",
+			repos: ["platform/team/project"],
+			base_url: "https://gitlab.example.test",
+		});
+	});
+
 	it("rejects config without code_host repos", () => {
 		using configFile = writeConfig(`
 tracker:

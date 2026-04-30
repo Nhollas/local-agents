@@ -37,6 +37,17 @@ defaults:
   workspace_root: /tmp/local-agent-workspaces
 ```
 
+For GitLab-hosted code, use `kind: gitlab`; `base_url` is optional and defaults
+to `https://gitlab.com`:
+
+```yaml
+code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.com
+  repos:
+    - your-group/your-project
+```
+
 Create `workflow.yaml` in the local-agents working directory to define hooks and
 the prompt used for every configured repo:
 
