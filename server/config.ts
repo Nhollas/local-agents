@@ -46,7 +46,7 @@ const configSchema = z
 			z
 				.object({
 					kind: z.literal("jira"),
-					base_url: z.string().url(),
+					base_url: z.url(),
 					project: z.string().min(1),
 					statuses: z
 						.object({
@@ -74,7 +74,7 @@ const configSchema = z
 				.object({
 					kind: z.literal("gitlab"),
 					repos: z.array(z.string()).min(1),
-					base_url: z.string().url().default("https://gitlab.com"),
+					base_url: z.url().default("https://gitlab.com"),
 				})
 				.strict(),
 		]),
