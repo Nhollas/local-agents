@@ -523,7 +523,25 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 7 — Jira Tracker Adapter
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30 on branch `plan/slice-07-jira`.
+
+**Completed changes:**
+
+- Added a Jira Cloud REST client using basic auth from `JIRA_EMAIL` and `JIRA_API_TOKEN`.
+- Added `server/trackers/jira.ts` with Jira-native issue keys, configurable logical-state status mapping, safe JQL construction, active issue polling, issue fetch, and transition resolution/posting.
+- Extended config parsing for `tracker.kind: jira`, required `base_url` and `project`, default/custom statuses, and exactly one configured code-host repo.
+- Wired startup env validation and server adapter selection for GitHub or Jira trackers.
+- Added focused config, env, Jira client, Jira tracker, and orchestrator integration tests, including the single-repo Jira mapping.
+- Documented Jira credentials in `.env.example`.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:coverage`
 
 **Purpose:** Add Jira Cloud as a tracker on top of the platform-neutral tracker state model.
 
