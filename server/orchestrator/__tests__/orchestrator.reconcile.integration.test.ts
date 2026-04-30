@@ -235,13 +235,56 @@ describe("Orchestrator reconciliation", () => {
 	it("does not orphan-reconcile a run with pending post-run work", async () => {
 		let pendingIssues = [createGitHubIssue(1, ["agent"])];
 		let runningIssues: ReturnType<typeof createGitHubIssue>[] = [];
-		const labelOps: string[] = [];
 		let releasePrCreate = () => {};
 		const prCreateBarrier = new Promise<void>(
 			(resolve) => (releasePrCreate = resolve),
 		);
 
+		// Strict one-shot handlers in dispatch order:
+		// 1. DELETE labels/agent       (initial swap pending → running)
+		// 2. POST labels [agent:running]
+		// 3. DELETE labels/agent:running (post-success swap → awaiting-review)
+		// 4. POST labels [agent:awaiting-review]
+		// We assert finalSwap*.isUsed to confirm the ONLY swap that ran was the
+		// post-success one — no orphan-reconcile kill happened mid-flight.
+		const initialDelete = http.delete(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent`,
+			() => new HttpResponse(null, { status: 204 }),
+			{ once: true },
+		);
+		const initialPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:running") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
+		const finalDelete = http.delete(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent:running`,
+			() => new HttpResponse(null, { status: 204 }),
+			{ once: true },
+		);
+		const finalPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:awaiting-review") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
+
 		server.use(
+			initialDelete,
+			initialPost,
+			finalDelete,
+			finalPost,
 			// Custom PR handler must come first to override the default in githubHandlers
 			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, async () => {
 				await prCreateBarrier;
@@ -256,8 +299,6 @@ describe("Orchestrator reconciliation", () => {
 					if (label === "agent:running") return runningIssues;
 					return [];
 				},
-				onLabelAdd: (label) => labelOps.push(`+${label}`),
-				onLabelDelete: (label) => labelOps.push(`-${label}`),
 			}),
 		);
 
@@ -276,19 +317,20 @@ describe("Orchestrator reconciliation", () => {
 		// Simulate GitHub still showing agent:running (label swap hasn't happened yet)
 		pendingIssues = [];
 		runningIssues = [createGitHubIssue(1, ["agent:running"])];
-		labelOps.length = 0;
 
-		// Tick 2: should NOT orphan-reconcile because the issue is settling
+		// Tick 2: should NOT orphan-reconcile because the issue is settling.
+		// The post-success swap handlers must remain unused after this tick.
 		await orchestrator.tick();
 
-		expect(labelOps).toEqual([]);
+		expect(finalDelete.isUsed).toBe(false);
+		expect(finalPost.isUsed).toBe(false);
 
 		// Release the barrier and let onSettled finish
 		releasePrCreate();
 		await orchestrator.settled();
 
-		// Verify the final label swap happened correctly
-		expect(labelOps).toEqual(["-agent:running", "+agent:awaiting-review"]);
+		expect(finalDelete.isUsed).toBe(true);
+		expect(finalPost.isUsed).toBe(true);
 	});
 
 	it("marks stale DB runs as failed when no process exists to kill", async () => {

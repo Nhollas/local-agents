@@ -22,12 +22,12 @@ describe("fetchFile", () => {
 	});
 
 	it("passes ref as query param when provided", async () => {
-		let capturedRef: string | null = null;
-
 		server.use(
 			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, ({ request }) => {
 				const url = new URL(request.url);
-				capturedRef = url.searchParams.get("ref");
+				if (url.searchParams.get("ref") !== "feature-branch") {
+					return new HttpResponse(null, { status: 400 });
+				}
 				return HttpResponse.json({
 					content: Buffer.from("from branch").toString("base64"),
 				});
@@ -39,8 +39,8 @@ describe("fetchFile", () => {
 			"README.md",
 			"feature-branch",
 		);
+
 		expect(content).toBe("from branch");
-		expect(capturedRef).toBe("feature-branch");
 	});
 
 	it("returns null when file does not exist", async () => {

@@ -8,15 +8,15 @@ const REPO = "group/project";
 
 describe("GitLab client retry", () => {
 	it("retries on 500 and succeeds on the next attempt", async () => {
-		let attempts = 0;
 		server.use(
-			http.get(`${GITLAB_API}/projects/:project/merge_requests`, () => {
-				attempts++;
-				if (attempts === 1) {
-					return new HttpResponse(null, { status: 500 });
-				}
-				return HttpResponse.json([]);
-			}),
+			http.get(
+				`${GITLAB_API}/projects/:project/merge_requests`,
+				() => new HttpResponse(null, { status: 500 }),
+				{ once: true },
+			),
+			http.get(`${GITLAB_API}/projects/:project/merge_requests`, () =>
+				HttpResponse.json([]),
+			),
 		);
 
 		const client = createGitLabClient("test-token", {
@@ -30,7 +30,6 @@ describe("GitLab client retry", () => {
 		});
 
 		expect(mergeRequests).toEqual([]);
-		expect(attempts).toBe(2);
 	});
 
 	it("throws after exhausting all retry attempts", async () => {

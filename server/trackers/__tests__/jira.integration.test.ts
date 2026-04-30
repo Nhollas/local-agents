@@ -36,12 +36,16 @@ function createTracker() {
 describe("jiraTrackerAdapter", () => {
 	describe("fetchIssue", () => {
 		it("maps Jira issues to tracker issues", async () => {
+			const expectedAuth = `Basic ${Buffer.from("agent@example.test:jira-token").toString("base64")}`;
+
 			server.use(
 				http.get(`${JIRA_API}/issue/:key`, ({ request, params }) => {
-					expect(params["key"]).toBe("PROJ-42");
-					expect(request.headers.get("Authorization")).toBe(
-						`Basic ${Buffer.from("agent@example.test:jira-token").toString("base64")}`,
-					);
+					if (
+						params["key"] !== "PROJ-42" ||
+						request.headers.get("Authorization") !== expectedAuth
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json(createJiraIssue("PROJ-42", "To Do"));
 				}),
 			);
@@ -119,20 +123,19 @@ describe("jiraTrackerAdapter", () => {
 
 	describe("fetchActiveIssues", () => {
 		it("builds safe JQL for the configured project and logical status", async () => {
-			let capturedJql = "";
-			let capturedMaxResults: unknown;
-			let capturedFields: unknown;
+			const expectedFields = ["summary", "description", "status", "created"];
 
 			server.use(
 				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
-					const body = (await request.json()) as {
-						jql?: string;
-						maxResults?: unknown;
-						fields?: unknown;
-					};
-					capturedJql = body.jql ?? "";
-					capturedMaxResults = body.maxResults;
-					capturedFields = body.fields;
+					const body = (await request.json()) as Record<string, unknown>;
+					if (
+						body["jql"] !==
+							'project = "PROJ" AND status = "To Do" ORDER BY created ASC' ||
+						body["maxResults"] !== 100 ||
+						JSON.stringify(body["fields"]) !== JSON.stringify(expectedFields)
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json({
 						issues: [createJiraIssue("PROJ-1", "To Do")],
 					});
@@ -142,26 +145,19 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = createTracker();
 			const issues = await tracker.fetchActiveIssues(REPO, "pending");
 
-			expect(capturedJql).toBe(
-				'project = "PROJ" AND status = "To Do" ORDER BY created ASC',
-			);
-			expect(capturedMaxResults).toBe(100);
-			expect(capturedFields).toEqual([
-				"summary",
-				"description",
-				"status",
-				"created",
-			]);
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 		});
 
 		it("escapes quotes and backslashes in custom status names", async () => {
-			let capturedJql = "";
-
 			server.use(
 				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
 					const body = (await request.json()) as { jql?: string };
-					capturedJql = body.jql ?? "";
+					if (
+						body.jql !==
+						'project = "PROJ" AND status = "Ready \\"Now\\" \\\\ Backlog" ORDER BY created ASC'
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json({ issues: [] });
 				}),
 			);
@@ -184,21 +180,19 @@ describe("jiraTrackerAdapter", () => {
 				},
 			);
 
-			await tracker.fetchActiveIssues(REPO, "pending");
-
-			expect(capturedJql).toBe(
-				'project = "PROJ" AND status = "Ready \\"Now\\" \\\\ Backlog" ORDER BY created ASC',
+			await expect(tracker.fetchActiveIssues(REPO, "pending")).resolves.toEqual(
+				[],
 			);
 		});
 	});
 
 	describe("transitionState", () => {
 		it("resolves and posts the transition whose target status matches the logical state", async () => {
-			let postedBody: unknown;
-
 			server.use(
 				http.get(`${JIRA_API}/issue/:key/transitions`, ({ params }) => {
-					expect(params["key"]).toBe("PROJ-42");
+					if (params["key"] !== "PROJ-42") {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json({
 						transitions: [
 							{ id: "11", name: "Start", to: { name: "In Progress" } },
@@ -207,15 +201,22 @@ describe("jiraTrackerAdapter", () => {
 					});
 				}),
 				http.post(`${JIRA_API}/issue/:key/transitions`, async ({ request }) => {
-					postedBody = await request.json();
+					const body = await request.json();
+					if (
+						JSON.stringify(body) !==
+						JSON.stringify({ transition: { id: "21" } })
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return new HttpResponse(null, { status: 204 });
 				}),
 			);
 
 			const tracker = createTracker();
-			await tracker.transitionState(REPO, 42, "running", "awaiting_review");
 
-			expect(postedBody).toEqual({ transition: { id: "21" } });
+			await expect(
+				tracker.transitionState(REPO, 42, "running", "awaiting_review"),
+			).resolves.toBeUndefined();
 		});
 
 		it("fails when Jira does not expose a transition to the target status", async () => {

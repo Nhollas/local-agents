@@ -6,16 +6,18 @@ export const server = setupServer();
 
 type GitHubIssue = ReturnType<typeof createGitHubIssue>;
 
+const CANONICAL_LABELS = new Set([
+	"agent",
+	"agent:running",
+	"agent:awaiting-review",
+]);
+
 export function githubHandlers({
 	issues = [],
 	resolveIssues,
-	onLabelDelete,
-	onLabelAdd,
 }: {
 	issues?: GitHubIssue[];
 	resolveIssues?: (label: string) => GitHubIssue[];
-	onLabelDelete?: (label: string) => void;
-	onLabelAdd?: (label: string) => void;
 } = {}) {
 	const resolve =
 		resolveIssues ?? ((label: string) => (label === "agent" ? issues : []));
@@ -39,7 +41,9 @@ export function githubHandlers({
 		http.delete<{ label: string }>(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
 			({ params }) => {
-				onLabelDelete?.(params.label);
+				if (!CANONICAL_LABELS.has(decodeURIComponent(params.label))) {
+					return new HttpResponse(null, { status: 400 });
+				}
 				return new HttpResponse(null, { status: 204 });
 			},
 		),
@@ -48,7 +52,9 @@ export function githubHandlers({
 			async ({ request }) => {
 				const body = (await request.json()) as { labels: string[] };
 				const label = body.labels[0];
-				if (label) onLabelAdd?.(label);
+				if (!label || !CANONICAL_LABELS.has(label)) {
+					return new HttpResponse(null, { status: 400 });
+				}
 				return HttpResponse.json([]);
 			},
 		),

@@ -76,13 +76,54 @@ describe("Orchestrator dispatch failure and polling", () => {
 	});
 
 	it("swaps label back to pending when retries exhausted", async () => {
-		const labelOps: { method: string; label: string }[] = [];
+		// Strict one-shot handlers in dispatch order:
+		// 1. DELETE labels/agent       (initial swap pending → running)
+		// 2. POST labels [agent:running]
+		// 3. DELETE labels/agent:running (rollback running → pending)
+		// 4. POST labels [agent]         (rollback)
+		// Each handler validates the exact expected shape and is consumed by its
+		// turn in the sequence. We assert via MSW's `isUsed` rather than
+		// capturing request data outside the handler.
+		const initialDelete = http.delete(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent`,
+			() => new HttpResponse(null, { status: 204 }),
+			{ once: true },
+		);
+		const initialPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent:running") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
+		const rollbackDelete = http.delete(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent:running`,
+			() => new HttpResponse(null, { status: 204 }),
+			{ once: true },
+		);
+		const rollbackPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
 
 		server.use(
+			initialDelete,
+			initialPost,
+			rollbackDelete,
+			rollbackPost,
 			...githubHandlers({
 				issues: [createGitHubIssue(1, ["agent"])],
-				onLabelDelete: (label) => labelOps.push({ method: "delete", label }),
-				onLabelAdd: (label) => labelOps.push({ method: "add", label }),
 			}),
 		);
 
@@ -97,12 +138,8 @@ describe("Orchestrator dispatch failure and polling", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
-		// Should have swapped agent:running → agent (back to pending)
-		expect(labelOps).toContainEqual({
-			method: "delete",
-			label: "agent:running",
-		});
-		expect(labelOps).toContainEqual({ method: "add", label: "agent" });
+		expect(rollbackDelete.isUsed).toBe(true);
+		expect(rollbackPost.isUsed).toBe(true);
 	});
 
 	it("does not crash when label rollback fails after retries exhausted", async () => {

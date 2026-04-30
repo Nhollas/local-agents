@@ -20,8 +20,32 @@ const statuses = {
 
 describe("Orchestrator Jira dispatch", () => {
 	it("maps Jira issues to the single configured code-host repo", async () => {
-		const changeRequests: { repo: string; body: string }[] = [];
-		const transitionTargets: string[] = [];
+		// Strict one-shot handlers fire only when the orchestrator posts the
+		// expected transition ids in order: 11 (To Do → In Progress) on dispatch,
+		// then 21 (→ In Review) after success. We assert via `isUsed` rather than
+		// capturing request bodies.
+		const startTransition = http.post(
+			`${JIRA_API}/issue/:key/transitions`,
+			async ({ request }) => {
+				const body = (await request.json()) as { transition: { id: string } };
+				if (body.transition.id !== "11") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return new HttpResponse(null, { status: 204 });
+			},
+			{ once: true },
+		);
+		const reviewTransition = http.post(
+			`${JIRA_API}/issue/:key/transitions`,
+			async ({ request }) => {
+				const body = (await request.json()) as { transition: { id: string } };
+				if (body.transition.id !== "21") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return new HttpResponse(null, { status: 204 });
+			},
+			{ once: true },
+		);
 
 		server.use(
 			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
@@ -42,13 +66,8 @@ describe("Orchestrator Jira dispatch", () => {
 					],
 				}),
 			),
-			http.post(`${JIRA_API}/issue/:key/transitions`, async ({ request }) => {
-				const body = (await request.json()) as {
-					transition: { id: string };
-				};
-				transitionTargets.push(body.transition.id);
-				return new HttpResponse(null, { status: 204 });
-			}),
+			startTransition,
+			reviewTransition,
 		);
 
 		const tracker = jiraTrackerAdapter(
@@ -61,12 +80,18 @@ describe("Orchestrator Jira dispatch", () => {
 			{ project: "PROJ", repo: REPO, baseUrl: JIRA_BASE_URL, statuses },
 		);
 
+		// Strict codeHost stub: returns success only when called against the
+		// single configured Jira-mapped repo with the expected close body.
 		await using ctx = await createTestOrchestrator({
 			tracker: () => tracker,
 			codeHost: (defaults) => ({
 				...defaults,
 				createChangeRequest: async (repo, _head, _base, _title, body) => {
-					changeRequests.push({ repo, body });
+					if (repo !== REPO || body !== "Closes PROJ-42") {
+						throw new Error(
+							`Unexpected createChangeRequest(${repo}, ..., ${body})`,
+						);
+					}
 					return { number: 1, url: "https://example.test/change/1" };
 				},
 			}),
@@ -79,7 +104,7 @@ describe("Orchestrator Jira dispatch", () => {
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
-		expect(changeRequests).toEqual([{ repo: REPO, body: "Closes PROJ-42" }]);
-		expect(transitionTargets).toEqual(["11", "21"]);
+		expect(startTransition.isUsed).toBe(true);
+		expect(reviewTransition.isUsed).toBe(true);
 	});
 });

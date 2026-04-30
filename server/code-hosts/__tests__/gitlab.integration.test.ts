@@ -22,17 +22,14 @@ describe("cloneUrl", () => {
 		const defaultAdapter = gitlabCodeHostAdapter(
 			createGitLabClient("test-token"),
 		);
-		let capturedPathname = "";
 
 		server.use(
 			http.get(
-				"https://gitlab.com/api/v4/projects/:project/repository/files/:file",
-				({ request }) => {
-					capturedPathname = new URL(request.url).pathname;
-					return HttpResponse.json({
+				"https://gitlab.com/api/v4/projects/group%2Fsubgroup%2Fproject/repository/files/README.md",
+				() =>
+					HttpResponse.json({
 						content: Buffer.from("default base").toString("base64"),
-					});
-				},
+					}),
 			),
 		);
 
@@ -42,26 +39,26 @@ describe("cloneUrl", () => {
 		expect(defaultAdapter.cloneUrl(REPO)).toBe(
 			"https://gitlab.com/group/subgroup/project.git",
 		);
-		expect(capturedPathname).toBe(
-			"/api/v4/projects/group%2Fsubgroup%2Fproject/repository/files/README.md",
-		);
 	});
 });
 
 describe("fetchFile", () => {
 	it("fetches file content through the encoded GitLab project and file API path", async () => {
-		let capturedPathname = "";
-		let capturedRef: string | null = null;
-		let capturedToken: string | null = null;
+		const expectedPath =
+			"/api/v4/projects/group%2Fsubgroup%2Fproject/repository/files/docs%2Fguide.md";
 
 		server.use(
 			http.get(
 				`${GITLAB_API}/projects/:project/repository/files/:file`,
 				({ request }) => {
 					const url = new URL(request.url);
-					capturedPathname = url.pathname;
-					capturedRef = url.searchParams.get("ref");
-					capturedToken = request.headers.get("PRIVATE-TOKEN");
+					if (
+						url.pathname !== expectedPath ||
+						url.searchParams.get("ref") !== "feature/gitlab" ||
+						request.headers.get("PRIVATE-TOKEN") !== "test-token"
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json({
 						content: Buffer.from("hello from gitlab").toString("base64"),
 					});
@@ -76,11 +73,6 @@ describe("fetchFile", () => {
 		);
 
 		expect(content).toBe("hello from gitlab");
-		expect(capturedPathname).toBe(
-			"/api/v4/projects/group%2Fsubgroup%2Fproject/repository/files/docs%2Fguide.md",
-		);
-		expect(capturedRef).toBe("feature/gitlab");
-		expect(capturedToken).toBe("test-token");
 	});
 
 	it("returns null when the GitLab file does not exist", async () => {
@@ -98,21 +90,35 @@ describe("fetchFile", () => {
 
 describe("createChangeRequest", () => {
 	it("creates a new MR when none exists", async () => {
-		let capturedSearchParams: URLSearchParams | undefined;
-		let capturedBody: unknown;
+		const expectedBody = {
+			source_branch: "agent/issue-1",
+			target_branch: "main",
+			title: "Fix issue 1",
+			description: "Closes TEST-1",
+		};
 
 		server.use(
 			http.get(
 				`${GITLAB_API}/projects/:project/merge_requests`,
 				({ request }) => {
-					capturedSearchParams = new URL(request.url).searchParams;
+					const params = new URL(request.url).searchParams;
+					if (
+						params.get("source_branch") !== "agent/issue-1" ||
+						params.get("target_branch") !== "main" ||
+						params.get("state") !== "opened"
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json([]);
 				},
 			),
 			http.post(
 				`${GITLAB_API}/projects/:project/merge_requests`,
 				async ({ request }) => {
-					capturedBody = await request.json();
+					const body = await request.json();
+					if (JSON.stringify(body) !== JSON.stringify(expectedBody)) {
+						return new HttpResponse(null, { status: 400 });
+					}
 					return HttpResponse.json({
 						iid: 5,
 						web_url: `${GITLAB_BASE_URL}/${REPO}/-/merge_requests/5`,
@@ -129,15 +135,6 @@ describe("createChangeRequest", () => {
 			"Closes TEST-1",
 		);
 
-		expect(capturedSearchParams?.get("source_branch")).toBe("agent/issue-1");
-		expect(capturedSearchParams?.get("target_branch")).toBe("main");
-		expect(capturedSearchParams?.get("state")).toBe("opened");
-		expect(capturedBody).toEqual({
-			source_branch: "agent/issue-1",
-			target_branch: "main",
-			title: "Fix issue 1",
-			description: "Closes TEST-1",
-		});
 		expect(result).toEqual({
 			number: 5,
 			url: `${GITLAB_BASE_URL}/${REPO}/-/merge_requests/5`,
