@@ -48,6 +48,12 @@ describe("renderPrompt", () => {
 	});
 });
 
+const validChangeRequest = `
+change_request:
+  title: "PR for {{ issue.key }}"
+  body: "Closes {{ issue.key }}"
+`;
+
 describe("parseRepoWorkflow", () => {
 	it("accepts a single-step workflow", () => {
 		const yaml = `
@@ -56,7 +62,7 @@ base_branch: main
 steps:
   - name: implement
     prompt: Fix this issue
-`;
+${validChangeRequest}`;
 
 		const result = parseRepoWorkflow(yaml);
 
@@ -66,6 +72,10 @@ steps:
 			steps: [
 				{ name: "implement", prompt: "Fix this issue", resume_previous: false },
 			],
+			change_request: {
+				title: "PR for {{ issue.key }}",
+				body: "Closes {{ issue.key }}",
+			},
 		});
 	});
 
@@ -79,7 +89,7 @@ steps:
   - name: implement
     prompt: Implement the plan
     resume_previous: true
-`;
+${validChangeRequest}`;
 
 		const result = parseRepoWorkflow(yaml);
 
@@ -91,6 +101,62 @@ steps:
 				resume_previous: true,
 			},
 		]);
+	});
+
+	it("rejects workflows missing change_request", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects change_request missing title", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+change_request:
+  body: "Closes {{ issue.key }}"
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects change_request missing body", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+change_request:
+  title: "PR"
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects change_request with unknown keys", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+change_request:
+  title: "PR"
+  body: "Closes"
+  labels: [bug]
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
 	it("rejects workflows missing branch", () => {

@@ -96,6 +96,10 @@ export function createTestWorkflow(
 				resume_previous: false,
 			},
 		],
+		change_request: {
+			title: "{{ issue.title }}",
+			body: "Closes {{ issue.key }}",
+		},
 		...overrides,
 	};
 }

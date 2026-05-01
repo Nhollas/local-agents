@@ -90,3 +90,10 @@ steps:
       If you find issues, fix them directly on this branch and commit the
       refinements with a Conventional Commit message. If the branch is
       already good, make no changes.
+
+change_request:
+  title: "{{ issue.title }}"
+  body: |
+    Closes {{ issue.key }}.
+
+    Branch: `{{ branch }}`

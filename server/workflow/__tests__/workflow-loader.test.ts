@@ -11,6 +11,9 @@ base_branch: "main"
 steps:
   - name: implement
     prompt: "Fix the issue"
+change_request:
+  title: "PR for {{ issue.key }}"
+  body: "Closes {{ issue.key }}"
 `;
 
 type TestWorkflowFile = {
@@ -42,6 +45,10 @@ describe("loadWorkflow", () => {
 			steps: [
 				{ name: "implement", prompt: "Fix the issue", resume_previous: false },
 			],
+			change_request: {
+				title: "PR for {{ issue.key }}",
+				body: "Closes {{ issue.key }}",
+			},
 		});
 	});
 
