@@ -43,7 +43,14 @@ export async function ensureBranch(
 }
 
 export async function removeWorkspace(wsPath: string): Promise<void> {
-	await rm(wsPath, { recursive: true, force: true });
+	// maxRetries tolerates a tail of git i/o (e.g. from a killed agent whose
+	// ensureBranch was still settling) racing with the rm.
+	await rm(wsPath, {
+		recursive: true,
+		force: true,
+		maxRetries: 5,
+		retryDelay: 25,
+	});
 }
 
 const SETUP_SCRIPT_PATH = ".agent/setup.sh";

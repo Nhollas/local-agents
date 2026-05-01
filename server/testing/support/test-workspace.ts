@@ -36,7 +36,14 @@ export async function createTestWorkspaceRoot(): Promise<TestWorkspace> {
 			return wsPath;
 		},
 		async [Symbol.asyncDispose]() {
-			await rm(root, { recursive: true, force: true });
+			// maxRetries tolerates a tail of git i/o from a killed agent's
+			// ensureBranch racing with the rm.
+			await rm(root, {
+				recursive: true,
+				force: true,
+				maxRetries: 5,
+				retryDelay: 25,
+			});
 		},
 	};
 }
