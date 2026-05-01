@@ -386,4 +386,59 @@ describe("Orchestrator reconciliation", () => {
 		const runsAfterSecondTick = db.select().from(runs).all();
 		expect(runsAfterSecondTick).toEqual(allRuns);
 	});
+
+	it("rolls back orphan label when GitHub still says agent:running but DB has no running run", async () => {
+		const recoveryDelete = http.delete(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent:running`,
+			() => new HttpResponse(null, { status: 204 }),
+			{ once: true },
+		);
+		const recoveryPost = http.post(
+			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+			async ({ request }) => {
+				const body = (await request.json()) as { labels: string[] };
+				if (body.labels[0] !== "agent") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			},
+			{ once: true },
+		);
+
+		server.use(
+			recoveryDelete,
+			recoveryPost,
+			...githubHandlers({
+				resolveIssues: (label) => {
+					if (label === "agent:running")
+						return [createGitHubIssue(1, ["agent:running"])];
+					return [];
+				},
+			}),
+		);
+
+		await using ctx = await createTestOrchestrator({ runAgent: noopAgent });
+		const { orchestrator, db, runner } = ctx;
+
+		db.insert(runs)
+			.values({
+				id: rid("completed-orphan"),
+				agentName: "issue-1",
+				status: "completed",
+				issueKey: issueKey(`${REPO}#1`),
+				issueTitle: "Issue 1",
+				startedAt: new Date().toISOString(),
+				completedAt: new Date().toISOString(),
+				durationMs: 1,
+				attempt: 1,
+			})
+			.run();
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		expect(recoveryDelete.isUsed).toBe(true);
+		expect(recoveryPost.isUsed).toBe(true);
+	});
 });

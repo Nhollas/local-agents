@@ -6,7 +6,11 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber } from "../../types/brands.ts";
-import { ensureWorkspace, removeWorkspace } from "../workspace.ts";
+import {
+	ensureWorkspace,
+	realRunShell,
+	removeWorkspace,
+} from "../workspace.ts";
 
 const exec = promisify(execFile);
 
@@ -54,10 +58,22 @@ describe("ensureWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(1);
 
-		const first = await ensureWorkspace(issue, ws.root, bareRepo);
+		const first = await ensureWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			undefined,
+			realRunShell,
+		);
 		expect(first.created).toBe(true);
 
-		const second = await ensureWorkspace(issue, ws.root, bareRepo);
+		const second = await ensureWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			undefined,
+			realRunShell,
+		);
 		expect(second.created).toBe(false);
 		expect(second.path).toBe(first.path);
 	});
@@ -66,9 +82,13 @@ describe("ensureWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(2);
 
-		const result = await ensureWorkspace(issue, ws.root, bareRepo, {
-			after_create: "touch hook_ran",
-		});
+		const result = await ensureWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			{ after_create: "touch hook_ran" },
+			realRunShell,
+		);
 
 		expect(result.created).toBe(true);
 		await expect(
@@ -80,11 +100,15 @@ describe("ensureWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(3);
 
-		await ensureWorkspace(issue, ws.root, bareRepo);
+		await ensureWorkspace(issue, ws.root, bareRepo, undefined, realRunShell);
 
-		const result = await ensureWorkspace(issue, ws.root, bareRepo, {
-			after_create: "touch should_not_exist",
-		});
+		const result = await ensureWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			{ after_create: "touch should_not_exist" },
+			realRunShell,
+		);
 
 		expect(result.created).toBe(false);
 		await expect(
@@ -98,7 +122,13 @@ describe("removeWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(4);
 
-		const { path: wsPath } = await ensureWorkspace(issue, ws.root, bareRepo);
+		const { path: wsPath } = await ensureWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			undefined,
+			realRunShell,
+		);
 
 		await removeWorkspace(wsPath);
 		await expect(access(wsPath)).rejects.toThrow();

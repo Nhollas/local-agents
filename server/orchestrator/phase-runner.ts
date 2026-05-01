@@ -1,4 +1,3 @@
-import type { query } from "@anthropic-ai/claude-agent-sdk";
 import * as canonicalLog from "../canonical-log.ts";
 import type { PhaseEvent } from "../event-bus.ts";
 import type { RunContext } from "../runner/runner.ts";
@@ -9,17 +8,12 @@ import {
 } from "../workflow/prompt-preprocessor.ts";
 import type { RepoWorkflow, WorkflowPhase } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
+import type { AgentInvoker } from "./agent-invoker.ts";
 import { logAgentMessage } from "./agent-logging.ts";
-
-export type RunAgent = (
-	params: Parameters<typeof query>[0],
-) => AsyncIterable<
-	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never
->;
 
 type RunWorkflowPhasesParams = {
 	ctx: RunContext;
-	runAgent: RunAgent;
+	agent: AgentInvoker;
 	workflow: RepoWorkflow;
 	issue: Issue;
 	attempt: number;
@@ -31,7 +25,7 @@ type RunWorkflowPhasesParams = {
 
 export async function runWorkflowPhases({
 	ctx,
-	runAgent,
+	agent,
 	workflow,
 	issue,
 	attempt,
@@ -60,7 +54,7 @@ export async function runWorkflowPhases({
 
 		const completedSessionId = await runWorkflowPhase({
 			ctx,
-			runAgent,
+			agent,
 			phase,
 			phaseIndex: index,
 			totalPhases: phases.length,
@@ -77,7 +71,7 @@ export async function runWorkflowPhases({
 
 type RunWorkflowPhaseParams = {
 	ctx: RunContext;
-	runAgent: RunAgent;
+	agent: AgentInvoker;
 	phase: WorkflowPhase;
 	phaseIndex: number;
 	totalPhases: number;
@@ -90,7 +84,7 @@ type RunWorkflowPhaseParams = {
 
 async function runWorkflowPhase({
 	ctx,
-	runAgent,
+	agent,
 	phase,
 	phaseIndex,
 	totalPhases,
@@ -115,15 +109,12 @@ async function runWorkflowPhase({
 		});
 		const prompt = await expandMarkedShellBlocks(renderedPrompt, { cwd });
 
-		for await (const msg of runAgent({
+		for await (const msg of agent.invoke({
 			prompt,
-			options: {
-				cwd,
-				model,
-				allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-				permissionMode: "dontAsk" as const,
-				...(resumeSessionId && { resume: resumeSessionId }),
-			},
+			cwd,
+			model,
+			signal: ctx.signal,
+			...(resumeSessionId && { resumeSessionId }),
 		})) {
 			if (msg.type !== "assistant") continue;
 			logAgentMessage(msg, cwd, ctx.emitToolUse);
