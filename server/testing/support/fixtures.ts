@@ -1,6 +1,34 @@
 import type { query } from "@anthropic-ai/claude-agent-sdk";
+import {
+	type AgentInvokeOptions,
+	type AgentInvoker,
+	type AgentMessage,
+	ALLOWED_TOOLS,
+} from "../../orchestrator/agent-invoker.ts";
 import { repoSlug } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
+
+type QueryParams = Parameters<typeof query>[0];
+export type LegacyRunAgent = (
+	params: QueryParams,
+) => AsyncIterable<AgentMessage>;
+
+export function adaptRunAgent(runAgent: LegacyRunAgent): AgentInvoker {
+	return {
+		invoke({ prompt, cwd, model, resumeSessionId }: AgentInvokeOptions) {
+			return runAgent({
+				prompt,
+				options: {
+					cwd,
+					model,
+					allowedTools: [...ALLOWED_TOOLS],
+					permissionMode: "dontAsk" as const,
+					...(resumeSessionId && { resume: resumeSessionId }),
+				},
+			});
+		},
+	};
+}
 
 export const GITHUB_API = "https://api.github.com";
 export const GITLAB_BASE_URL = "https://gitlab.example.test";
@@ -53,54 +81,6 @@ export async function* noopAgent() {}
 
 export async function* hangingAgent() {
 	await new Promise(() => {});
-}
-
-// biome-ignore lint/correctness/useYield: throws before yielding
-export async function* failingAgent() {
-	throw new Error("agent exploded");
-}
-
-type ContentBlock = { type: "text"; text: string } | { type: string };
-
-export function createSessionAgent(
-	sessionId: string,
-	content: ContentBlock[] = [],
-) {
-	return async function* sessionAgent() {
-		yield {
-			type: "assistant" as const,
-			session_id: sessionId,
-			// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's BetaMessage shape
-			message: { content } as any,
-			parent_tool_use_id: null,
-			uuid: "00000000-0000-0000-0000-000000000001" as const,
-		};
-	};
-}
-
-type QueryParams = Parameters<typeof query>[0];
-
-export function createPromptSpyAgent() {
-	let captured: QueryParams | undefined;
-	const capturedCalls: QueryParams[] = [];
-	async function* spyAgent(params: QueryParams) {
-		captured = params;
-		capturedCalls.push(params);
-		yield {
-			type: "assistant" as const,
-			session_id: "spy-session",
-			// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's BetaMessage shape
-			message: { content: [] } as any,
-			parent_tool_use_id: null,
-			uuid: "00000000-0000-0000-0000-000000000002" as const,
-		};
-	}
-	function getCaptured(): QueryParams {
-		if (!captured) throw new Error("spyAgent was never called");
-		return captured;
-	}
-
-	return { spyAgent, getCaptured, getCapturedCalls: () => capturedCalls };
 }
 
 export function createTestWorkflow(

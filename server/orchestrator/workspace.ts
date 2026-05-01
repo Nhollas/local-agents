@@ -7,6 +7,12 @@ import { renderPrompt } from "../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 
+export type RunShell = (script: string, cwd: string) => Promise<void>;
+
+export const realRunShell: RunShell = async (script, cwd) => {
+	await exec("sh", ["-c", script], { cwd });
+};
+
 export function sanitizeKey(key: string): string {
 	return key.replace(/[^A-Za-z0-9._-]/g, "_");
 }
@@ -15,7 +21,8 @@ export async function ensureWorkspace(
 	issue: Issue,
 	workspaceRoot: string,
 	cloneUrl: string,
-	hooks?: { after_create?: string | undefined },
+	hooks: { after_create?: string | undefined } | undefined,
+	runShell: RunShell,
 ): Promise<{ path: string; created: boolean }> {
 	const dirName = sanitizeKey(issue.key);
 	const wsPath = join(workspaceRoot, dirName);
@@ -32,7 +39,7 @@ export async function ensureWorkspace(
 
 	if (hooks?.after_create) {
 		const script = renderPrompt(hooks.after_create, { issue });
-		await exec("sh", ["-c", script], { cwd: wsPath });
+		await runShell(script, wsPath);
 	}
 
 	return { path: wsPath, created: true };

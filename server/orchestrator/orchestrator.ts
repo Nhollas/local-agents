@@ -1,30 +1,16 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
 import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
-import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
+import type { Runner } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import {
-	branchName,
-	type IssueKey,
-	type RepoSlug,
-	type RunId,
-} from "../types/brands.ts";
+import type { IssueKey, RepoSlug, RunId } from "../types/brands.ts";
 import { unwrap } from "../types/result.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
-import { renderPrompt } from "../workflow/workflow.ts";
-import { type RunAgent, runWorkflowPhases } from "./phase-runner.ts";
-import { ensureWorkspace, removeWorkspace } from "./workspace.ts";
-
-const exec = promisify(execFile);
-
-async function runShell(script: string, cwd: string): Promise<void> {
-	await exec("sh", ["-c", script], { cwd });
-}
+import { type AgentInvoker, claudeSdkAgentInvoker } from "./agent-invoker.ts";
+import { type Clock, systemClock } from "./clock.ts";
+import { createRunLifecycle } from "./run-lifecycle.ts";
+import { type RunShell, realRunShell } from "./workspace.ts";
 
 type OrchestratorConfig = {
 	runRepo: RunRepository;
@@ -33,7 +19,9 @@ type OrchestratorConfig = {
 	config: Config;
 	workflows: Map<RepoSlug, RepoWorkflow>;
 	runner: Runner;
-	runAgent?: RunAgent;
+	agent?: AgentInvoker;
+	clock?: Clock;
+	runShell?: RunShell;
 };
 
 type Orchestrator = {
@@ -65,189 +53,27 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		config,
 		workflows,
 		runner,
-		runAgent = query,
+		agent = claudeSdkAgentInvoker(),
+		clock = systemClock(),
+		runShell = realRunShell,
 	} = opts;
 	const { defaults } = config;
 
-	async function prepareAndDispatch(params: {
-		issue: Issue;
-		repo: RepoSlug;
-		workflow: RepoWorkflow;
-		attempt: number;
-		parentRunId?: RunId;
-		startPhaseIndex?: number;
-		failedPhaseResumeSessionId?: string;
-	}): Promise<RunId> {
-		const { issue, repo, workflow, attempt } = params;
+	const lifecycle = createRunLifecycle({
+		runner,
+		tracker,
+		codeHost,
+		agent,
+		clock,
+		runShell,
+		workspaceRoot: defaults.workspace_root,
+		model: defaults.model,
+		maxRetries: defaults.max_retries,
+	});
 
-		const cloneUrl = codeHost.cloneUrl(repo);
-		const ws = await ensureWorkspace(
-			issue,
-			defaults.workspace_root,
-			cloneUrl,
-			workflow.hooks,
-		);
-
-		if (workflow.hooks?.before_run) {
-			const script = renderPrompt(workflow.hooks.before_run, {
-				issue,
-				attempt,
-			});
-			await runShell(script, ws.path);
-		}
-
-		const { runId, done } = runner.enqueue({
-			name: `issue-${issue.number}`,
-			issueKey: issue.key,
-			issueTitle: issue.title,
-			attempt,
-			...(params.parentRunId != null && { parentRunId: params.parentRunId }),
-			handler: async (ctx) => {
-				return canonicalLog.run(
-					{
-						scope: "run",
-						run_id: ctx.runId,
-						agent: `issue-${issue.number}`,
-						issue_key: issue.key,
-						attempt: attempt,
-					},
-					async () => {
-						const startTime = Date.now();
-						let result: RunResult;
-
-						try {
-							const abortPromise = new Promise<never>((_, reject) => {
-								ctx.signal.addEventListener("abort", () => {
-									reject(new Error(ABORT_ERROR));
-								});
-							});
-
-							await Promise.race([
-								(async () => {
-									await runWorkflowPhases({
-										ctx,
-										runAgent,
-										workflow,
-										issue,
-										attempt,
-										cwd: ws.path,
-										model: defaults.model,
-										...(params.startPhaseIndex != null && {
-											startPhaseIndex: params.startPhaseIndex,
-										}),
-										...(params.failedPhaseResumeSessionId && {
-											failedPhaseResumeSessionId:
-												params.failedPhaseResumeSessionId,
-										}),
-									});
-
-									if (workflow.hooks?.after_run) {
-										const script = renderPrompt(workflow.hooks.after_run, {
-											issue,
-											attempt,
-										});
-										try {
-											await runShell(script, ws.path);
-										} catch (err) {
-											canonicalLog.append(
-												"warnings",
-												`after_run_failed: ${canonicalLog.errorMessage(err)}`,
-											);
-										}
-									}
-								})(),
-								abortPromise,
-							]);
-
-							result = {
-								status: "completed",
-								durationMs: Date.now() - startTime,
-							};
-						} catch (err) {
-							result = {
-								status: "failed",
-								error: canonicalLog.errorMessage(err),
-								durationMs: Date.now() - startTime,
-							};
-						}
-
-						canonicalLog.set({
-							status: result.status,
-							...(result.status === "failed" && { error: result.error }),
-						});
-
-						// Post-run work — inside the canonical scope so decorators
-						// and warnings are captured in the run's log line.
-						if (result.status === "completed") {
-							try {
-								const head = branchName(
-									renderPrompt(workflow.branch, { issue }),
-								);
-								await codeHost.createChangeRequest(
-									repo,
-									head,
-									branchName(workflow.base_branch),
-									issue.title,
-									`Closes ${issue.key}`,
-								);
-
-								await tracker.transitionState(
-									repo,
-									issue.number,
-									"running",
-									"awaiting_review",
-								);
-							} catch (err) {
-								canonicalLog.append(
-									"warnings",
-									`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
-								);
-								await tracker
-									.transitionState(
-										repo,
-										issue.number,
-										"running",
-										"awaiting_review",
-									)
-									.catch((labelErr) =>
-										canonicalLog.append(
-											"warnings",
-											`state_recovery_failed: ${canonicalLog.errorMessage(labelErr)}`,
-										),
-									);
-							}
-						}
-
-						const retriesExhausted = defaults.max_retries - attempt < 0;
-						const shouldCleanup =
-							result.status === "completed" || retriesExhausted;
-
-						if (shouldCleanup) {
-							await removeWorkspace(ws.path);
-						}
-
-						if (result.status === "failed" && retriesExhausted) {
-							await tracker
-								.transitionState(repo, issue.number, "running", "pending")
-								.catch((err) =>
-									canonicalLog.append(
-										"warnings",
-										`state_rollback_failed: ${canonicalLog.errorMessage(err)}`,
-									),
-								);
-						}
-
-						return result;
-					},
-					logger,
-				);
-			},
-		});
-
+	function trackPostRun(done: Promise<unknown>): void {
 		pendingPostRuns.add(done);
 		done.finally(() => pendingPostRuns.delete(done));
-
-		return runId;
 	}
 
 	async function fetchTickState(): Promise<TickState> {
@@ -353,7 +179,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			await tracker.transitionState(repo, issue.number, "pending", "running");
 
 			try {
-				await prepareAndDispatch({ issue, repo, workflow, attempt: 1 });
+				const handle = await lifecycle.dispatch({
+					issue,
+					repo,
+					workflow,
+					attempt: 1,
+				});
+				trackPostRun(handle.done);
 			} catch (err) {
 				logger.warn({ issue: issue.key, err }, "orchestrator.dispatch_failed");
 				await tracker
@@ -411,24 +243,25 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 		const issue = await tracker.fetchIssue(repo, issueNumber);
 
-		const runId = await prepareAndDispatch({
+		const handle = await lifecycle.dispatch({
 			issue,
 			repo,
 			workflow,
 			attempt,
-			parentRunId: failedRunId,
-			startPhaseIndex: failedRun.phaseIndex,
-			...(failedRun.sessionId && {
-				failedPhaseResumeSessionId: failedRun.sessionId,
-			}),
+			resume: {
+				parentRunId: failedRunId,
+				startPhaseIndex: failedRun.phaseIndex,
+				...(failedRun.sessionId && { sessionId: failedRun.sessionId }),
+			},
 		});
+		trackPostRun(handle.done);
 
 		logger.info(
 			{ issue: issue.key, attempt, parentRunId: failedRunId },
 			"orchestrator.retry_dispatched",
 		);
 
-		return { runId };
+		return { runId: handle.runId };
 	}
 
 	return {

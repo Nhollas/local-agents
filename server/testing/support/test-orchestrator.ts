@@ -1,6 +1,7 @@
 import { githubCodeHostAdapter } from "../../code-hosts/github.ts";
 import type { CodeHostAdapter } from "../../code-hosts/types.ts";
 import { createGitHubClient } from "../../github-client.ts";
+import type { AgentInvoker } from "../../orchestrator/agent-invoker.ts";
 import { createOrchestrator } from "../../orchestrator/orchestrator.ts";
 import { createRunRepository } from "../../run-repository.ts";
 import { createRunner } from "../../runner/runner.ts";
@@ -8,13 +9,20 @@ import { githubTrackerAdapter } from "../../trackers/github.ts";
 import type { TrackerAdapter } from "../../trackers/types.ts";
 import { githubToken, type RepoSlug } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
-import { createTestWorkflow, noopAgent, REPO } from "./fixtures.ts";
+import type { LegacyRunAgent } from "./fixtures.ts";
+import {
+	adaptRunAgent,
+	createTestWorkflow,
+	noopAgent,
+	REPO,
+} from "./fixtures.ts";
 import { createTestConfig } from "./test-config.ts";
 import { createTestDb } from "./test-db.ts";
 import { createTestWorkspaceRoot } from "./test-workspace.ts";
 
 type CreateTestOrchestratorOptions = {
-	runAgent?: Parameters<typeof createOrchestrator>[0]["runAgent"];
+	runAgent?: LegacyRunAgent;
+	agent?: AgentInvoker;
 	configOverrides?: Parameters<typeof createTestConfig>[0];
 	workflows?: Map<RepoSlug, RepoWorkflow>;
 	maxConcurrency?: number;
@@ -39,6 +47,8 @@ export async function createTestOrchestrator(
 	const defaultCodeHost = githubCodeHostAdapter(github);
 	const defaultTracker = githubTrackerAdapter(github);
 
+	const agent = options.agent ?? adaptRunAgent(options.runAgent ?? noopAgent);
+
 	const orchestrator = createOrchestrator({
 		runRepo: repo,
 		tracker: options.tracker ? options.tracker(defaultTracker) : defaultTracker,
@@ -53,7 +63,7 @@ export async function createTestOrchestrator(
 			options.workflows ??
 			new Map<RepoSlug, RepoWorkflow>([[REPO, createTestWorkflow()]]),
 		runner,
-		runAgent: options.runAgent ?? noopAgent,
+		agent,
 	});
 
 	return {

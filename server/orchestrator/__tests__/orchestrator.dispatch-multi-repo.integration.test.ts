@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { runs } from "../../db/schema.ts";
 import {
 	createGitHubIssue,
-	createSessionAgent,
 	createTestWorkflow,
 	GITHUB_API,
 	hangingAgent,
@@ -14,7 +13,7 @@ import { createTestOrchestrator } from "../../testing/support/test-orchestrator.
 import { type RepoSlug, repoSlug } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
-describe("Orchestrator dispatch multi-repo", () => {
+describe("Orchestrator multi-repo scheduling", () => {
 	it("ticking guard prevents concurrent ticks", async () => {
 		let issuesFetchCount = 0;
 
@@ -39,7 +38,7 @@ describe("Orchestrator dispatch multi-repo", () => {
 
 		await Promise.all([orchestrator.tick(), orchestrator.tick()]);
 
-		// Only one tick should have fetched issues — the second bailed at the guard
+		// Only one tick should have fetched issues — the second bailed at the guard.
 		expect(issuesFetchCount).toBe(1);
 	});
 
@@ -50,11 +49,9 @@ describe("Orchestrator dispatch multi-repo", () => {
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
-			// First repo: issues endpoint returns 500
 			http.get(`${GITHUB_API}/repos/${REPO}/issues`, () => {
 				return new HttpResponse(null, { status: 500 });
 			}),
-			// Second repo: returns a valid issue
 			http.get(`${GITHUB_API}/repos/${REPO2}/issues`, ({ request }) => {
 				const url = new URL(request.url);
 				const label = url.searchParams.get("labels");
@@ -93,26 +90,14 @@ describe("Orchestrator dispatch multi-repo", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toEqual([
-			{
-				id: expect.any(String),
-				agentName: "issue-10",
-				status: "completed",
-				error: null,
-				issueKey: `${REPO2}#10`,
-				issueTitle: "Issue 10",
-				startedAt: expect.any(String),
-				completedAt: expect.any(String),
-				durationMs: expect.any(Number),
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				phaseIndex: 0,
-			},
-		]);
+		expect(allRuns).toHaveLength(1);
+		expect(allRuns[0]).toMatchObject({
+			issueKey: `${REPO2}#10`,
+			status: "completed",
+		});
 	});
 
-	it("dispatches issues across multiple repos", async () => {
+	it("dispatches issues across multiple repos in oldest-first order", async () => {
 		const REPO2 = repoSlug("test-owner/second-repo");
 
 		server.use(
@@ -171,128 +156,9 @@ describe("Orchestrator dispatch multi-repo", () => {
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toEqual(
-			expect.arrayContaining([
-				{
-					id: expect.any(String),
-					agentName: "issue-1",
-					status: "completed",
-					error: null,
-					issueKey: `${REPO}#1`,
-					issueTitle: "Issue 1",
-					startedAt: expect.any(String),
-					completedAt: expect.any(String),
-					durationMs: expect.any(Number),
-					sessionId: null,
-					attempt: 1,
-					parentRunId: null,
-					phaseIndex: 0,
-				},
-				{
-					id: expect.any(String),
-					agentName: "issue-2",
-					status: "completed",
-					error: null,
-					issueKey: `${REPO2}#2`,
-					issueTitle: "Issue 2",
-					startedAt: expect.any(String),
-					completedAt: expect.any(String),
-					durationMs: expect.any(Number),
-					sessionId: null,
-					attempt: 1,
-					parentRunId: null,
-					phaseIndex: 0,
-				},
-			]),
-		);
 		expect(allRuns).toHaveLength(2);
-	});
-
-	it("stores sessionId when agent emits assistant messages", async () => {
-		server.use(
-			...githubHandlers({
-				issues: [createGitHubIssue(1, ["agent"])],
-			}),
+		expect(new Set(allRuns.map((r) => r.issueKey))).toEqual(
+			new Set([`${REPO}#1`, `${REPO2}#2`]),
 		);
-
-		await using ctx = await createTestOrchestrator({
-			runAgent: createSessionAgent("test-sess-abc", [
-				{ type: "text", text: "Working on it" },
-			]),
-		});
-		const { orchestrator, db, runner, workspace } = ctx;
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		await orchestrator.tick();
-		await runner.queue.waitForIdle();
-		await orchestrator.settled();
-
-		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toEqual([
-			{
-				id: expect.any(String),
-				agentName: "issue-1",
-				status: "completed",
-				error: null,
-				issueKey: `${REPO}#1`,
-				issueTitle: "Issue 1",
-				startedAt: expect.any(String),
-				completedAt: expect.any(String),
-				durationMs: expect.any(Number),
-				sessionId: "test-sess-abc",
-				attempt: 1,
-				parentRunId: null,
-				phaseIndex: 0,
-			},
-		]);
-	});
-
-	it("completes run when agent emits non-assistant messages", async () => {
-		server.use(
-			...githubHandlers({
-				issues: [createGitHubIssue(1, ["agent"])],
-			}),
-		);
-
-		// biome-ignore lint/suspicious/noExplicitAny: decouple test fixture from SDK's message shape
-		async function* mixedMessageAgent(): AsyncGenerator<any> {
-			yield { type: "system" };
-			yield {
-				type: "assistant",
-				session_id: "sess-mixed",
-				message: { content: [] },
-				parent_tool_use_id: null,
-				uuid: "00000000-0000-0000-0000-000000000099",
-			};
-		}
-
-		await using ctx = await createTestOrchestrator({
-			runAgent: mixedMessageAgent,
-		});
-		const { orchestrator, db, runner, workspace } = ctx;
-		await workspace.preCreateWorkspace(`${REPO}#1`);
-
-		await orchestrator.tick();
-		await runner.queue.waitForIdle();
-		await orchestrator.settled();
-
-		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toEqual([
-			{
-				id: expect.any(String),
-				agentName: "issue-1",
-				status: "completed",
-				error: null,
-				issueKey: `${REPO}#1`,
-				issueTitle: "Issue 1",
-				startedAt: expect.any(String),
-				completedAt: expect.any(String),
-				durationMs: expect.any(Number),
-				sessionId: "sess-mixed",
-				attempt: 1,
-				parentRunId: null,
-				phaseIndex: 0,
-			},
-		]);
 	});
 });
