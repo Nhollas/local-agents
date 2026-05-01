@@ -72,7 +72,7 @@ describe("run repository row projection", () => {
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 	});
 });

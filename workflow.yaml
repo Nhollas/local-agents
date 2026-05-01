@@ -1,0 +1,92 @@
+branch: "agent/issue-{{ issue.number }}"
+base_branch: main
+
+steps:
+  - name: implement
+    prompt: |
+      # Task
+
+      Work on issue {{ issue.key }}: {{ issue.title }}
+
+      <issue-description>
+      {{ issue.description }}
+      </issue-description>
+
+      Only work on this one issue. The orchestrator has cloned the repo fresh
+      and created branch `agent/issue-{{ issue.number }}` from `main` for you.
+      Make commits as you go — the orchestrator pushes the branch and opens
+      the change request after the final step completes.
+
+      # Project Context
+
+      Read `AGENTS.md` first if it exists, then `README.md`. Then read any
+      project docs relevant to the change, especially anything under `docs/`.
+
+      Recent commits:
+
+      <recent-commits>
+      !`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
+      </recent-commits>
+
+      Top-level layout:
+
+      <repo-tree>
+      !`ls -1`
+      </repo-tree>
+
+      # Execution
+
+      1. Explore the implementation and tests before editing.
+      2. Keep the change as small as possible.
+      3. Add or update tests when behaviour changes.
+      4. Update docs when shipped behaviour, installation, usage, or document
+         structure changes.
+      5. Run the project's typecheck, test, and lint commands. Discover them
+         from `package.json` scripts or project docs — do not assume.
+      6. Commit the result with a Conventional Commit message
+         (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, or `test:`).
+
+      If you are blocked or the issue is incomplete, leave a clear final
+      message explaining the state and stop without committing speculative
+      work. Do not push, open a PR, or transition the tracker — those are
+      orchestrator-owned.
+
+  - name: review
+    prompt: |
+      # Task
+
+      Review the code changes on branch `agent/issue-{{ issue.number }}` for
+      issue {{ issue.key }}: {{ issue.title }}.
+
+      <issue-description>
+      {{ issue.description }}
+      </issue-description>
+
+      Diff against the base branch:
+
+      <diff>
+      !`git diff main...HEAD`
+      </diff>
+
+      Commits on this branch:
+
+      <commits>
+      !`git log main..HEAD --oneline`
+      </commits>
+
+      # Review Focus
+
+      Review for correctness, maintainability, test coverage, and fit with
+      project conventions (`AGENTS.md`, `CODING_STANDARDS.md`, anything under
+      `docs/coding-standards*` or `docs/adr/`).
+
+      Check that:
+
+      - behaviour matches the issue
+      - tests cover meaningful changed behaviour
+      - typecheck, test, and lint all pass
+      - docs are updated when shipped behaviour changed
+
+      If you find issues, fix them directly on this branch and commit the
+      refinements with a Conventional Commit message. If the branch is
+      already good, make no changes.

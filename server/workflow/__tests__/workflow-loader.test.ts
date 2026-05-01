@@ -6,9 +6,11 @@ import { repoSlug } from "../../types/brands.ts";
 import { createWorkflowMap, loadWorkflow } from "../workflow-loader.ts";
 
 const validWorkflowYaml = `
-prompt: "Fix the issue"
 branch: "agent/issue-{{ issue.number }}"
 base_branch: "main"
+steps:
+  - name: implement
+    prompt: "Fix the issue"
 `;
 
 type TestWorkflowFile = {
@@ -35,11 +37,11 @@ describe("loadWorkflow", () => {
 		const workflow = loadWorkflow(workflowFile.path);
 
 		expect(workflow).toEqual({
-			phases: [
-				{ name: "prompt", prompt: "Fix the issue", resume_previous: false },
-			],
 			branch: "agent/issue-{{ issue.number }}",
 			base_branch: "main",
+			steps: [
+				{ name: "implement", prompt: "Fix the issue", resume_previous: false },
+			],
 		});
 	});
 

@@ -15,7 +15,11 @@ import {
 	createRunLifecycle,
 	type RunLifecycle,
 } from "../../orchestrator/run-lifecycle.ts";
-import { type RunShell, realRunShell } from "../../orchestrator/workspace.ts";
+import {
+	type RunShell,
+	realRunShell,
+	sanitizeKey,
+} from "../../orchestrator/workspace.ts";
 import { createRunRepository } from "../../run-repository.ts";
 import { createRunner, type Runner } from "../../runner/runner.ts";
 import type {
@@ -194,6 +198,8 @@ type TestLifecycleOptions = {
 	tracker?: InMemoryTracker;
 	codeHost?: InMemoryCodeHost;
 	issue?: Issue;
+	/** Run after the workspace is cloned but before lifecycle.dispatch. */
+	beforeFirstStep?: (wsPath: string) => Promise<void>;
 };
 
 let bareRepoCache: string | null = null;
@@ -204,7 +210,21 @@ async function ensureBareRepo(): Promise<string> {
 		tmpdir(),
 		`lifecycle-bare-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.git`,
 	);
-	await exec("git", ["init", "--bare", path]);
+	await exec("git", ["init", "--bare", "--initial-branch=main", path]);
+
+	const seedDir = `${path}.seed`;
+	await mkdir(seedDir, { recursive: true });
+	await exec("git", ["clone", path, "."], { cwd: seedDir });
+	await exec("git", ["config", "user.email", "test@example.test"], {
+		cwd: seedDir,
+	});
+	await exec("git", ["config", "user.name", "Test"], { cwd: seedDir });
+	await exec("git", ["commit", "--allow-empty", "-m", "seed"], {
+		cwd: seedDir,
+	});
+	await exec("git", ["push", "origin", "main"], { cwd: seedDir });
+	await rm(seedDir, { recursive: true, force: true });
+
 	bareRepoCache = path;
 	return path;
 }
@@ -226,6 +246,15 @@ export async function createTestRunLifecycle(
 	const issue = options.issue ?? createTestIssue();
 	const tracker = options.tracker ?? createInMemoryTracker(issue);
 	const codeHost = options.codeHost ?? createInMemoryCodeHost(bareRepo);
+
+	if (options.beforeFirstStep) {
+		const wsPath = join(workspaceRoot, sanitizeKey(issue.key));
+		await mkdir(wsPath, { recursive: true });
+		await exec("git", ["clone", codeHost.cloneUrl(TEST_REPO), "."], {
+			cwd: wsPath,
+		});
+		await options.beforeFirstStep(wsPath);
+	}
 
 	const lifecycle = createRunLifecycle({
 		runner,

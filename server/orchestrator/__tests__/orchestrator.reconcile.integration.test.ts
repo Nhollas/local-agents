@@ -53,7 +53,7 @@ describe("Orchestrator reconciliation", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
-				phaseIndex: 0,
+				stepIndex: 0,
 			},
 		]);
 
@@ -80,7 +80,7 @@ describe("Orchestrator reconciliation", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
-				phaseIndex: 0,
+				stepIndex: 0,
 			},
 		]);
 	});
@@ -129,7 +129,7 @@ describe("Orchestrator reconciliation", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
-				phaseIndex: 0,
+				stepIndex: 0,
 			},
 		]);
 	});
@@ -219,7 +219,7 @@ describe("Orchestrator reconciliation", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
-				phaseIndex: 0,
+				stepIndex: 0,
 			},
 		]);
 
@@ -376,7 +376,7 @@ describe("Orchestrator reconciliation", () => {
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
-				phaseIndex: 0,
+				stepIndex: 0,
 			},
 		]);
 

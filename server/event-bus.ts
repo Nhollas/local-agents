@@ -1,13 +1,13 @@
 import { EventEmitter } from "node:events";
 import type {
-	PhaseCompletedData,
-	PhaseFailedData,
-	PhaseStartedData,
 	RunCompletedData,
 	RunFailedData,
 	RunOutputData,
 	RunStartedData,
 	RunToolUseData,
+	StepCompletedData,
+	StepFailedData,
+	StepStartedData,
 } from "./db/schema.ts";
 import type { RunId } from "./types/brands.ts";
 
@@ -17,16 +17,16 @@ type RunEventBase = {
 	createdAt: string;
 };
 
-export type PhaseEvent =
-	| { type: "phase.started"; data: PhaseStartedData }
-	| { type: "phase.completed"; data: PhaseCompletedData }
-	| { type: "phase.failed"; data: PhaseFailedData };
+export type StepEvent =
+	| { type: "step.started"; data: StepStartedData }
+	| { type: "step.completed"; data: StepCompletedData }
+	| { type: "step.failed"; data: StepFailedData };
 
 export type RunEvent =
 	| (RunEventBase & { type: "run:started"; data: RunStartedData })
 	| (RunEventBase & { type: "run:output"; data: RunOutputData })
 	| (RunEventBase & { type: "run:tool_use"; data: RunToolUseData })
-	| (RunEventBase & PhaseEvent)
+	| (RunEventBase & StepEvent)
 	| (RunEventBase & { type: "run:completed"; data: RunCompletedData })
 	| (RunEventBase & { type: "run:failed"; data: RunFailedData });
 

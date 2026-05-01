@@ -117,7 +117,9 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 0 — Baseline And Planning Hygiene
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-01 on `main` (small enough for a single PR; no separate branch needed for docs + workflow.yaml restoration).
 
 **Purpose:** Establish the baseline before code changes and make sure design + glossary + examples agree.
 
@@ -146,9 +148,32 @@ Use this handoff template when a slice is interrupted:
 
 - The `examples/*.yaml` files reference output substitution and dynamic branch features that don't exist yet. The live `workflow.yaml` must use only features supported by the *current* code (single-prompt or phases, static branch, no `change_request` block) — not the post-restructure shape — until slice 2 lands. Be explicit about this; it's the easiest place to break the dev loop.
 
+**Completed changes:**
+
+- Confirmed design doc, ADR-0001, and `CONTEXT.md` glossary agree on terminology — `steps`, `change_request`, lifecycle pins, `.agent/setup.sh`, `run_step_outputs`, output substitution. No drift detected.
+- Confirmed `examples/static-branch.yaml` and `examples/dynamic-branch.yaml` reflect the trimmed `change_request` shape: `rg -n 'labels:|draft:' docs/design-workflow-restructure.md CONTEXT.md examples/*.yaml` returns nothing.
+- Restored a live `workflow.yaml` at the repo root using only current-code features: static `branch`, `base_branch`, `hooks: { after_create, before_run, after_run }`, `phases: [implement, review]`. No `change_request`, no `output_schema`, no dynamic branch. Loader parses it cleanly via `loadWorkflow()`. Removed the redundant `git checkout -b` from `after_create` that was in the deleted #48 version (the orchestrator already creates the branch from the workflow's `branch:` template).
+- Baseline coverage recorded for comparison after each feature slice:
+  - Statements: **99.23%**
+  - Branches: **98.97%**
+  - Functions: **98.15%**
+  - Lines: **99.28%**
+  - Notable lower-coverage files: `agent-invoker.ts` (33.33% lines — only invoked under real SDK paths), `phase-runner.ts` (96.66%), `run-lifecycle.ts` (94.73%), `orchestrator.ts` (98.95%).
+
+**Verification:**
+
+- `pnpm lint` — pass (125 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (39 files, 234 tests).
+- `pnpm test:coverage` — pass; baseline numbers above.
+- `rg -n 'labels:|draft:' docs/design-workflow-restructure.md CONTEXT.md examples/*.yaml` — no matches.
+- `loadWorkflow()` against the new `workflow.yaml` returns a valid `RepoWorkflow` with phases `[implement, review]` and all three hook keys.
+
 ## Slice 1 — Foundation
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-01 on `main` (single sweep — rename + removals + setup.sh + table all together; small enough to review as one PR).
 
 **Purpose:** Settle the surface before adding new behaviour. Rename phases → steps, remove the top-level `prompt:` and `hooks:` forms, add `.agent/setup.sh` invocation, and add the `run_step_outputs` table without yet writing to it.
 
@@ -209,6 +234,32 @@ Use this handoff template when a slice is interrupted:
 - `RunEventType` is an exported type union — downstream code may switch on it exhaustively. Update every switch site or accept TS errors as the audit trail.
 - The Drizzle migration for the `phase_index` rename is destructive on local sqlite dbs; remind devs to wipe their local db or run the migration cleanly.
 - `RunContext` has `setPhaseIndex` — this name needs renaming too, alongside any retry path that reads `failedRun.phaseIndex`.
+
+**Completed changes:**
+
+- **Rename phases → steps** across `server/`, `dashboard/`, db schema, tests, and `workflow.yaml`. The dashboard had no `phase` references to update; only server and tests.
+- **Workflow schema** is now `.strict()` with required `branch`, `base_branch`, and a non-empty `steps:` array. Top-level `prompt:` form, `hooks:` block, and `phases:` key all fail at parse with explicit tests covering each rejection.
+- **DB column rename**: `runs.phase_index` → `runs.step_index`. Migration `0004_workflow_restructure_slice_1.sql` does the rename in place plus creates `run_step_outputs(run_id, step_name, output_json, created_at)` with a composite primary key. Snapshot + journal updated. Verified the migration applies cleanly to a fresh sqlite db.
+- **Event-type rename**: `RunEventType` literals `phase.started` / `phase.completed` / `phase.failed` → `step.started` / `step.completed` / `step.failed`. Old historic rows (if any local dev still has them) are not backfilled — pre-launch policy. The `RunEventType` union no longer includes the legacy literals; readers that switch exhaustively will surface a TS error if old rows are referenced. Dashboard never rendered phase events, so no UI work was needed.
+- **Renames at the runtime boundary**: `RunContext.setPhaseIndex` → `setStepIndex`, `emitPhaseEvent` → `emitStepEvent`, `runWorkflowPhases` → `runWorkflowSteps`, `failedRun.phaseIndex` → `failedRun.stepIndex`, `RunRequest.resume.startPhaseIndex` → `startStepIndex`. `server/orchestrator/phase-runner.ts` is renamed to `step-runner.ts` (plain rename, no behaviour change in the runner itself).
+- **`change_request` rename** at the user-facing event/canonical-log layer: `canonicalLog.append("phase_events", …)` → `canonicalLog.append("step_events", …)`.
+- **`hooks:` block removed** from the workflow schema. All hook invocations (`after_create`, `before_run`, `after_run`) deleted from `run-lifecycle.ts` and `workspace.ts`. The `hooks` parameter on `ensureWorkspace` is gone.
+- **Lifecycle pin 2 (branch creation)** is now orchestrator-owned. `run-lifecycle.ts` runs `git checkout -B <rendered-branch>` directly after clone, before setup. This replaces what the deleted `after_create` hook used to do; without it, slice-1's pin 3 setup step couldn't observe a real branch and downstream slices would have no anchor for "wherever branch creation lives after slice 1" (slice 5's wording).
+- **Lifecycle pin 3 (`.agent/setup.sh`)** is wired in. New `runRepoSetup(wsPath, runShell)` helper looks for `.agent/setup.sh` in the cloned workspace; if absent, it's a no-op. If present, it invokes `bash .agent/setup.sh` with the workspace as cwd. Non-zero exit propagates and aborts the run before any step fires.
+- **`run_step_outputs` table** is staged in the schema (not yet written to). Slice 3 will populate it.
+- **Live `workflow.yaml`** at the repo root rewritten to the new shape: static `branch`, `base_branch: main`, two-step `steps:` array (`implement`, `review`). No `hooks:` block — `.agent/setup.sh` already does `pnpm install --frozen-lockfile`.
+- **Test seam updates**: `createTestWorkspaceRoot.preCreateWorkspace` now seeds a real git repo with one commit on main so the orchestrator's `git checkout -B` succeeds in tests. The bare repo cached in `test-lifecycle.ts` is similarly seeded with a base commit on main. New `beforeFirstStep` option on `createTestRunLifecycle` lets a test drop `.agent/setup.sh` into the cloned workspace before the lifecycle handler runs.
+- **Known regression (deferred)**: The orchestrator no longer pushes the branch to the remote (the `after_run` hook used to do this). Real-world PRs against an unpushed branch will fail at `codeHost.createChangeRequest`. Tests are unaffected (in-memory code-host). Adding lifecycle pin 5 push is out of slice 1 scope — slice 2 or later will fill it in.
+- **Stdout/stderr capture for `setup.sh` (deferred)**: The slice plan calls for capturing setup script output to the canonical log. RunShell is kept as `Promise<void>` for now to avoid a wider test-seam churn; setup output goes to the executing process's stdio. Re-add capture when we touch the canonical log shape next.
+
+**Verification:**
+
+- `pnpm lint` — pass (126 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (39 files, 242 tests). Up from 234 in slice 0; the new tests cover the three step-event/setup paths plus a few legacy-rejection cases.
+- `pnpm test:coverage` — Statements **99.22%** / Branches **98.93%** / Functions **98.15%** / Lines **99.28%**. Within 0.1pp of slice 0 baseline; functions and lines unchanged.
+- Migration smoke test: in-memory drizzle migrate run produces tables `runs` (with `step_index`), `run_events`, and `run_step_outputs` (composite PK on `(run_id, step_name)`).
+- `loadWorkflow()` against the new live `workflow.yaml` returns `{ branch, base_branch, steps: [implement, review] }` — parses cleanly under the `.strict()` schema.
 
 ## Slice 2 — Change Request Block
 

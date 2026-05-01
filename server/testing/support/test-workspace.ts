@@ -1,7 +1,11 @@
+import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { sanitizeKey } from "../../orchestrator/workspace.ts";
+
+const exec = promisify(execFile);
 
 type TestWorkspace = {
 	root: string;
@@ -21,6 +25,14 @@ export async function createTestWorkspaceRoot(): Promise<TestWorkspace> {
 		async preCreateWorkspace(issueKey: string): Promise<string> {
 			const wsPath = join(root, sanitizeKey(issueKey));
 			await mkdir(wsPath, { recursive: true });
+			await exec("git", ["init", "--initial-branch=main"], { cwd: wsPath });
+			await exec("git", ["config", "user.email", "test@example.test"], {
+				cwd: wsPath,
+			});
+			await exec("git", ["config", "user.name", "Test"], { cwd: wsPath });
+			await exec("git", ["commit", "--allow-empty", "-m", "seed"], {
+				cwd: wsPath,
+			});
 			return wsPath;
 		},
 		async [Symbol.asyncDispose]() {

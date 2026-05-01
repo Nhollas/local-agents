@@ -3,50 +3,23 @@ import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
 import { stripShellBlockMarkers } from "./prompt-preprocessor.ts";
 
-const workflowPhaseSchema = z.object({
-	name: z.string().min(1),
-	prompt: z.string(),
-	resume_previous: z.boolean().optional().default(false),
-});
+const workflowStepSchema = z
+	.object({
+		name: z.string().min(1),
+		prompt: z.string(),
+		resume_previous: z.boolean().optional().default(false),
+	})
+	.strict();
 
-export type WorkflowPhase = z.infer<typeof workflowPhaseSchema>;
+export type WorkflowStep = z.infer<typeof workflowStepSchema>;
 
 const repoWorkflowSchema = z
 	.object({
 		branch: z.string().min(1),
 		base_branch: z.string().min(1),
-		hooks: z
-			.object({
-				after_create: z.string().optional(),
-				before_run: z.string().optional(),
-				after_run: z.string().optional(),
-			})
-			.optional(),
-		prompt: z.string().optional(),
-		phases: z.array(workflowPhaseSchema).min(1).optional(),
+		steps: z.array(workflowStepSchema).min(1),
 	})
-	.superRefine((workflow, ctx) => {
-		const hasPrompt = workflow.prompt != null;
-		const hasPhases = workflow.phases != null;
-		if (hasPrompt === hasPhases) {
-			ctx.addIssue({
-				code: "custom",
-				message: "Workflow must define exactly one of prompt or phases",
-				path: hasPrompt ? ["phases"] : ["prompt"],
-			});
-		}
-	})
-	.transform(({ prompt, phases, ...rest }) => {
-		if (phases) return { ...rest, phases };
-		/* v8 ignore next 3 -- unreachable; superRefine guarantees prompt is set when phases is not */
-		if (prompt == null) {
-			throw new Error("Invariant: workflow has neither prompt nor phases");
-		}
-		return {
-			...rest,
-			phases: [{ name: "prompt", prompt, resume_previous: false }],
-		};
-	});
+	.strict();
 
 export type RepoWorkflow = z.infer<typeof repoWorkflowSchema>;
 

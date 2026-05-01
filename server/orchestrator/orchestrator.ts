@@ -250,7 +250,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			attempt,
 			resume: {
 				parentRunId: failedRunId,
-				startPhaseIndex: failedRun.phaseIndex,
+				startStepIndex: failedRun.stepIndex,
 				...(failedRun.sessionId && { sessionId: failedRun.sessionId }),
 			},
 		});
