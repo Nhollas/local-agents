@@ -126,7 +126,27 @@ Slice 6 is cleanup and can run in parallel with anything once 1–5 are done.
 
 ## Slice 3 — Discriminate `Run` State
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-04-30.
+
+**Completed changes:**
+
+- Replaced `Run = typeof runs.$inferSelect` in `server/run-repository.ts` with a discriminated union: `RunningRun | CompletedRun | FailedRun`. Each variant carries only the fields that are valid in that state (e.g. `running` has no `completedAt`/`durationMs`/`error`; `completed` requires `completedAt` and `durationMs`; `failed` requires `completedAt` and `error`, with `durationMs: number | null` because stale-run reconciliation fails without one).
+- Added `rowToRun` projection at the repository edge. `getRunById` and `getRuns` now parse rows into the union; mixed-state rows throw an invariant error rather than being returned. The exhaustive switch on `row.status` ends in `assertNever`.
+- `getRunningSnapshot` keeps its narrow `{ id, issueKey }` projection — it already filters on `status = "running" AND issueKey IS NOT NULL`, so it bypasses the union mapping intentionally.
+- DB schema is unchanged. Drizzle columns stay nullable; the row/union mismatch lives entirely inside the repository.
+- `server/api/api.ts` adds a `runToWire` projection back to the existing wide JSON shape so the API contract is unchanged. Both `/runs` and `/runs/:id` go union → wire. Exhaustive switch ends in `assertNever`.
+- Orchestrator `retryRun` already used early-return on `failedRun.status !== "failed"`; the union just makes that narrowing real — `failedRun` is a `FailedRun` after the guard, no other code changes needed.
+- `seedRun` test helper now auto-fills variant-required fields (`completedAt`/`durationMs` for completed; `completedAt`/`durationMs`/`error` for failed) so tests can seed by status without restating the invariants.
+- New `server/__tests__/run-repository.test.ts` covers the projection: invariant throws for malformed completed/failed rows and the failed-run round-trip. New API test asserts the failed-run wire shape.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:coverage` — 100% across all `server/` and `dashboard/` files.
 
 **Purpose:** Make impossible run states unrepresentable. Replace the optional-field bag (`status` plus optional `error`, `completedAt`, etc.) with a tagged union at the repository boundary.
 
