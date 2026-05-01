@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eventBus, type PhaseEvent, type RunEvent } from "../event-bus.ts";
+import { eventBus, type RunEvent, type StepEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { type IssueKey, type RunId, runId } from "../types/brands.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
@@ -9,9 +9,9 @@ export const ABORT_ERROR = "Run killed by user";
 export type RunContext = {
 	runId: RunId;
 	emitToolUse: (tool: string, target: string) => void;
-	emitPhaseEvent: (event: PhaseEvent) => void;
+	emitStepEvent: (event: StepEvent) => void;
 	setSessionId: (id: string | null) => void;
-	setPhaseIndex: (index: number) => void;
+	setStepIndex: (index: number) => void;
 	signal: AbortSignal;
 };
 
@@ -128,8 +128,8 @@ export function createRunner(config: RunnerConfig): Runner {
 				repo.setSessionId(id, sessionId);
 			};
 
-			const setPhaseIndex = (index: number) => {
-				repo.setPhaseIndex(id, index);
+			const setStepIndex = (index: number) => {
+				repo.setStepIndex(id, index);
 			};
 
 			const emitToolUse = (tool: string, target: string) => {
@@ -139,7 +139,7 @@ export function createRunner(config: RunnerConfig): Runner {
 				});
 			};
 
-			const emitPhaseEvent: RunContext["emitPhaseEvent"] = (event) => {
+			const emitStepEvent: RunContext["emitStepEvent"] = (event) => {
 				emitEvent(id, job.name, event);
 			};
 
@@ -157,9 +157,9 @@ export function createRunner(config: RunnerConfig): Runner {
 				job.handler({
 					runId: id,
 					emitToolUse,
-					emitPhaseEvent,
+					emitStepEvent,
 					setSessionId,
-					setPhaseIndex,
+					setStepIndex,
 					signal: controller.signal,
 				}),
 				abortPromise,

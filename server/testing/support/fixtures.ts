@@ -89,7 +89,7 @@ export function createTestWorkflow(
 	return {
 		branch: "agent/issue-{{ issue.number }}",
 		base_branch: "main",
-		phases: [
+		steps: [
 			{
 				name: "prompt",
 				prompt: "Fix issue {{ issue.number }}: {{ issue.title }}",

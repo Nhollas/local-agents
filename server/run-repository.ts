@@ -22,7 +22,7 @@ type RunBase = {
 	startedAt: string;
 	attempt: number;
 	parentRunId: RunId | null;
-	phaseIndex: number;
+	stepIndex: number;
 	sessionId: string | null;
 };
 
@@ -52,7 +52,7 @@ function rowToRun(row: RunRow): Run {
 		startedAt: row.startedAt,
 		attempt: row.attempt,
 		parentRunId: row.parentRunId,
-		phaseIndex: row.phaseIndex,
+		stepIndex: row.stepIndex,
 		sessionId: row.sessionId,
 	};
 
@@ -101,7 +101,7 @@ export type RunRepository = {
 		parentRunId: RunId | null;
 	}): void;
 	setSessionId(runId: RunId, sessionId: string | null): void;
-	setPhaseIndex(runId: RunId, phaseIndex: number): void;
+	setStepIndex(runId: RunId, stepIndex: number): void;
 	completeRun(
 		runId: RunId,
 		params: { completedAt: string; durationMs: number },
@@ -138,8 +138,8 @@ export function createRunRepository(db: Db): RunRepository {
 			db.update(runs).set({ sessionId }).where(eq(runs.id, runId)).run();
 		},
 
-		setPhaseIndex(runId, phaseIndex) {
-			db.update(runs).set({ phaseIndex }).where(eq(runs.id, runId)).run();
+		setStepIndex(runId, stepIndex) {
+			db.update(runs).set({ stepIndex }).where(eq(runs.id, runId)).run();
 		},
 
 		completeRun(runId, params) {

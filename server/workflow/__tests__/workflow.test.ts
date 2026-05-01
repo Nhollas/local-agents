@@ -49,27 +49,31 @@ describe("renderPrompt", () => {
 });
 
 describe("parseRepoWorkflow", () => {
-	it("accepts a single-prompt workflow", () => {
+	it("accepts a single-step workflow", () => {
 		const yaml = `
 branch: "agent/issue-{{ issue.number }}"
 base_branch: main
-prompt: Fix this issue
+steps:
+  - name: implement
+    prompt: Fix this issue
 `;
 
 		const result = parseRepoWorkflow(yaml);
 
-		expect(result.branch).toBe("agent/issue-{{ issue.number }}");
-		expect(result.base_branch).toBe("main");
-		expect(result.phases).toEqual([
-			{ name: "prompt", prompt: "Fix this issue", resume_previous: false },
-		]);
+		expect(result).toEqual({
+			branch: "agent/issue-{{ issue.number }}",
+			base_branch: "main",
+			steps: [
+				{ name: "implement", prompt: "Fix this issue", resume_previous: false },
+			],
+		});
 	});
 
-	it("accepts a phased workflow", () => {
+	it("accepts a multi-step workflow with resume_previous", () => {
 		const yaml = `
 branch: "agent/issue-{{ issue.number }}"
 base_branch: main
-phases:
+steps:
   - name: plan
     prompt: Write a plan
   - name: implement
@@ -79,7 +83,7 @@ phases:
 
 		const result = parseRepoWorkflow(yaml);
 
-		expect(result.phases).toEqual([
+		expect(result.steps).toEqual([
 			{ name: "plan", prompt: "Write a plan", resume_previous: false },
 			{
 				name: "implement",
@@ -90,38 +94,76 @@ phases:
 	});
 
 	it("rejects workflows missing branch", () => {
-		const yaml = "base_branch: main\nprompt: Fix it\n";
+		const yaml = "base_branch: main\nsteps:\n  - name: x\n    prompt: Fix it\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
 	it("rejects workflows missing base_branch", () => {
-		const yaml = "branch: agent/x\nprompt: Fix it\n";
+		const yaml = "branch: agent/x\nsteps:\n  - name: x\n    prompt: Fix it\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
-	it("rejects missing prompt", () => {
+	it("rejects workflows missing steps", () => {
 		const yaml = "branch: my-branch\nbase_branch: main\n";
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow(
-			/Workflow must define exactly one of prompt or phases/,
-		);
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
-	it("rejects workflows with both prompt and phases", () => {
+	it("rejects workflows with an empty steps array", () => {
+		const yaml = "branch: my-branch\nbase_branch: main\nsteps: []\n";
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects the legacy top-level prompt form", () => {
 		const yaml = `
 branch: my-branch
 base_branch: main
 prompt: Fix this issue
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects the legacy phases key", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
 phases:
   - name: plan
     prompt: Write a plan
 `;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow(
-			/Workflow must define exactly one of prompt or phases/,
-		);
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects the legacy hooks block", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+hooks:
+  before_run: echo hi
+steps:
+  - name: implement
+    prompt: Fix it
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects unknown step keys", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+    output_schema: { type: object }
+`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
 	it("throws on invalid YAML", () => {

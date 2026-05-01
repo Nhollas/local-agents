@@ -3,16 +3,23 @@ import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import { logger } from "../logger.ts";
 import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import { branchName, type RepoSlug, type RunId } from "../types/brands.ts";
+import {
+	type BranchName,
+	branchName,
+	type RepoSlug,
+	type RunId,
+} from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import type { Clock } from "./clock.ts";
-import { runWorkflowPhases } from "./phase-runner.ts";
+import { runWorkflowSteps } from "./step-runner.ts";
 import {
+	ensureBranch,
 	ensureWorkspace,
 	type RunShell,
 	removeWorkspace,
+	runRepoSetup,
 } from "./workspace.ts";
 
 export type RunRequest = {
@@ -22,7 +29,7 @@ export type RunRequest = {
 	attempt: number;
 	resume?: {
 		parentRunId: RunId;
-		startPhaseIndex: number;
+		startStepIndex: number;
 		sessionId?: string;
 	};
 };
@@ -60,21 +67,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		const { issue, repo, workflow, attempt, resume } = req;
 
 		const cloneUrl = codeHost.cloneUrl(repo);
-		const ws = await ensureWorkspace(
-			issue,
-			workspaceRoot,
-			cloneUrl,
-			workflow.hooks,
-			runShell,
+		const ws = await ensureWorkspace(issue, workspaceRoot, cloneUrl);
+		const branch = branchName(
+			renderPrompt(workflow.branch, { issue, attempt }),
 		);
-
-		if (workflow.hooks?.before_run) {
-			const script = renderPrompt(workflow.hooks.before_run, {
-				issue,
-				attempt,
-			});
-			await runShell(script, ws.path);
-		}
 
 		return runner.enqueue({
 			name: `issue-${issue.number}`,
@@ -96,7 +92,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						let result: RunResult;
 
 						try {
-							await runWorkflowPhases({
+							await ensureBranch(ws.path, branch);
+							await runRepoSetup(ws.path, runShell);
+
+							await runWorkflowSteps({
 								ctx,
 								agent,
 								workflow,
@@ -104,28 +103,13 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								attempt,
 								cwd: ws.path,
 								model,
-								...(resume?.startPhaseIndex != null && {
-									startPhaseIndex: resume.startPhaseIndex,
+								...(resume?.startStepIndex != null && {
+									startStepIndex: resume.startStepIndex,
 								}),
 								...(resume?.sessionId && {
-									failedPhaseResumeSessionId: resume.sessionId,
+									failedStepResumeSessionId: resume.sessionId,
 								}),
 							});
-
-							if (workflow.hooks?.after_run) {
-								const script = renderPrompt(workflow.hooks.after_run, {
-									issue,
-									attempt,
-								});
-								try {
-									await runShell(script, ws.path);
-								} catch (err) {
-									canonicalLog.append(
-										"warnings",
-										`after_run_failed: ${canonicalLog.errorMessage(err)}`,
-									);
-								}
-							}
 
 							result = {
 								status: "completed",
@@ -145,7 +129,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						});
 
 						if (result.status === "completed") {
-							await finalizeSuccess(repo, issue, workflow);
+							await finalizeSuccess(repo, issue, workflow, branch);
 						}
 
 						const retriesExhausted = maxRetries - attempt < 0;
@@ -171,12 +155,12 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		repo: RepoSlug,
 		issue: Issue,
 		workflow: RepoWorkflow,
+		branch: BranchName,
 	): Promise<void> {
 		try {
-			const head = branchName(renderPrompt(workflow.branch, { issue }));
 			await codeHost.createChangeRequest(
 				repo,
-				head,
+				branch,
 				branchName(workflow.base_branch),
 				issue.title,
 				`Closes ${issue.key}`,

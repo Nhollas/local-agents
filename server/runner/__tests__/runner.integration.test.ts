@@ -63,7 +63,7 @@ describe("Runner integration", () => {
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 
 		resolveHandler({ status: "completed", durationMs: 0 });
@@ -110,7 +110,7 @@ describe("Runner integration", () => {
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 
 		resolveBlocker({ status: "completed", durationMs: 0 });
@@ -147,7 +147,7 @@ describe("Runner integration", () => {
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 	});
 
@@ -315,7 +315,7 @@ describe("Runner integration", () => {
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 	});
 
@@ -353,7 +353,7 @@ describe("Runner integration", () => {
 			sessionId: null,
 			attempt: 2,
 			parentRunId: "prev-id",
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 	});
 
@@ -388,19 +388,19 @@ describe("Runner integration", () => {
 			sessionId: "third-session",
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 	});
 
-	it("persists phase index progress from the run context", async () => {
+	it("persists step index progress from the run context", async () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			name: "phase-job",
+			name: "step-job",
 			issueKey: ik("owner/repo#9"),
-			issueTitle: "Phase issue",
+			issueTitle: "Step issue",
 			handler: async (ctx) => {
-				ctx.setPhaseIndex(2);
+				ctx.setStepIndex(2);
 				return { status: "completed", durationMs: 0 };
 			},
 		});
@@ -410,7 +410,7 @@ describe("Runner integration", () => {
 		const run = getRun(db, runId);
 		expect(run).toMatchObject({
 			id: runId,
-			phaseIndex: 2,
+			stepIndex: 2,
 		});
 	});
 
@@ -464,7 +464,7 @@ describe("Runner integration", () => {
 			sessionId: "sess-123",
 			attempt: 1,
 			parentRunId: null,
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 	});
 });

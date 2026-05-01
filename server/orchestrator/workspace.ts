@@ -3,7 +3,6 @@ import { access, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Issue } from "../trackers/types.ts";
-import { renderPrompt } from "../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 
@@ -21,8 +20,6 @@ export async function ensureWorkspace(
 	issue: Issue,
 	workspaceRoot: string,
 	cloneUrl: string,
-	hooks: { after_create?: string | undefined } | undefined,
-	runShell: RunShell,
 ): Promise<{ path: string; created: boolean }> {
 	const dirName = sanitizeKey(issue.key);
 	const wsPath = join(workspaceRoot, dirName);
@@ -30,21 +27,44 @@ export async function ensureWorkspace(
 	try {
 		await access(wsPath);
 		return { path: wsPath, created: false };
-	} catch {
-		// Directory doesn't exist — create it
-	}
+	} catch {}
 
 	await mkdir(wsPath, { recursive: true });
 	await exec("git", ["clone", cloneUrl, "."], { cwd: wsPath });
 
-	if (hooks?.after_create) {
-		const script = renderPrompt(hooks.after_create, { issue });
-		await runShell(script, wsPath);
-	}
-
 	return { path: wsPath, created: true };
 }
 
+export async function ensureBranch(
+	wsPath: string,
+	branch: string,
+): Promise<void> {
+	await exec("git", ["checkout", "-B", branch], { cwd: wsPath });
+}
+
 export async function removeWorkspace(wsPath: string): Promise<void> {
-	await rm(wsPath, { recursive: true, force: true });
+	// maxRetries tolerates a tail of git i/o (e.g. from a killed agent whose
+	// ensureBranch was still settling) racing with the rm.
+	await rm(wsPath, {
+		recursive: true,
+		force: true,
+		maxRetries: 5,
+		retryDelay: 25,
+	});
+}
+
+const SETUP_SCRIPT_PATH = ".agent/setup.sh";
+
+export async function runRepoSetup(
+	wsPath: string,
+	runShell: RunShell,
+): Promise<void> {
+	const scriptPath = join(wsPath, SETUP_SCRIPT_PATH);
+	try {
+		await access(scriptPath);
+	} catch {
+		return;
+	}
+
+	await runShell(`bash ${SETUP_SCRIPT_PATH}`, wsPath);
 }

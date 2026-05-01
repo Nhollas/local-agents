@@ -1,4 +1,7 @@
-import { access } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, chmod, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { runs } from "../../db/schema.ts";
 import { getEvents } from "../../testing/support/test-db.ts";
@@ -15,10 +18,12 @@ import {
 import { issueNumber } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
+const exec = promisify(execFile);
+
 const baseWorkflow: RepoWorkflow = {
 	branch: "agent/issue-{{ issue.number }}",
 	base_branch: "main",
-	phases: [
+	steps: [
 		{
 			name: "implement",
 			prompt: "Fix issue {{ issue.number }}: {{ issue.title }}",
@@ -27,10 +32,10 @@ const baseWorkflow: RepoWorkflow = {
 	],
 };
 
-const phasedWorkflow: RepoWorkflow = {
+const multiStepWorkflow: RepoWorkflow = {
 	branch: "agent/issue-{{ issue.number }}",
 	base_branch: "main",
-	phases: [
+	steps: [
 		{ name: "plan", prompt: "Plan {{ issue.number }}", resume_previous: false },
 		{
 			name: "implement",
@@ -40,39 +45,34 @@ const phasedWorkflow: RepoWorkflow = {
 	],
 };
 
+async function writeSetupScript(
+	wsPath: string,
+	contents: string,
+): Promise<void> {
+	const dir = join(wsPath, ".agent");
+	await mkdir(dir, { recursive: true });
+	const scriptPath = join(dir, "setup.sh");
+	await writeFile(scriptPath, contents);
+	await chmod(scriptPath, 0o755);
+}
+
 describe("RunLifecycle.dispatch", () => {
-	it("happy path: clones, runs hooks and phases, opens PR, transitions, cleans up", async () => {
-		const hookOrder: string[] = [];
+	it("happy path: clones, creates branch, runs steps, opens PR, transitions, cleans up", async () => {
 		await using setup = await createTestRunLifecycle({
 			agent: createScriptedAgent(() => yieldAssistant("sess-final")),
-			runShell: async (script, _cwd) => {
-				hookOrder.push(script);
-			},
 		});
 		const issue = createTestIssue();
 
 		const handle = await setup.lifecycle.dispatch({
 			issue,
 			repo: TEST_REPO,
-			workflow: {
-				...baseWorkflow,
-				hooks: {
-					after_create: "echo after_create",
-					before_run: "echo before_run",
-					after_run: "echo after_run",
-				},
-			},
+			workflow: baseWorkflow,
 			attempt: 1,
 		});
 
 		const result = await handle.done;
 
 		expect(result).toMatchObject({ status: "completed" });
-		expect(hookOrder).toEqual([
-			"echo after_create",
-			"echo before_run",
-			"echo after_run",
-		]);
 		expect(setup.codeHost.changeRequests).toEqual([
 			{
 				repo: TEST_REPO,
@@ -95,7 +95,7 @@ describe("RunLifecycle.dispatch", () => {
 		expect(run).toMatchObject({
 			status: "completed",
 			sessionId: "sess-final",
-			phaseIndex: 0,
+			stepIndex: 0,
 		});
 
 		await expect(
@@ -103,10 +103,10 @@ describe("RunLifecycle.dispatch", () => {
 		).rejects.toThrow();
 	});
 
-	it("phase failure with retries remaining: workspace kept, no tracker rollback", async () => {
+	it("step failure with retries remaining: workspace kept, no tracker rollback", async () => {
 		// biome-ignore lint/correctness/useYield: throws before yielding
 		const explodingAgent = createScriptedAgent(async function* () {
-			throw new Error("phase exploded");
+			throw new Error("step exploded");
 		});
 		await using setup = await createTestRunLifecycle({
 			agent: explodingAgent,
@@ -121,17 +121,17 @@ describe("RunLifecycle.dispatch", () => {
 		});
 		const result = await handle.done;
 
-		expect(result).toMatchObject({ status: "failed", error: "phase exploded" });
+		expect(result).toMatchObject({ status: "failed", error: "step exploded" });
 		expect(setup.tracker.transitions).toEqual([]);
 		await expect(
 			access(`${setup.workspaceRoot}/test-owner_test-repo_1`),
 		).resolves.toBeUndefined();
 	});
 
-	it("phase failure on terminal attempt: workspace removed, tracker rolls back to pending", async () => {
+	it("step failure on terminal attempt: workspace removed, tracker rolls back to pending", async () => {
 		// biome-ignore lint/correctness/useYield: throws before yielding
 		const explodingAgent = createScriptedAgent(async function* () {
-			throw new Error("phase exploded");
+			throw new Error("step exploded");
 		});
 		await using setup = await createTestRunLifecycle({
 			agent: explodingAgent,
@@ -160,18 +160,18 @@ describe("RunLifecycle.dispatch", () => {
 		).rejects.toThrow();
 	});
 
-	it("retry resume: skips earlier phases and feeds sessionId to the failed phase", async () => {
+	it("retry resume: skips earlier steps and feeds sessionId to the failed step", async () => {
 		const agent = createScriptedAgent((_opts) => yieldAssistant("sess-new"));
 		await using setup = await createTestRunLifecycle({ agent });
 
 		const handle = await setup.lifecycle.dispatch({
 			issue: createTestIssue(),
 			repo: TEST_REPO,
-			workflow: phasedWorkflow,
+			workflow: multiStepWorkflow,
 			attempt: 2,
 			resume: {
 				parentRunId: "parent-run" as never,
-				startPhaseIndex: 1,
+				startStepIndex: 1,
 				sessionId: "sess-failed",
 			},
 		});
@@ -184,18 +184,18 @@ describe("RunLifecycle.dispatch", () => {
 		});
 	});
 
-	it("retry without sessionId: failed phase runs fresh", async () => {
+	it("retry without sessionId: failed step runs fresh", async () => {
 		const agent = createScriptedAgent(() => yieldAssistant("sess-new"));
 		await using setup = await createTestRunLifecycle({ agent });
 
 		const handle = await setup.lifecycle.dispatch({
 			issue: createTestIssue(),
 			repo: TEST_REPO,
-			workflow: phasedWorkflow,
+			workflow: multiStepWorkflow,
 			attempt: 2,
 			resume: {
 				parentRunId: "parent-run" as never,
-				startPhaseIndex: 1,
+				startStepIndex: 1,
 			},
 		});
 		await handle.done;
@@ -204,41 +204,12 @@ describe("RunLifecycle.dispatch", () => {
 		expect(agent.calls[0]?.resumeSessionId).toBeUndefined();
 	});
 
-	it("after_run hook failure does not fail the run", async () => {
-		await using setup = await createTestRunLifecycle({
-			agent: silentAgent,
-			runShell: async (script) => {
-				if (script.includes("after_run")) throw new Error("after_run failed");
-			},
-		});
-		const issue = createTestIssue();
-
-		const handle = await setup.lifecycle.dispatch({
-			issue,
-			repo: TEST_REPO,
-			workflow: { ...baseWorkflow, hooks: { after_run: "exit-after_run" } },
-			attempt: 1,
-		});
-		const result = await handle.done;
-
-		expect(result).toMatchObject({ status: "completed" });
-		expect(setup.tracker.transitions).toEqual([
-			{
-				repo: TEST_REPO,
-				number: issue.number,
-				from: "running",
-				to: "awaiting_review",
-			},
-		]);
-	});
-
 	it("PR creation failure: tracker transition still attempted, run still completes", async () => {
 		const tracker = createInMemoryTracker(createTestIssue());
 		const codeHost = createInMemoryCodeHost("file:///dummy");
 		codeHost.failChangeRequest();
 
 		await using setup = await createTestRunLifecycle({ tracker, codeHost });
-		// Re-point cloneUrl to the bare repo since failChangeRequest does not interact with cloneUrl
 		const realCloneUrl = setup.bareRepo;
 		codeHost.cloneUrl = () => realCloneUrl;
 
@@ -261,7 +232,7 @@ describe("RunLifecycle.dispatch", () => {
 		]);
 	});
 
-	it("abort mid-phase: result is failed with abort error, workspace kept", async () => {
+	it("abort mid-step: result is failed with abort error, workspace kept", async () => {
 		let releaseAbortable: () => void = () => {};
 		const abortableAgent = createScriptedAgent(async function* (opts) {
 			yield* (async function* (): AsyncGenerator<never> {
@@ -269,7 +240,7 @@ describe("RunLifecycle.dispatch", () => {
 					releaseAbortable = resolve;
 					opts.signal.addEventListener("abort", () => resolve());
 				});
-				if (opts.signal.aborted) throw new Error("phase saw abort");
+				if (opts.signal.aborted) throw new Error("step saw abort");
 			})();
 		});
 		await using setup = await createTestRunLifecycle({
@@ -284,7 +255,6 @@ describe("RunLifecycle.dispatch", () => {
 			attempt: 1,
 		});
 
-		// Wait until the agent is mid-flight, then kill.
 		await new Promise<void>((resolve) => {
 			const tick = () => {
 				if (releaseAbortable !== (() => {})) resolve();
@@ -306,7 +276,7 @@ describe("RunLifecycle.dispatch", () => {
 		).resolves.toBeUndefined();
 	});
 
-	it("persists phaseIndex and sessionId for each phase as it completes", async () => {
+	it("persists stepIndex and sessionId for each step as it completes", async () => {
 		const agent = createScriptedAgent(async function* (_opts, callIndex) {
 			yield {
 				type: "assistant",
@@ -323,46 +293,27 @@ describe("RunLifecycle.dispatch", () => {
 		const handle = await setup.lifecycle.dispatch({
 			issue: createTestIssue(),
 			repo: TEST_REPO,
-			workflow: phasedWorkflow,
+			workflow: multiStepWorkflow,
 			attempt: 1,
 		});
 		await handle.done;
 
 		const [run] = setup.db.select().from(runs).all();
 		expect(run).toMatchObject({
-			phaseIndex: 1,
+			stepIndex: 1,
 			sessionId: "sess-1",
 		});
 		expect(agent.calls).toHaveLength(2);
 	});
 
-	it("before_run hook failure throws from dispatch (no run is enqueued)", async () => {
-		await using setup = await createTestRunLifecycle({
-			runShell: async (script) => {
-				if (script.includes("before_run")) throw new Error("before_run failed");
-			},
-		});
-
-		await expect(
-			setup.lifecycle.dispatch({
-				issue: createTestIssue(),
-				repo: TEST_REPO,
-				workflow: { ...baseWorkflow, hooks: { before_run: "exit-before_run" } },
-				attempt: 1,
-			}),
-		).rejects.toThrow(/before_run failed/);
-
-		expect(setup.db.select().from(runs).all()).toEqual([]);
-	});
-
-	it("renders phase prompts with template vars and shell expansion", async () => {
+	it("renders step prompts with template vars and shell expansion", async () => {
 		const agent = createScriptedAgent(() => yieldAssistant("sess"));
 		await using setup = await createTestRunLifecycle({ agent });
 
 		const workflow: RepoWorkflow = {
 			branch: "agent/x",
 			base_branch: "main",
-			phases: [
+			steps: [
 				{
 					name: "plan",
 					prompt: "Plan {{ issue.number }} !`printf one`",
@@ -392,11 +343,11 @@ describe("RunLifecycle.dispatch", () => {
 		expect(agent.calls[1]?.resumeSessionId).toBe("sess");
 	});
 
-	it("emits phase.started/completed/failed events with the failed phase index", async () => {
+	it("emits step.started/completed/failed events with the failed step index", async () => {
 		let callCount = 0;
 		const agent = createScriptedAgent(async function* () {
 			callCount++;
-			if (callCount === 2) throw new Error("phase exploded");
+			if (callCount === 2) throw new Error("step exploded");
 			yield {
 				type: "assistant",
 				session_id: "sess-plan",
@@ -415,7 +366,7 @@ describe("RunLifecycle.dispatch", () => {
 		const handle = await setup.lifecycle.dispatch({
 			issue: createTestIssue(),
 			repo: TEST_REPO,
-			workflow: phasedWorkflow,
+			workflow: multiStepWorkflow,
 			attempt: 1,
 		});
 		await handle.done;
@@ -423,32 +374,139 @@ describe("RunLifecycle.dispatch", () => {
 		const [run] = setup.db.select().from(runs).all();
 		expect(run).toMatchObject({
 			status: "failed",
-			error: "phase exploded",
+			error: "step exploded",
 			sessionId: "sess-plan",
-			phaseIndex: 1,
+			stepIndex: 1,
 		});
 
-		const phaseEvents = getEvents(setup.db, run?.id ?? "")
-			.filter((e) => e.type.startsWith("phase."))
+		const stepEvents = getEvents(setup.db, run?.id ?? "")
+			.filter((e) => e.type.startsWith("step."))
 			.map((e) => ({ type: e.type, data: e.data }));
 
-		expect(phaseEvents).toEqual([
+		expect(stepEvents).toEqual([
 			{
-				type: "phase.started",
+				type: "step.started",
 				data: { name: "plan", index: 0, total: 2 },
 			},
 			{
-				type: "phase.completed",
+				type: "step.completed",
 				data: { name: "plan", index: 0, durationMs: expect.any(Number) },
 			},
 			{
-				type: "phase.started",
+				type: "step.started",
 				data: { name: "implement", index: 1, total: 2 },
 			},
 			{
-				type: "phase.failed",
-				data: { name: "implement", index: 1, error: "phase exploded" },
+				type: "step.failed",
+				data: { name: "implement", index: 1, error: "step exploded" },
 			},
 		]);
+	});
+
+	it("creates the workflow's branch in the cloned workspace before running steps", async () => {
+		const branchAtStep = { value: "" };
+		const agent = createScriptedAgent(async function* (opts) {
+			const { stdout } = await exec(
+				"git",
+				["rev-parse", "--abbrev-ref", "HEAD"],
+				{ cwd: opts.cwd },
+			);
+			branchAtStep.value = stdout.trim();
+			yield {
+				type: "assistant",
+				session_id: "sess",
+				// biome-ignore lint/suspicious/noExplicitAny: shape decoupled from SDK
+				message: { content: [] } as any,
+				parent_tool_use_id: null,
+				uuid: "00000000-0000-0000-0000-000000000077",
+			} as never;
+		});
+
+		await using setup = await createTestRunLifecycle({ agent });
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: baseWorkflow,
+			attempt: 1,
+		});
+		await handle.done;
+
+		expect(branchAtStep.value).toBe("agent/issue-1");
+	});
+
+	it("runs .agent/setup.sh from the cloned repo when present", async () => {
+		const ranScripts: string[] = [];
+		await using setup = await createTestRunLifecycle({
+			agent: silentAgent,
+			runShell: async (script, cwd) => {
+				ranScripts.push(script);
+				expect(cwd).toBe(`${setup.workspaceRoot}/test-owner_test-repo_1`);
+			},
+			beforeFirstStep: async (wsPath) => {
+				await writeSetupScript(wsPath, "#!/usr/bin/env bash\necho hi\n");
+			},
+		});
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: baseWorkflow,
+			attempt: 1,
+		});
+		await handle.done;
+
+		expect(ranScripts).toEqual(["bash .agent/setup.sh"]);
+	});
+
+	it("skips setup when .agent/setup.sh is absent", async () => {
+		const ranScripts: string[] = [];
+		await using setup = await createTestRunLifecycle({
+			agent: silentAgent,
+			runShell: async (script) => {
+				ranScripts.push(script);
+			},
+		});
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: baseWorkflow,
+			attempt: 1,
+		});
+		await handle.done;
+
+		expect(ranScripts).toEqual([]);
+	});
+
+	it("aborts the run when .agent/setup.sh exits non-zero, no step.started event", async () => {
+		await using setup = await createTestRunLifecycle({
+			agent: silentAgent,
+			runShell: async () => {
+				throw new Error("setup.sh exit 1");
+			},
+			beforeFirstStep: async (wsPath) => {
+				await writeSetupScript(wsPath, "#!/usr/bin/env bash\nexit 1\n");
+			},
+		});
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: baseWorkflow,
+			attempt: 1,
+		});
+		const result = await handle.done;
+
+		expect(result).toMatchObject({
+			status: "failed",
+			error: "setup.sh exit 1",
+		});
+
+		const [run] = setup.db.select().from(runs).all();
+		const stepStarted = getEvents(setup.db, run?.id ?? "").filter(
+			(e) => e.type === "step.started",
+		);
+		expect(stepStarted).toEqual([]);
 	});
 });
