@@ -47,10 +47,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function renderPrompt(
 	template: string,
-	vars: { issue: Issue; attempt?: number; branch?: string },
+	vars: {
+		issue: Issue;
+		attempt?: number;
+		branch?: string;
+		outputs?: Record<string, unknown> | undefined;
+	},
 ): string {
 	return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
 		const parts = path.split(".");
+		if (parts[0] === "steps") {
+			return renderOutputReference(parts, vars.outputs ?? {});
+		}
 		let value: unknown = vars;
 		for (const part of parts) {
 			if (!isRecord(value)) return "";
@@ -63,4 +71,22 @@ export function renderPrompt(
 			);
 		return stripShellBlockMarkers(String(value));
 	});
+}
+
+function renderOutputReference(
+	parts: string[],
+	outputs: Record<string, unknown>,
+): string {
+	const [, stepName, marker, ...rest] = parts;
+	if (stepName === undefined || marker !== "output" || rest.length === 0)
+		return "";
+	let value: unknown = outputs[stepName];
+	for (const key of rest) {
+		if (!isRecord(value)) return "";
+		value = value[key];
+	}
+	if (value == null) return "";
+	if (typeof value === "object")
+		return stripShellBlockMarkers(JSON.stringify(value));
+	return stripShellBlockMarkers(String(value));
 }
