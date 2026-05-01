@@ -8,6 +8,7 @@ const workflowStepSchema = z
 		name: z.string().min(1),
 		prompt: z.string(),
 		resume_previous: z.boolean().optional().default(false),
+		output_schema: z.record(z.string(), z.unknown()).optional(),
 	})
 	.strict();
 

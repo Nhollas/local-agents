@@ -61,6 +61,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 	const lifecycle = createRunLifecycle({
 		runner,
+		repo: runRepo,
 		tracker,
 		codeHost,
 		agent,

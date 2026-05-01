@@ -3,7 +3,7 @@ import { access, chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { runs } from "../../db/schema.ts";
+import { runStepOutputs, runs } from "../../db/schema.ts";
 import { getEvents } from "../../testing/support/test-db.ts";
 import {
 	createInMemoryCodeHost,
@@ -547,5 +547,178 @@ describe("RunLifecycle.dispatch", () => {
 				body: `Closes ${issue.key}\nBranch: agent/issue-1`,
 			},
 		]);
+	});
+
+	it("output step: passes outputFormat to invoker and persists structured_output to run_step_outputs", async () => {
+		const summarySchema = {
+			type: "object",
+			properties: { title: { type: "string" } },
+			required: ["title"],
+		};
+		const structured = { title: "It broke" };
+		const agent = createScriptedAgent(async function* () {
+			yield {
+				type: "result",
+				subtype: "success",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: false,
+				num_turns: 1,
+				result: "ok",
+				stop_reason: "end_turn",
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				structured_output: structured,
+				uuid: "00000000-0000-0000-0000-000000000050",
+				session_id: "sess-out",
+			} as never;
+		});
+		await using setup = await createTestRunLifecycle({ agent });
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: {
+				...baseWorkflow,
+				steps: [
+					{
+						name: "summarise",
+						prompt: "Summarise",
+						resume_previous: false,
+						output_schema: summarySchema,
+					},
+				],
+			},
+			attempt: 1,
+		});
+		const result = await handle.done;
+
+		expect(result).toMatchObject({ status: "completed" });
+		expect(agent.calls[0]?.outputFormat).toEqual({
+			type: "json_schema",
+			schema: summarySchema,
+		});
+
+		const outputRows = setup.db.select().from(runStepOutputs).all();
+		expect(outputRows).toEqual([
+			{
+				runId: handle.runId,
+				stepName: "summarise",
+				outputJson: structured,
+				createdAt: expect.any(String),
+			},
+		]);
+	});
+
+	it("output step: aborts the run when SDK returns error_max_structured_output_retries", async () => {
+		const agent = createScriptedAgent(async function* () {
+			yield {
+				type: "result",
+				subtype: "error_max_structured_output_retries",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: true,
+				num_turns: 1,
+				stop_reason: null,
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				errors: [],
+				uuid: "00000000-0000-0000-0000-000000000060",
+				session_id: "sess-err",
+			} as never;
+		});
+		await using setup = await createTestRunLifecycle({ agent, maxRetries: 0 });
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: {
+				...baseWorkflow,
+				steps: [
+					{
+						name: "summarise",
+						prompt: "Summarise",
+						resume_previous: false,
+						output_schema: { type: "object" },
+					},
+					{ name: "after", prompt: "after", resume_previous: false },
+				],
+			},
+			attempt: 1,
+		});
+		const result = await handle.done;
+
+		expect(result).toMatchObject({
+			status: "failed",
+			error: "error_max_structured_output_retries",
+		});
+		expect(agent.calls).toHaveLength(1);
+		expect(setup.db.select().from(runStepOutputs).all()).toEqual([]);
+	});
+
+	it("retry: only writes the new run's outputs, leaving the parent's row untouched (hydration is in-memory)", async () => {
+		const parentRunIdValue = "parent-run" as never;
+		const agent = createScriptedAgent(() => yieldAssistant("sess-resume"));
+		await using setup = await createTestRunLifecycle({ agent });
+
+		setup.db
+			.insert(runs)
+			.values({
+				id: parentRunIdValue,
+				agentName: "issue-1",
+				status: "failed",
+				startedAt: "2026-01-01T00:00:00Z",
+				completedAt: "2026-01-01T00:00:01Z",
+				durationMs: 1,
+				error: "boom",
+			})
+			.run();
+		setup.db
+			.insert(runStepOutputs)
+			.values({
+				runId: parentRunIdValue,
+				stepName: "summarise",
+				outputJson: { title: "from-parent" },
+				createdAt: "2026-01-01T00:00:00Z",
+			})
+			.run();
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: {
+				...baseWorkflow,
+				steps: [
+					{
+						name: "summarise",
+						prompt: "Summarise",
+						resume_previous: false,
+						output_schema: { type: "object" },
+					},
+					{ name: "after", prompt: "after", resume_previous: false },
+				],
+			},
+			attempt: 2,
+			resume: {
+				parentRunId: parentRunIdValue,
+				startStepIndex: 1,
+			},
+		});
+		await handle.done;
+
+		const rows = setup.db.select().from(runStepOutputs).all();
+		expect(rows).toEqual([
+			{
+				runId: parentRunIdValue,
+				stepName: "summarise",
+				outputJson: { title: "from-parent" },
+				createdAt: "2026-01-01T00:00:00Z",
+			},
+		]);
+		expect(agent.calls).toHaveLength(1);
 	});
 });

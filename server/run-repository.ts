@@ -7,6 +7,7 @@ import {
 	type RunEventType,
 	type RunStatus,
 	runEvents,
+	runStepOutputs,
 	runs,
 } from "./db/schema.ts";
 import type { IssueKey, RunId } from "./types/brands.ts";
@@ -124,6 +125,8 @@ export type RunRepository = {
 		limit: number;
 	}): Run[];
 	getRunEvents(runId: RunId): RunEvent[];
+	writeStepOutput(runId: RunId, stepName: string, value: unknown): void;
+	getStepOutputs(runId: RunId): Record<string, unknown>;
 };
 
 export function createRunRepository(db: Db): RunRepository {
@@ -209,6 +212,28 @@ export function createRunRepository(db: Db): RunRepository {
 				.where(eq(runEvents.runId, runId))
 				.orderBy(asc(runEvents.createdAt))
 				.all();
+		},
+
+		writeStepOutput(runId, stepName, value) {
+			const createdAt = new Date().toISOString();
+			db.insert(runStepOutputs)
+				.values({ runId, stepName, outputJson: value, createdAt })
+				.onConflictDoUpdate({
+					target: [runStepOutputs.runId, runStepOutputs.stepName],
+					set: { outputJson: value, createdAt },
+				})
+				.run();
+		},
+
+		getStepOutputs(runId) {
+			const rows = db
+				.select()
+				.from(runStepOutputs)
+				.where(eq(runStepOutputs.runId, runId))
+				.all();
+			const out: Record<string, unknown> = {};
+			for (const row of rows) out[row.stepName] = row.outputJson;
+			return out;
 		},
 	};
 }

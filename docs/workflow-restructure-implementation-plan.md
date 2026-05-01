@@ -333,7 +333,9 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 3 — Output Steps
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-01 on `main` (single sweep — schema + invoker + step runner + repo + lifecycle hydration; reviewable as one PR).
 
 **Purpose:** Add `output_schema` to step definitions, plumb `outputFormat` through to the SDK, capture validated outputs, persist them, and hydrate them on retry.
 
@@ -387,6 +389,33 @@ Use this handoff template when a slice is interrupted:
 - Hydration on retry is the bug magnet of this slice. Easy failure mode: new runId reads its own (empty) outputs instead of the parent's. Test specifically for retry-skip-and-substitute behaviour, not just "outputs are persisted".
 - `output_json` size: structured outputs can be large (the SDK example `todoSchema` returns an array). Sqlite TEXT handles it, but consider whether to log the full value to the canonical log or just a checksum / first-N-chars summary.
 - `RunContext.outputs` is shared between fresh runs and resumed runs; the type signature must reflect that it can be partially populated.
+
+**Completed changes:**
+
+- **Workflow schema**: optional `output_schema: Record<string, unknown>` added to `workflowStepSchema` in `server/workflow/workflow.ts`. Strict step parse still rejects other unknown keys.
+- **Agent invoker**: `AgentInvokeOptions` gained optional `outputFormat: { type: "json_schema", schema }` (new `OutputFormat` type re-exported). `claudeSdkAgentInvoker` threads it into `query()` only when set, so action-step calls remain identical to before.
+- **Step runner** (`server/orchestrator/step-runner.ts`):
+  - When `step.output_schema` is present, builds `{ type: "json_schema", schema }` and passes to the invoker.
+  - Iterates the message stream and now consumes terminal `result` messages too (not just `assistant`). On `result.subtype === "success"` for an output step, captures `structured_output` via `ctx.setStepOutput(step.name, value)` and appends a `step_outputs` canonical-log entry. On `result.subtype === "error_max_structured_output_retries"` (and other error subtypes), throws — the existing `catch` in the runner emits `step.failed` with the subtype as the error message and aborts the run before subsequent steps fire.
+  - Action steps (no `output_schema`) ignore terminal `result` messages silently — preserves backwards compatibility with the SDK now always emitting one.
+- **`RunContext`** (`server/runner/runner.ts`):
+  - New `outputs: Record<string, unknown>` (the readable map, populated from `job.initialOutputs` at enqueue) and `setStepOutput(stepName, value)` setter (updates the in-memory map AND persists via `repo.writeStepOutput`).
+  - `AgentJob.initialOutputs?: Record<string, unknown>` carries hydrated parent outputs into the runner.
+- **Run repository** (`server/run-repository.ts`): two new methods. `writeStepOutput(runId, stepName, value)` upserts a `run_step_outputs` row keyed by the composite primary key. `getStepOutputs(runId)` returns `Record<stepName, value>` (empty object for unknown runs).
+- **Run lifecycle**: now takes `repo: RunRepository` in its deps. On dispatch, when `resume.parentRunId` is set, calls `repo.getStepOutputs(parentRunId)` and threads the result through `AgentJob.initialOutputs`. Hydration is purely in-memory — the runner does not re-persist parent outputs under the new run id, so `run_step_outputs` only ever contains rows for steps that *actually executed and produced output* in their own run.
+- **Test seam**: no changes to the scripted-agent contract. The new `step-runner.test.ts` constructs a fake `RunContext` directly to exercise hydration and result-message handling in isolation. The lifecycle integration tests cover the wiring (output rows persisted, `outputFormat` reaches the invoker, retry doesn't crash and doesn't re-persist parent outputs).
+
+**Verification:**
+
+- `pnpm lint` — pass (129 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (41 files, 263 tests; up from 250 in slice 2). New tests: 5 in `step-runner.test.ts` (action step path, output-step success path, max-retries abort, action step with terminal result, initialOutputs hydration), 4 in `run-repository.test.ts` (write/upsert/read/empty), 1 in `workflow.test.ts` (`output_schema` accepted), 3 in `run-lifecycle.test.ts` (output step end-to-end, max-retries abort, retry-without-re-persisting-parent).
+- `pnpm test:coverage` — Statements **99.35%** / Branches **98.48%** / Functions **98.18%** / Lines **99.3%**. Statements/lines/functions all up vs the slice 2 baseline; branches dropped 0.45pp because the SDK `SDKResultError` union has multiple subtypes (`error_during_execution`, `error_max_turns`, `error_max_budget_usd`, `error_max_structured_output_retries`) and only the named one is exercised in tests — the others are caught by the same `throw new Error(msg.subtype)` path so further coverage would be redundant.
+
+**Deferred:**
+
+- `change_request` rendering does not yet read `RunContext.outputs` — that's slice 4. The lifecycle still calls `renderChangeRequest({ template, issue, attempt, branch })` without an outputs argument, by design.
+- Step prompt rendering (`{{ steps.X.output.Y }}`) is also slice 4. The hydrated `ctx.outputs` map exists but isn't read by `renderPrompt` yet.
 
 ## Slice 4 — Output Substitution
 

@@ -1,6 +1,7 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import { logger } from "../logger.ts";
+import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import {
@@ -41,6 +42,7 @@ export type RunLifecycle = {
 
 type RunLifecycleDeps = {
 	runner: Runner;
+	repo: RunRepository;
 	tracker: TrackerAdapter;
 	codeHost: CodeHostAdapter;
 	agent: AgentInvoker;
@@ -54,6 +56,7 @@ type RunLifecycleDeps = {
 export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	const {
 		runner,
+		repo: runRepo,
 		tracker,
 		codeHost,
 		agent,
@@ -78,7 +81,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			issueKey: issue.key,
 			issueTitle: issue.title,
 			attempt,
-			...(resume?.parentRunId != null && { parentRunId: resume.parentRunId }),
+			...(resume?.parentRunId != null && {
+				parentRunId: resume.parentRunId,
+				initialOutputs: runRepo.getStepOutputs(resume.parentRunId),
+			}),
 			handler: (ctx) =>
 				canonicalLog.run(
 					{

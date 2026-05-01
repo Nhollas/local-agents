@@ -3,12 +3,18 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 export type AgentMessage =
 	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never;
 
+export type OutputFormat = {
+	type: "json_schema";
+	schema: Record<string, unknown>;
+};
+
 export type AgentInvokeOptions = {
 	prompt: string;
 	cwd: string;
 	model: string;
 	resumeSessionId?: string;
 	signal: AbortSignal;
+	outputFormat?: OutputFormat;
 };
 
 export type AgentInvoker = {
@@ -26,7 +32,7 @@ export const ALLOWED_TOOLS = [
 
 export function claudeSdkAgentInvoker(): AgentInvoker {
 	return {
-		invoke({ prompt, cwd, model, resumeSessionId }) {
+		invoke({ prompt, cwd, model, resumeSessionId, outputFormat }) {
 			return query({
 				prompt,
 				options: {
@@ -35,6 +41,7 @@ export function claudeSdkAgentInvoker(): AgentInvoker {
 					allowedTools: [...ALLOWED_TOOLS],
 					permissionMode: "dontAsk" as const,
 					...(resumeSessionId && { resume: resumeSessionId }),
+					...(outputFormat && { outputFormat }),
 				},
 			});
 		},
