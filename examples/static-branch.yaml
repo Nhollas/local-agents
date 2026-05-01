@@ -1,23 +1,7 @@
 branch: "agent/issue-{{ issue.number }}"
 base_branch: main
 
-hooks:
-  after_create: |
-    git checkout -b agent/issue-{{ issue.number }}
-    if [ -f pnpm-lock.yaml ]; then
-      pnpm install --frozen-lockfile
-    elif [ -f yarn.lock ]; then
-      yarn install --frozen-lockfile
-    elif [ -f package-lock.json ]; then
-      npm ci
-    fi
-  before_run: |
-    git fetch origin main
-    git rebase origin/main
-  after_run: |
-    git push -u origin agent/issue-{{ issue.number }}
-
-phases:
+steps:
   - name: implement
     prompt: |
       # Task
@@ -28,10 +12,10 @@ phases:
       {{ issue.description }}
       </issue-description>
 
-      Only work on this one issue. The orchestrator created branch
-      `agent/issue-{{ issue.number }}` and rebased it on `origin/main` for you.
-      Make commits before finishing — the branch is pushed and a pull request
-      is opened by the orchestrator after the review phase completes.
+      Only work on this one issue. The orchestrator has cloned the repo fresh
+      and created branch `agent/issue-{{ issue.number }}` from `main` for you.
+      Make commits as you go — the orchestrator pushes the branch and opens
+      the change request after the final step completes.
 
       # Project Context
 
@@ -64,8 +48,8 @@ phases:
 
       If you are blocked or the issue is incomplete, leave a clear final
       message explaining the state and stop without committing speculative
-      work. Do not transition the issue yourself — the orchestrator owns
-      tracker state.
+      work. Do not push, open a PR, or transition the tracker — those are
+      orchestrator-owned.
 
   - name: review
     prompt: |
@@ -78,23 +62,23 @@ phases:
       {{ issue.description }}
       </issue-description>
 
-      Diff against the target branch:
+      Diff against the base branch:
 
       <diff>
-      !`git diff origin/main...HEAD`
+      !`git diff main...HEAD`
       </diff>
 
       Commits on this branch:
 
       <commits>
-      !`git log origin/main..HEAD --oneline`
+      !`git log main..HEAD --oneline`
       </commits>
 
       # Review Focus
 
       Review for correctness, maintainability, test coverage, and fit with
       project conventions (`AGENTS.md`, `CODING_STANDARDS.md`, anything under
-      `docs/coding-standards*` or `docs/adrs/`).
+      `docs/coding-standards*` or `docs/adr/`).
 
       Check that:
 
@@ -106,3 +90,32 @@ phases:
       If you find issues, fix them directly on this branch and commit the
       refinements with a Conventional Commit message. If the branch is
       already good, make no changes.
+
+  - name: summarise
+    prompt: |
+      Summarise the change on branch `agent/issue-{{ issue.number }}` for
+      reviewers of issue {{ issue.key }}.
+
+      <diff>
+      !`git diff main...HEAD`
+      </diff>
+
+      <commits>
+      !`git log main..HEAD --oneline`
+      </commits>
+
+      Produce a one-line title and a short markdown body explaining what
+      changed and why. Body should be reviewer-facing, not a commit log.
+    output_schema:
+      type: object
+      properties:
+        title: { type: string }
+        body: { type: string }
+      required: [title, body]
+
+change_request:
+  title: "{{ steps.summarise.output.title }}"
+  body: |
+    Closes {{ issue.key }}: {{ issue.title }}.
+
+    {{ steps.summarise.output.body }}

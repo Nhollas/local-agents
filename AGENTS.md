@@ -17,6 +17,10 @@ pnpm test                 # vitest across all projects
 | `dashboard/` | React + Vite dashboard UI with Tailwind                          |
 | `docs/`      | Architecture, patterns, and coding standards                     |
 
+## Project status
+
+Pre-launch and unstable. There are no real users, no production data, and no compatibility guarantees. Don't propose migrations, backfills, dual-read shims, deprecation paths, or "additive" designs to preserve existing state — just make the breaking change. Drop old rows, rename freely, change schemas in place.
+
 ## Before writing code
 
 - Read existing code in the area you're changing. Follow the patterns already there.
