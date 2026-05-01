@@ -9,6 +9,8 @@ const workflowPhaseSchema = z.object({
 	resume_previous: z.boolean().optional().default(false),
 });
 
+export type WorkflowPhase = z.infer<typeof workflowPhaseSchema>;
+
 const repoWorkflowSchema = z
 	.object({
 		branch: z.string().min(1),
@@ -33,26 +35,27 @@ const repoWorkflowSchema = z
 				path: hasPrompt ? ["phases"] : ["prompt"],
 			});
 		}
+	})
+	.transform(({ prompt, phases, ...rest }) => {
+		if (phases) return { ...rest, phases };
+		/* v8 ignore next 3 -- unreachable; superRefine guarantees prompt is set when phases is not */
+		if (prompt == null) {
+			throw new Error("Invariant: workflow has neither prompt nor phases");
+		}
+		return {
+			...rest,
+			phases: [{ name: "prompt", prompt, resume_previous: false }],
+		};
 	});
-
-export type WorkflowPhase = z.infer<typeof workflowPhaseSchema>;
 
 export type RepoWorkflow = z.infer<typeof repoWorkflowSchema>;
 
-export function getWorkflowPhases(workflow: RepoWorkflow): WorkflowPhase[] {
-	if (workflow.phases) return workflow.phases;
-	return [
-		{
-			name: "prompt",
-			prompt: workflow.prompt as string,
-			resume_previous: false,
-		},
-	];
+export function parseRepoWorkflow(yamlContent: string): RepoWorkflow {
+	return repoWorkflowSchema.parse(parse(yamlContent));
 }
 
-export function parseRepoWorkflow(yamlContent: string): RepoWorkflow {
-	const parsed = parse(yamlContent);
-	return repoWorkflowSchema.parse(parsed);
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object";
 }
 
 /**
@@ -66,8 +69,8 @@ export function renderPrompt(
 		const parts = path.split(".");
 		let value: unknown = vars;
 		for (const part of parts) {
-			if (value == null || typeof value !== "object") return "";
-			value = (value as Record<string, unknown>)[part];
+			if (!isRecord(value)) return "";
+			value = value[part];
 		}
 		if (value == null) return "";
 		if (Array.isArray(value))

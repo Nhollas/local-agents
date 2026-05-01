@@ -28,9 +28,15 @@ export async function expandMarkedShellBlocks(
 	prompt: string,
 	options: ExpandShellBlocksOptions,
 ): Promise<string> {
-	const commands = [...prompt.matchAll(markedShellBlockPattern)].map(
-		(match) => match[1] as string,
-	);
+	const commands: string[] = [];
+	for (const match of prompt.matchAll(markedShellBlockPattern)) {
+		const command = match[1];
+		/* v8 ignore next 3 -- unreachable; pattern's first capture group always matches */
+		if (command === undefined) {
+			throw new Error("Invariant: shell block match missing capture group");
+		}
+		commands.push(command);
+	}
 	if (commands.length === 0) return prompt;
 
 	const outputs = await Promise.all(
@@ -38,7 +44,14 @@ export async function expandMarkedShellBlocks(
 	);
 
 	let i = 0;
-	return prompt.replace(markedShellBlockPattern, () => outputs[i++] as string);
+	return prompt.replace(markedShellBlockPattern, () => {
+		const output = outputs[i++];
+		/* v8 ignore next 3 -- unreachable; outputs.length matches number of replacements */
+		if (output === undefined) {
+			throw new Error("Invariant: shell block output missing");
+		}
+		return output;
+	});
 }
 
 async function runShellBlock(

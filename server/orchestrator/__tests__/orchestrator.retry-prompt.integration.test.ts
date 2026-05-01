@@ -34,8 +34,14 @@ describe("Orchestrator retry prompt fidelity", () => {
 		const workflow: RepoWorkflow = {
 			branch: "agent/issue-{{ issue.number }}",
 			base_branch: "main",
-			prompt:
-				"Fix issue #{{ issue.number }}: {{ issue.title }}\n\nDescription: {{ issue.description }}",
+			phases: [
+				{
+					name: "prompt",
+					prompt:
+						"Fix issue #{{ issue.number }}: {{ issue.title }}\n\nDescription: {{ issue.description }}",
+					resume_previous: false,
+				},
+			],
 		};
 
 		await using ctx = await createTestOrchestrator({
@@ -68,8 +74,14 @@ describe("Orchestrator retry prompt fidelity", () => {
 		const workflow: RepoWorkflow = {
 			branch: "agent/issue-{{ issue.number }}",
 			base_branch: "main",
-			prompt:
-				"Fix issue #{{ issue.number }} [{{ issue.labels }}]: {{ issue.title }}",
+			phases: [
+				{
+					name: "prompt",
+					prompt:
+						"Fix issue #{{ issue.number }} [{{ issue.labels }}]: {{ issue.title }}",
+					resume_previous: false,
+				},
+			],
 		};
 
 		await using ctx = await createTestOrchestrator({

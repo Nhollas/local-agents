@@ -24,7 +24,13 @@ describe("Orchestrator shell expansion", () => {
 				[
 					REPO,
 					createTestWorkflow({
-						prompt: "Fix issue {{ issue.number }}\n!`printf from-shell`",
+						phases: [
+							{
+								name: "prompt",
+								prompt: "Fix issue {{ issue.number }}\n!`printf from-shell`",
+								resume_previous: false,
+							},
+						],
 					}),
 				],
 			]),
@@ -55,7 +61,13 @@ describe("Orchestrator shell expansion", () => {
 				[
 					REPO,
 					createTestWorkflow({
-						prompt: "!`printf expansion-failed >&2; exit 7`",
+						phases: [
+							{
+								name: "prompt",
+								prompt: "!`printf expansion-failed >&2; exit 7`",
+								resume_previous: false,
+							},
+						],
 					}),
 				],
 			]),

@@ -8,7 +8,12 @@ import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import { ABORT_ERROR, type Runner, type RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import { branchName, type RepoSlug, type RunId } from "../types/brands.ts";
+import {
+	branchName,
+	type IssueKey,
+	type RepoSlug,
+	type RunId,
+} from "../types/brands.ts";
 import { unwrap } from "../types/result.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
@@ -42,10 +47,10 @@ type Orchestrator = {
 
 type TaggedIssue = { issue: Issue; repo: RepoSlug; workflow: RepoWorkflow };
 type TickState = {
-	runningByIssue: Map<string, RunId[]>;
+	runningByIssue: Map<IssueKey, RunId[]>;
 	runningCount: number;
 	pending: TaggedIssue[];
-	stillRunning: Map<RepoSlug, Set<string>>;
+	stillRunning: Map<RepoSlug, Set<IssueKey>>;
 };
 
 export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
@@ -249,7 +254,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		const entries = [...workflows.entries()];
 
 		const dbSnapshot = runRepo.getRunningSnapshot();
-		const runningByIssue = new Map<string, RunId[]>();
+		const runningByIssue = new Map<IssueKey, RunId[]>();
 		for (const r of dbSnapshot) {
 			const ids = runningByIssue.get(r.issueKey) ?? [];
 			ids.push(r.id);
@@ -268,7 +273,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			Promise.allSettled(
 				entries.map(async ([repo]) => {
 					const issues = await tracker.fetchActiveIssues(repo, "running");
-					return { repo, keys: new Set(issues.map((i) => i.key as string)) };
+					return { repo, keys: new Set(issues.map((i) => i.key)) };
 				}),
 			),
 		]);
@@ -286,7 +291,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		}
 		pending.sort((a, b) => a.issue.createdAt.localeCompare(b.issue.createdAt));
 
-		const stillRunning = new Map<RepoSlug, Set<string>>();
+		const stillRunning = new Map<RepoSlug, Set<IssueKey>>();
 		for (const result of runningResults) {
 			if (result.status === "fulfilled") {
 				stillRunning.set(result.value.repo, result.value.keys);

@@ -26,15 +26,14 @@ Every slice must:
 
 ## Sequencing
 
-Slices 1 → 5 are sequential. Each unblocks the next:
+Slices 1 → 4 are sequential. Each unblocks the next:
 
 - Slice 1 introduces the primitives (brands, `Result`, `assertNever`) that later slices use.
 - Slice 2 brands the values that ripple through every module; doing this before slice 3+ means later slices already see the right types at boundaries.
-- Slice 3 reshapes `Run` state, which slices 4 and 5 depend on for parsing and API responses.
+- Slice 3 reshapes `Run` state, which slice 4 depends on for parsing.
 - Slice 4 parses at the DB boundary; needs slice 3's union shape to parse into.
-- Slice 5 converts API throws to returns; cleaner once slice 3 has tightened the shape it returns.
 
-Slice 6 is cleanup and can run in parallel with anything once 1–5 are done.
+Slice 6 is cleanup and can run in parallel with anything once 1–4 are done.
 
 ## Slice 1 — Type Foundations
 
@@ -197,53 +196,63 @@ Slice 6 is cleanup and can run in parallel with anything once 1–5 are done.
 - `RunEvent` data is a single inferred type with no hand-maintained duplicates.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 
-## Slice 5 — API Errors as Values
+## Slice 5 — API Errors as Values (dropped)
 
-**Status:** Not started
+**Status:** Dropped 2026-05-01.
 
-**Purpose:** Stop using `throw` for expected API failures. 404, validation, and state-conflict responses are routine outcomes, not invariant violations.
-
-**Scope:**
-
-- Audit `server/api/*` routes for `throw new ProblemDetailsError(...)` in expected paths.
-- Convert each to a returned response (`return c.json({...}, status)`).
-- Keep `ProblemDetailsError` and the global handler for genuine invariant violations / 500s only.
-- Where a route reads from the repository and may need to 404, the repository returns `Result<Run, NotFound>` (or similar); the route maps that to a response.
-
-**Natural code areas:**
-
-- `server/api/*`
-- `server/api/problem-details.ts`
-- `server/run-repository.ts` (signature changes for find-style reads)
-
-**Quality gates:**
-
-- No expected failure paths throw.
-- Existing route tests still pass with same response shapes.
-- `pnpm lint`, `pnpm typecheck`, `pnpm test`.
+**Why dropped:** The existing pattern (route throws `ProblemDetailsError`, single `onError` handler converts it to an RFC 9457 response) is already errors-as-values in everything but syntax. Conversion to `return problemResponse(c, ...)` is purely cosmetic — same status codes, same response shapes, same control flow. A trial implementation also forced an `as unknown as Context<AppEnv>` cast in the helper because `@hono/zod-validator`'s `Hook` binds `Env` looser than `AppEnv`, which is a regression the slice was supposed to avoid. The "errors as values" wins are already realised by slices 1–3 (branded types, `Run` discriminated union, `parseIssueKey` returning `Result`). `ProblemDetailsError` stays as the route → handler bridge.
 
 ## Slice 6 — Cleanup Pass
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-01.
+
+**Completed changes:**
+
+- `server/workflow/workflow.ts`: Folded the `prompt | phases` shorthand into a single Zod schema with a `.transform()` that normalizes both YAML shapes into a `phases` array at the boundary. `RepoWorkflow` is now `z.infer<typeof repoWorkflowSchema>` — no hand-written duplicate. Dropped `getWorkflowPhases` (callers read `workflow.phases` directly), removed `prompt as string` and the `value as Record<string, unknown>` cast in `renderPrompt` (now uses an `isRecord` type predicate). `NonEmptyArray<WorkflowPhase>` was considered and dropped — no caller indexes phases (only `.length`/`.entries()`), so per the standards it is non-load-bearing type machinery.
+- `server/orchestrator/phase-runner.ts`: Reads `workflow.phases` directly. Added a guard that throws if `startPhaseIndex` is out of range for the configured phases — the invariant could otherwise silently fail when stored DB state predates a config change.
+- `server/workflow/prompt-preprocessor.ts`: Removed `match[1] as string` and `outputs[i++] as string`. Both call sites now check for `undefined` and throw an unreachable-invariant error documented with a `/* v8 ignore */` pragma.
+- `server/api/problem-details.ts`: `zodProblemHook` now derives validation errors from `result.error.issues` directly, dropping the `messages as string[]` cast and the `flattenError` round-trip.
+- `server/orchestrator/orchestrator.ts`: Tightened tick-state types — `runningByIssue: Map<IssueKey, RunId[]>` and `stillRunning: Map<RepoSlug, Set<IssueKey>>` (was `string` keyed). Removed the `i.key as string` widening cast.
+- `server/run-repository.ts`: `getRunningSnapshot` now narrows via a `filter` with a typed predicate rather than asserting through `as`.
+- `server/trackers/jira.ts`: `extractText` uses `in`-based narrowing instead of casting through `Record<string, unknown>`.
+- `server/runner/runner.ts`: Documented the lone remaining `as RunEvent` cast — a TS limitation when recombining a discriminated union through a spread. `EventPayload` is the distributive `Pick<RunEvent, "type" | "data">`, so the runtime invariant is intact.
+- Added `server/orchestrator/__tests__/phase-runner.test.ts` covering the new `startPhaseIndex` invariant in both directions (negative and past-last-phase).
+- Updated test fixtures (`createTestWorkflow`) and the few tests that constructed `RepoWorkflow` literals with the old `prompt` shorthand to use the normalized `phases` form.
+
+**Verification:**
+
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm test:coverage` — 100% across all `server/` and `dashboard/` files.
+
+**Surviving `as` casts under `server/` (all documented post-narrowing assertions):**
+
+- `server/types/brands.ts` — Brand constructors at trusted boundaries (slice 1/2 design).
+- `server/run-repository.ts` `rowToRun` — exhaustive switch ends in `assertNever` (slice 3 design).
+- `server/runner/runner.ts` `as RunEvent` — see above.
 
 **Purpose:** Sweep the remaining items the earlier slices did not naturally fix.
 
-**Scope:**
+**Scope (executed):**
 
-- Remove unchecked `as` casts in `server/workflow/workflow.ts` (`prompt as string`, etc.) and `server/workflow/prompt-preprocessor.ts` (`match as RegExpExecArray`). Use control-flow narrowing or small assertion helpers.
-- Encode workflow phase invariants: `phases` as `NonEmptyArray<Phase>`, `startPhaseIndex` valid against the array.
-- Audit `server/api/problem-details.ts` for the `messages as string[]` cast.
-- Final scan with `rg -n '\bany\b|\bas \b|@ts-ignore|@ts-expect-error'` under `server/` (excluding `as const`); document any survivors with a justification or fix them.
+- Remove unchecked `as` casts in `server/workflow/workflow.ts` and `server/workflow/prompt-preprocessor.ts`.
+- Encode workflow phase invariants: `phases` always defined post-parse via Zod transform; `startPhaseIndex` validated at runtime against the array.
+- Drop the `messages as string[]` cast in `server/api/problem-details.ts`.
+- Final scan with `rg -n '\bany\b|\bas \b|@ts-ignore|@ts-expect-error'` under `server/` (excluding `as const`); document survivors.
 
 **Natural code areas:**
 
 - `server/workflow/*`
 - `server/api/problem-details.ts`
-- Anywhere flagged by the final sweep.
+- `server/orchestrator/*`, `server/run-repository.ts`, `server/trackers/jira.ts`
+- `server/runner/runner.ts`
 
 **Quality gates:**
 
-- No `any`, no `@ts-ignore`/`@ts-expect-error`, no unchecked `as` outside `as const` and post-narrowing assertions.
+- No `any`, no `@ts-ignore`/`@ts-expect-error`, no unchecked `as` outside `as const` and the documented post-narrowing assertions listed above.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 
 ## Release-Level Acceptance

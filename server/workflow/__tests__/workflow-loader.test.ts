@@ -35,7 +35,9 @@ describe("loadWorkflow", () => {
 		const workflow = loadWorkflow(workflowFile.path);
 
 		expect(workflow).toEqual({
-			prompt: "Fix the issue",
+			phases: [
+				{ name: "prompt", prompt: "Fix the issue", resume_previous: false },
+			],
 			branch: "agent/issue-{{ issue.number }}",
 			base_branch: "main",
 		});

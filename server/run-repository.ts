@@ -172,7 +172,11 @@ export function createRunRepository(db: Db): RunRepository {
 				.select({ id: runs.id, issueKey: runs.issueKey })
 				.from(runs)
 				.where(and(eq(runs.status, "running"), isNotNull(runs.issueKey)))
-				.all() as { id: RunId; issueKey: IssueKey }[];
+				.all()
+				.filter(
+					(row): row is { id: RunId; issueKey: IssueKey } =>
+						row.issueKey != null,
+				);
 		},
 
 		getRunById(id) {

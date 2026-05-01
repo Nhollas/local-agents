@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber } from "../../types/brands.ts";
-import {
-	getWorkflowPhases,
-	parseRepoWorkflow,
-	renderPrompt,
-} from "../workflow.ts";
+import { parseRepoWorkflow, renderPrompt } from "../workflow.ts";
 
 const baseIssue: Issue = {
 	key: issueKey("owner/repo#1"),
@@ -64,8 +60,7 @@ prompt: Fix this issue
 
 		expect(result.branch).toBe("agent/issue-{{ issue.number }}");
 		expect(result.base_branch).toBe("main");
-		expect(result.prompt).toBe("Fix this issue");
-		expect(getWorkflowPhases(result)).toEqual([
+		expect(result.phases).toEqual([
 			{ name: "prompt", prompt: "Fix this issue", resume_previous: false },
 		]);
 	});
@@ -84,8 +79,7 @@ phases:
 
 		const result = parseRepoWorkflow(yaml);
 
-		expect(result.prompt).toBeUndefined();
-		expect(getWorkflowPhases(result)).toEqual([
+		expect(result.phases).toEqual([
 			{ name: "plan", prompt: "Write a plan", resume_previous: false },
 			{
 				name: "implement",
