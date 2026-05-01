@@ -12,6 +12,8 @@ export type RunContext = {
 	emitStepEvent: (event: StepEvent) => void;
 	setSessionId: (id: string | null) => void;
 	setStepIndex: (index: number) => void;
+	setStepOutput: (stepName: string, value: unknown) => void;
+	outputs: Record<string, unknown>;
 	signal: AbortSignal;
 };
 
@@ -22,6 +24,7 @@ export type AgentJob = {
 	handler: (ctx: RunContext) => Promise<RunResult>;
 	attempt?: number;
 	parentRunId?: RunId;
+	initialOutputs?: Record<string, unknown>;
 };
 
 export type RunResult =
@@ -132,6 +135,13 @@ export function createRunner(config: RunnerConfig): Runner {
 				repo.setStepIndex(id, index);
 			};
 
+			const outputs: Record<string, unknown> = { ...job.initialOutputs };
+
+			const setStepOutput = (stepName: string, value: unknown) => {
+				outputs[stepName] = value;
+				repo.writeStepOutput(id, stepName, value);
+			};
+
 			const emitToolUse = (tool: string, target: string) => {
 				emitEvent(id, job.name, {
 					type: "run:tool_use",
@@ -160,6 +170,8 @@ export function createRunner(config: RunnerConfig): Runner {
 					emitStepEvent,
 					setSessionId,
 					setStepIndex,
+					setStepOutput,
+					outputs,
 					signal: controller.signal,
 				}),
 				abortPromise,

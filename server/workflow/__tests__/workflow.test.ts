@@ -226,10 +226,41 @@ base_branch: main
 steps:
   - name: implement
     prompt: Fix it
-    output_schema: { type: object }
-`;
+    bogus: value
+${validChangeRequest}`;
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("accepts a step with an output_schema (raw JSON Schema)", () => {
+		const yaml = `
+branch: my-branch
+base_branch: main
+steps:
+  - name: summarise
+    prompt: Summarise the issue
+    output_schema:
+      type: object
+      properties:
+        title:
+          type: string
+      required: [title]
+${validChangeRequest}`;
+
+		const result = parseRepoWorkflow(yaml);
+
+		expect(result.steps).toEqual([
+			{
+				name: "summarise",
+				prompt: "Summarise the issue",
+				resume_previous: false,
+				output_schema: {
+					type: "object",
+					properties: { title: { type: "string" } },
+					required: ["title"],
+				},
+			},
+		]);
 	});
 
 	it("throws on invalid YAML", () => {

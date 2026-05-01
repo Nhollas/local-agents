@@ -8,7 +8,7 @@ import {
 } from "../workflow/prompt-preprocessor.ts";
 import type { RepoWorkflow, WorkflowStep } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
-import type { AgentInvoker } from "./agent-invoker.ts";
+import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { logAgentMessage } from "./agent-logging.ts";
 
 type RunWorkflowStepsParams = {
@@ -109,16 +109,37 @@ async function runWorkflowStep({
 		});
 		const prompt = await expandMarkedShellBlocks(renderedPrompt, { cwd });
 
+		const outputFormat: OutputFormat | undefined = step.output_schema
+			? { type: "json_schema", schema: step.output_schema }
+			: undefined;
+
 		for await (const msg of agent.invoke({
 			prompt,
 			cwd,
 			model,
 			signal: ctx.signal,
 			...(resumeSessionId && { resumeSessionId }),
+			...(outputFormat && { outputFormat }),
 		})) {
-			if (msg.type !== "assistant") continue;
-			logAgentMessage(msg, cwd, ctx.emitToolUse);
-			currentSessionId = msg.session_id;
+			if (msg.type === "assistant") {
+				logAgentMessage(msg, cwd, ctx.emitToolUse);
+				currentSessionId = msg.session_id;
+				continue;
+			}
+			if (msg.type === "result") {
+				currentSessionId = msg.session_id;
+				if (msg.subtype === "success") {
+					if (outputFormat) {
+						ctx.setStepOutput(step.name, msg.structured_output);
+						canonicalLog.append("step_outputs", {
+							name: step.name,
+							output: msg.structured_output,
+						});
+					}
+					continue;
+				}
+				throw new Error(msg.subtype);
+			}
 		}
 
 		ctx.setSessionId(currentSessionId ?? null);

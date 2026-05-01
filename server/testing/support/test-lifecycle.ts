@@ -258,6 +258,7 @@ export async function createTestRunLifecycle(
 
 	const lifecycle = createRunLifecycle({
 		runner,
+		repo,
 		tracker,
 		codeHost,
 		agent: options.agent ?? silentAgent,
