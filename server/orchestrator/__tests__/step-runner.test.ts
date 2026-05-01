@@ -304,4 +304,68 @@ describe("runWorkflowSteps", () => {
 
 		expect(observed).toEqual({ earlier: { x: "from-parent" } });
 	});
+
+	it("substitutes earlier step outputs into a later step's prompt", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(async function* () {
+			yield {
+				type: "assistant",
+				session_id: "sess",
+				// biome-ignore lint/suspicious/noExplicitAny: decouple from SDK shape
+				message: { content: [] } as any,
+				parent_tool_use_id: null,
+				uuid: "00000000-0000-0000-0000-000000000050",
+			} as AgentMessage;
+			yield {
+				type: "result",
+				subtype: "success",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: false,
+				num_turns: 1,
+				result: "ok",
+				stop_reason: "end_turn",
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				structured_output: { title: "Earlier title" },
+				uuid: "00000000-0000-0000-0000-000000000051",
+				session_id: "sess",
+			} as AgentMessage;
+		});
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			base_branch: "main",
+			steps: [
+				{
+					name: "summarise",
+					prompt: "Summarise",
+					resume_previous: false,
+					output_schema: outputSchema,
+				},
+				{
+					name: "implement",
+					prompt: "Use {{ steps.summarise.output.title }}",
+					resume_previous: false,
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		await runWorkflowSteps({
+			ctx: recorder.ctx,
+			agent,
+			workflow,
+			issue,
+			attempt: 1,
+			cwd: "/work",
+			model: "test-model",
+		});
+
+		expect(agent.calls.map((c) => c.prompt)).toEqual([
+			"Summarise",
+			"Use Earlier title",
+		]);
+	});
 });

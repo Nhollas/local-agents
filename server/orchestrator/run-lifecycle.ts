@@ -136,7 +136,14 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						});
 
 						if (result.status === "completed") {
-							await finalizeSuccess(repo, issue, workflow, branch, attempt);
+							await finalizeSuccess(
+								repo,
+								issue,
+								workflow,
+								branch,
+								attempt,
+								ctx.outputs,
+							);
 						}
 
 						const retriesExhausted = maxRetries - attempt < 0;
@@ -164,12 +171,14 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		workflow: RepoWorkflow,
 		branch: BranchName,
 		attempt: number,
+		outputs: Record<string, unknown>,
 	): Promise<void> {
 		const { title, body } = renderChangeRequest({
 			template: workflow.change_request,
 			issue,
 			attempt,
 			branch,
+			outputs,
 		});
 		try {
 			await codeHost.createChangeRequest(

@@ -8,6 +8,7 @@ type RenderChangeRequestParams = {
 	issue: Issue;
 	attempt: number;
 	branch: BranchName;
+	outputs?: Record<string, unknown>;
 };
 
 export function renderChangeRequest({
@@ -15,8 +16,9 @@ export function renderChangeRequest({
 	issue,
 	attempt,
 	branch,
+	outputs,
 }: RenderChangeRequestParams): { title: string; body: string } {
-	const vars = { issue, attempt, branch };
+	const vars = { issue, attempt, branch, outputs };
 	return {
 		title: renderPrompt(template.title, vars),
 		body: renderPrompt(template.body, vars),

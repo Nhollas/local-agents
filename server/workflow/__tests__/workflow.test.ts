@@ -46,6 +46,117 @@ describe("renderPrompt", () => {
 
 		expect(result).toBe("Attempt #3");
 	});
+
+	it("resolves a top-level scalar step output reference", () => {
+		const result = renderPrompt("Title: {{ steps.summarise.output.title }}", {
+			issue: baseIssue,
+			outputs: { summarise: { title: "Hello" } },
+		});
+
+		expect(result).toBe("Title: Hello");
+	});
+
+	it("resolves a nested scalar step output reference", () => {
+		const result = renderPrompt(
+			"Heading: {{ steps.summarise.output.summary.title }}",
+			{
+				issue: baseIssue,
+				outputs: {
+					summarise: { summary: { title: "Deep" } },
+				},
+			},
+		);
+
+		expect(result).toBe("Heading: Deep");
+	});
+
+	it("renders an object output value as JSON.stringify(value)", () => {
+		const result = renderPrompt(
+			"Summary: {{ steps.summarise.output.summary }}",
+			{
+				issue: baseIssue,
+				outputs: {
+					summarise: { summary: { title: "Deep", count: 2 } },
+				},
+			},
+		);
+
+		expect(result).toBe('Summary: {"title":"Deep","count":2}');
+	});
+
+	it("renders an array output value as JSON.stringify(value)", () => {
+		const result = renderPrompt("Tags: {{ steps.summarise.output.tags }}", {
+			issue: baseIssue,
+			outputs: { summarise: { tags: ["a", "b"] } },
+		});
+
+		expect(result).toBe('Tags: ["a","b"]');
+	});
+
+	it("renders an unknown step reference as empty string", () => {
+		const result = renderPrompt("Title: {{ steps.missing.output.title }}", {
+			issue: baseIssue,
+			outputs: { summarise: { title: "Hello" } },
+		});
+
+		expect(result).toBe("Title: ");
+	});
+
+	it("renders an unknown nested field as empty string", () => {
+		const result = renderPrompt(
+			"Title: {{ steps.summarise.output.title.deep }}",
+			{
+				issue: baseIssue,
+				outputs: { summarise: { title: "Hello" } },
+			},
+		);
+
+		expect(result).toBe("Title: ");
+	});
+
+	it("renders empty string when outputs are not provided", () => {
+		const result = renderPrompt("Title: {{ steps.summarise.output.title }}", {
+			issue: baseIssue,
+		});
+
+		expect(result).toBe("Title: ");
+	});
+
+	it("renders a too-short steps reference as empty string", () => {
+		const result = renderPrompt("X={{ steps.summarise }}", {
+			issue: baseIssue,
+			outputs: { summarise: { title: "Hello" } },
+		});
+
+		expect(result).toBe("X=");
+	});
+
+	it("renders a steps reference without the output keyword as empty string", () => {
+		const result = renderPrompt("X={{ steps.summarise.notoutput.title }}", {
+			issue: baseIssue,
+			outputs: { summarise: { notoutput: { title: "Hello" } } },
+		});
+
+		expect(result).toBe("X=");
+	});
+
+	it("renders a null output value as empty string", () => {
+		const result = renderPrompt("X={{ steps.summarise.output.title }}", {
+			issue: baseIssue,
+			outputs: { summarise: { title: null } },
+		});
+
+		expect(result).toBe("X=");
+	});
+
+	it("does not re-substitute templates that appear inside an output value", () => {
+		const result = renderPrompt("Title: {{ steps.summarise.output.title }}", {
+			issue: baseIssue,
+			outputs: { summarise: { title: "Has {{ issue.key }} inside" } },
+		});
+
+		expect(result).toBe("Title: Has {{ issue.key }} inside");
+	});
 });
 
 const validChangeRequest = `

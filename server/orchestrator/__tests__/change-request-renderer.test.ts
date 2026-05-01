@@ -77,4 +77,27 @@ describe("renderChangeRequest", () => {
 
 		expect(result).toEqual({ title: "", body: "" });
 	});
+
+	it("substitutes step output references in title and body", () => {
+		const result = renderChangeRequest({
+			template: {
+				title: "[{{ issue.key }}] {{ steps.summarise.output.title }}",
+				body: "Summary: {{ steps.summarise.output.summary }}",
+			},
+			issue,
+			attempt: 1,
+			branch: branchName("agent/issue-42"),
+			outputs: {
+				summarise: {
+					title: "Login fix",
+					summary: { lines: 4, files: ["a.ts"] },
+				},
+			},
+		});
+
+		expect(result).toEqual({
+			title: "[owner/repo#42] Login fix",
+			body: 'Summary: {"lines":4,"files":["a.ts"]}',
+		});
+	});
 });

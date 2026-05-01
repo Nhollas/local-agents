@@ -106,6 +106,7 @@ async function runWorkflowStep({
 		const renderedPrompt = renderPrompt(markTrustedShellBlocks(step.prompt), {
 			issue,
 			attempt,
+			outputs: ctx.outputs,
 		});
 		const prompt = await expandMarkedShellBlocks(renderedPrompt, { cwd });
 

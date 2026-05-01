@@ -419,7 +419,9 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 4 — Output Substitution
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-01 on `main` (single sweep — `renderPrompt` extension + two call sites; reviewable as one PR).
 
 **Purpose:** Make `{{ steps.X.output.Y }}` (including nested paths) resolve in step prompts and in `change_request` templates against the in-memory outputs map.
 
@@ -464,6 +466,22 @@ Use this handoff template when a slice is interrupted:
 
 - The path walk needs to handle edge cases: keys with dots in them aren't supported (treated as nested), array index syntax (`steps.foo.output.items.0`) is a design choice — pick "no array index in V1, only object property names" and document it.
 - `JSON.stringify` on a value containing a function or symbol returns surprising results. Validated outputs from the SDK are JSON, so this shouldn't happen, but type the outputs map as `Record<string, unknown>` and accept that consumers pass JSON-shaped values.
+
+**Completed changes:**
+
+- **`renderPrompt` extension** (`server/workflow/workflow.ts`): added optional `outputs?: Record<string, unknown>` to the vars object. When a `{{ ... }}` reference's first path segment is `steps`, the new `renderOutputReference` helper looks up `outputs[stepName]` and walks the rest of the path. Scalars render via `String(value)`. Objects (including arrays) render via `JSON.stringify(value)`. Anything missing — unknown step, mid-path through a non-object, terminal `null`/`undefined`, or a malformed shape (`{{ steps.foo }}`, `{{ steps.foo.notoutput.x }}`) — renders as empty string. Existing `{{ issue.* }}`, `{{ attempt }}`, `{{ branch }}` interpolation is unchanged.
+- **Single-pass replacement**: the regex replace runs once over the template, so an output value that itself contains `{{ ... }}` substrings is *not* re-interpolated. Test locks this in.
+- **Step prompt wiring** (`server/orchestrator/step-runner.ts`): each step's prompt is rendered with `outputs: { ...ctx.outputs }` (snapshot — only earlier steps' outputs are visible because the in-memory map is populated step-by-step).
+- **Change-request wiring** (`server/orchestrator/change-request-renderer.ts` + `run-lifecycle.ts`): `renderChangeRequest` now accepts `outputs?: Record<string, unknown>` and threads it to `renderPrompt`. `finalizeSuccess` passes the final `ctx.outputs` so `change_request.title` / `change_request.body` can reference any completed step's structured output.
+- **No changes to `prompt-preprocessor.ts`** — substitution lives next to existing variable interpolation in `workflow.ts` per the slice's quality gate.
+
+**Verification:**
+
+- `pnpm lint` — pass (129 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (41 files, 277 tests; up from 263 in slice 3).
+- `pnpm test:coverage` — Statements **99.36%** / Branches **98.51%** / Functions **98.18%** / Lines **99.31%**. All dimensions match or exceed the slice 3 baseline; `workflow.ts` is at 100% across all four after the new tests.
+- New tests: 11 in `workflow.test.ts` (scalar, nested, object→JSON, array→JSON, unknown step, unknown nested field, no-outputs, single-pass, too-short reference, missing `output` keyword, null terminal); 1 in `step-runner.test.ts` (later step's prompt sees earlier step's output); 1 in `change-request-renderer.test.ts` (output substitution in title and body); 1 in `run-lifecycle.test.ts` (end-to-end change-request with output reference).
 
 ## Slice 5 — Dynamic Branch Agent
 

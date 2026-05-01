@@ -518,6 +518,67 @@ describe("RunLifecycle.dispatch", () => {
 		expect(stepStarted).toEqual([]);
 	});
 
+	it("opens the change request with step output substitutions rendered against ctx.outputs", async () => {
+		const summarySchema = {
+			type: "object",
+			properties: { title: { type: "string" } },
+			required: ["title"],
+		};
+		const agent = createScriptedAgent(async function* () {
+			yield {
+				type: "result",
+				subtype: "success",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: false,
+				num_turns: 1,
+				result: "ok",
+				stop_reason: "end_turn",
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				structured_output: { title: "Summarised PR title" },
+				uuid: "00000000-0000-0000-0000-000000000070",
+				session_id: "sess-cr",
+			} as never;
+		});
+		await using setup = await createTestRunLifecycle({ agent });
+		const issue = createTestIssue();
+
+		const handle = await setup.lifecycle.dispatch({
+			issue,
+			repo: TEST_REPO,
+			workflow: {
+				...baseWorkflow,
+				steps: [
+					{
+						name: "summarise",
+						prompt: "Summarise",
+						resume_previous: false,
+						output_schema: summarySchema,
+					},
+				],
+				change_request: {
+					title: "{{ steps.summarise.output.title }}",
+					body: "Closes {{ issue.key }} ({{ steps.summarise.output.title }})",
+				},
+			},
+			attempt: 1,
+		});
+		await handle.done;
+
+		expect(setup.codeHost.changeRequests).toEqual([
+			{
+				repo: TEST_REPO,
+				head: "agent/issue-1",
+				base: "main",
+				title: "Summarised PR title",
+				body: `Closes ${issue.key} (Summarised PR title)`,
+			},
+		]);
+	});
+
 	it("opens the change request with values rendered from the workflow's change_request template", async () => {
 		await using setup = await createTestRunLifecycle({
 			agent: createScriptedAgent(() => yieldAssistant("sess-final")),
