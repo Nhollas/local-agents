@@ -2,10 +2,12 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import type { runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
-import type { RunRepository } from "../run-repository.ts";
+import type { Run, RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
 import { runId as brandRunId, type RunId } from "../types/brands.ts";
+import { assertNever } from "../types/exhaustive.ts";
 import { canonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
@@ -34,6 +36,22 @@ type HealthCheckResult = {
 };
 
 export type HealthCheck = () => HealthCheckResult;
+
+type RunWire = typeof runs.$inferSelect;
+
+function runToWire(run: Run): RunWire {
+	switch (run.status) {
+		case "running":
+			return { ...run, error: null, completedAt: null, durationMs: null };
+		case "completed":
+			return { ...run, error: null };
+		case "failed":
+			return run;
+		/* v8 ignore next 2 -- unreachable; Run union is exhaustively handled above */
+		default:
+			return assertNever(run);
+	}
+}
 
 export function createApi({
 	runner,
@@ -82,7 +100,7 @@ export function createApi({
 		zValidator("query", runsQuerySchema, zodProblemHook),
 		(c) => {
 			const { agent, status, limit } = c.req.valid("query");
-			return c.json(repo.getRuns({ agent, status, limit }));
+			return c.json(repo.getRuns({ agent, status, limit }).map(runToWire));
 		},
 	);
 
@@ -96,7 +114,7 @@ export function createApi({
 			if (!run) throw new ProblemDetailsError(404, "Not found");
 
 			const events = repo.getRunEvents(id);
-			return c.json({ ...run, events });
+			return c.json({ ...runToWire(run), events });
 		},
 	);
 

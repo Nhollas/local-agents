@@ -10,9 +10,85 @@ import {
 	runs,
 } from "./db/schema.ts";
 import type { IssueKey, RunId } from "./types/brands.ts";
+import { assertNever } from "./types/exhaustive.ts";
 
-export type Run = typeof runs.$inferSelect;
+type RunRow = typeof runs.$inferSelect;
+
+type RunBase = {
+	id: RunId;
+	agentName: string;
+	issueKey: IssueKey | null;
+	issueTitle: string | null;
+	startedAt: string;
+	attempt: number;
+	parentRunId: RunId | null;
+	phaseIndex: number;
+	sessionId: string | null;
+};
+
+export type RunningRun = RunBase & { status: "running" };
+export type CompletedRun = RunBase & {
+	status: "completed";
+	completedAt: string;
+	durationMs: number;
+};
+export type FailedRun = RunBase & {
+	status: "failed";
+	completedAt: string;
+	durationMs: number | null;
+	error: string;
+};
+
+export type Run = RunningRun | CompletedRun | FailedRun;
+
 export type RunEvent = typeof runEvents.$inferSelect;
+
+function rowToRun(row: RunRow): Run {
+	const base: RunBase = {
+		id: row.id,
+		agentName: row.agentName,
+		issueKey: row.issueKey,
+		issueTitle: row.issueTitle,
+		startedAt: row.startedAt,
+		attempt: row.attempt,
+		parentRunId: row.parentRunId,
+		phaseIndex: row.phaseIndex,
+		sessionId: row.sessionId,
+	};
+
+	switch (row.status) {
+		case "running":
+			return { ...base, status: "running" };
+		case "completed":
+			if (row.completedAt == null || row.durationMs == null) {
+				throw new Error(
+					`Invariant: completed run ${row.id} missing completedAt or durationMs`,
+				);
+			}
+			return {
+				...base,
+				status: "completed",
+				completedAt: row.completedAt,
+				durationMs: row.durationMs,
+			};
+		case "failed":
+			if (row.completedAt == null || row.error == null) {
+				throw new Error(
+					`Invariant: failed run ${row.id} missing completedAt or error`,
+				);
+			}
+			return {
+				...base,
+				status: "failed",
+				completedAt: row.completedAt,
+				durationMs: row.durationMs,
+				error: row.error,
+			};
+		/* v8 ignore next 2 -- unreachable; RunStatus is exhaustively handled above */
+		default:
+			return assertNever(row.status);
+	}
+}
 
 export type RunRepository = {
 	insertRun(run: {
@@ -100,7 +176,8 @@ export function createRunRepository(db: Db): RunRepository {
 		},
 
 		getRunById(id) {
-			return db.select().from(runs).where(eq(runs.id, id)).get();
+			const row = db.select().from(runs).where(eq(runs.id, id)).get();
+			return row ? rowToRun(row) : undefined;
 		},
 
 		getRuns(filters) {
@@ -114,9 +191,11 @@ export function createRunRepository(db: Db): RunRepository {
 				.orderBy(desc(runs.startedAt))
 				.limit(filters.limit);
 
-			return conditions.length > 0
-				? query.where(and(...conditions)).all()
-				: query.all();
+			const rows =
+				conditions.length > 0
+					? query.where(and(...conditions)).all()
+					: query.all();
+			return rows.map(rowToRun);
 		},
 
 		getRunEvents(runId) {

@@ -4,12 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { Db } from "../../db/db.ts";
 import { migrate } from "../../db/migrate.ts";
 import { runEvents, runs } from "../../db/schema.ts";
-import {
-	type IssueKey,
-	issueKey,
-	type RunId,
-	runId,
-} from "../../types/brands.ts";
+import { issueKey, runId } from "../../types/brands.ts";
 
 export function createTestDb(): Db {
 	const sqlite = new Database(":memory:");
@@ -28,19 +23,29 @@ type LooseRunInsert = Omit<
 	parentRunId?: string | null;
 };
 
+const variantDefaultsByStatus = {
+	running: {},
+	completed: { durationMs: 0 },
+	failed: { durationMs: 0, error: "test error" },
+} as const;
+
 export function seedRun(db: Db, overrides: LooseRunInsert) {
 	const { id, issueKey: keyStr, parentRunId, ...rest } = overrides;
+	const status = rest.status ?? "completed";
+	const now = new Date().toISOString();
+	const completedAt = status === "running" ? null : now;
+
 	db.insert(runs)
 		.values({
 			agentName: "test-agent",
-			status: "completed",
-			startedAt: new Date().toISOString(),
+			startedAt: now,
+			completedAt,
+			...variantDefaultsByStatus[status],
 			...rest,
+			status,
 			id: runId(id),
-			...(keyStr != null && { issueKey: issueKey(keyStr) as IssueKey | null }),
-			...(parentRunId != null && {
-				parentRunId: runId(parentRunId) as RunId | null,
-			}),
+			...(keyStr != null && { issueKey: issueKey(keyStr) }),
+			...(parentRunId != null && { parentRunId: runId(parentRunId) }),
 		})
 		.run();
 }

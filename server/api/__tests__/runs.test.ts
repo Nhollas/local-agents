@@ -32,8 +32,8 @@ describe("GET /runs", () => {
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-03T00:00:00Z",
-				completedAt: null,
-				durationMs: null,
+				completedAt: expect.any(String),
+				durationMs: 0,
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
@@ -47,8 +47,8 @@ describe("GET /runs", () => {
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-02T00:00:00Z",
-				completedAt: null,
-				durationMs: null,
+				completedAt: expect.any(String),
+				durationMs: 0,
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
@@ -62,8 +62,8 @@ describe("GET /runs", () => {
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-01T00:00:00Z",
-				completedAt: null,
-				durationMs: null,
+				completedAt: expect.any(String),
+				durationMs: 0,
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
@@ -98,8 +98,8 @@ describe("GET /runs", () => {
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-01T00:00:00Z",
-				completedAt: null,
-				durationMs: null,
+				completedAt: expect.any(String),
+				durationMs: 0,
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
@@ -149,6 +149,40 @@ describe("GET /runs", () => {
 		]);
 	});
 
+	it("returns failed runs with their error and completion fields", async () => {
+		const { app, db } = createTestApi();
+		seedRun(db, {
+			id: "fail-1",
+			status: "failed",
+			startedAt: "2025-01-03T00:00:00Z",
+			completedAt: "2025-01-03T00:00:02Z",
+			durationMs: 1500,
+			error: "agent timed out",
+		});
+
+		const res = await app.request("/runs?status=failed");
+		const body = await res.json();
+
+		expect(res.status).toBe(200);
+		expect(body).toEqual([
+			{
+				id: "fail-1",
+				agentName: "test-agent",
+				status: "failed",
+				error: "agent timed out",
+				issueKey: null,
+				issueTitle: null,
+				startedAt: "2025-01-03T00:00:00Z",
+				completedAt: "2025-01-03T00:00:02Z",
+				durationMs: 1500,
+				sessionId: null,
+				attempt: 1,
+				parentRunId: null,
+				phaseIndex: 0,
+			},
+		]);
+	});
+
 	it("respects limit parameter", async () => {
 		const { app, db } = createTestApi();
 		seedRun(db, { id: "r1", startedAt: "2025-01-01T00:00:00Z" });
@@ -168,8 +202,8 @@ describe("GET /runs", () => {
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-03T00:00:00Z",
-				completedAt: null,
-				durationMs: null,
+				completedAt: expect.any(String),
+				durationMs: 0,
 				sessionId: null,
 				attempt: 1,
 				parentRunId: null,
@@ -215,8 +249,8 @@ describe("GET /runs/:id", () => {
 			issueKey: null,
 			issueTitle: null,
 			startedAt: "2025-01-01T00:00:00Z",
-			completedAt: null,
-			durationMs: null,
+			completedAt: expect.any(String),
+			durationMs: 0,
 			sessionId: null,
 			attempt: 1,
 			parentRunId: null,
