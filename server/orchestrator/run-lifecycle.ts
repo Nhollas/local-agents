@@ -12,6 +12,7 @@ import {
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
+import { renderChangeRequest } from "./change-request-renderer.ts";
 import type { Clock } from "./clock.ts";
 import { runWorkflowSteps } from "./step-runner.ts";
 import {
@@ -129,7 +130,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						});
 
 						if (result.status === "completed") {
-							await finalizeSuccess(repo, issue, workflow, branch);
+							await finalizeSuccess(repo, issue, workflow, branch, attempt);
 						}
 
 						const retriesExhausted = maxRetries - attempt < 0;
@@ -156,14 +157,21 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		issue: Issue,
 		workflow: RepoWorkflow,
 		branch: BranchName,
+		attempt: number,
 	): Promise<void> {
+		const { title, body } = renderChangeRequest({
+			template: workflow.change_request,
+			issue,
+			attempt,
+			branch,
+		});
 		try {
 			await codeHost.createChangeRequest(
 				repo,
 				branch,
 				branchName(workflow.base_branch),
-				issue.title,
-				`Closes ${issue.key}`,
+				title,
+				body,
 			);
 		} catch (err) {
 			canonicalLog.append(

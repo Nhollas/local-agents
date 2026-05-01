@@ -13,11 +13,21 @@ const workflowStepSchema = z
 
 export type WorkflowStep = z.infer<typeof workflowStepSchema>;
 
+const changeRequestSchema = z
+	.object({
+		title: z.string().min(1),
+		body: z.string().min(1),
+	})
+	.strict();
+
+export type ChangeRequestTemplate = z.infer<typeof changeRequestSchema>;
+
 const repoWorkflowSchema = z
 	.object({
 		branch: z.string().min(1),
 		base_branch: z.string().min(1),
 		steps: z.array(workflowStepSchema).min(1),
+		change_request: changeRequestSchema,
 	})
 	.strict();
 
@@ -36,7 +46,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function renderPrompt(
 	template: string,
-	vars: { issue: Issue; attempt?: number },
+	vars: { issue: Issue; attempt?: number; branch?: string },
 ): string {
 	return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
 		const parts = path.split(".");

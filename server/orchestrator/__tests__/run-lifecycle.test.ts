@@ -20,6 +20,11 @@ import type { RepoWorkflow } from "../../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 
+const baseChangeRequest = {
+	title: "{{ issue.title }}",
+	body: "Closes {{ issue.key }}",
+};
+
 const baseWorkflow: RepoWorkflow = {
 	branch: "agent/issue-{{ issue.number }}",
 	base_branch: "main",
@@ -30,6 +35,7 @@ const baseWorkflow: RepoWorkflow = {
 			resume_previous: false,
 		},
 	],
+	change_request: baseChangeRequest,
 };
 
 const multiStepWorkflow: RepoWorkflow = {
@@ -43,6 +49,7 @@ const multiStepWorkflow: RepoWorkflow = {
 			resume_previous: true,
 		},
 	],
+	change_request: baseChangeRequest,
 };
 
 async function writeSetupScript(
@@ -325,6 +332,7 @@ describe("RunLifecycle.dispatch", () => {
 					resume_previous: true,
 				},
 			],
+			change_request: baseChangeRequest,
 		};
 
 		const handle = await setup.lifecycle.dispatch({
@@ -508,5 +516,36 @@ describe("RunLifecycle.dispatch", () => {
 			(e) => e.type === "step.started",
 		);
 		expect(stepStarted).toEqual([]);
+	});
+
+	it("opens the change request with values rendered from the workflow's change_request template", async () => {
+		await using setup = await createTestRunLifecycle({
+			agent: createScriptedAgent(() => yieldAssistant("sess-final")),
+		});
+		const issue = createTestIssue();
+
+		const handle = await setup.lifecycle.dispatch({
+			issue,
+			repo: TEST_REPO,
+			workflow: {
+				...baseWorkflow,
+				change_request: {
+					title: "[{{ issue.key }}] {{ issue.title }} (attempt {{ attempt }})",
+					body: "Closes {{ issue.key }}\nBranch: {{ branch }}",
+				},
+			},
+			attempt: 3,
+		});
+		await handle.done;
+
+		expect(setup.codeHost.changeRequests).toEqual([
+			{
+				repo: TEST_REPO,
+				head: "agent/issue-1",
+				base: "main",
+				title: `[${issue.key}] ${issue.title} (attempt 3)`,
+				body: `Closes ${issue.key}\nBranch: agent/issue-1`,
+			},
+		]);
 	});
 });

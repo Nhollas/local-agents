@@ -263,7 +263,9 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 2 — Change Request Block
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-01 on `main` (single sweep — small, focused change touching schema, renderer, lifecycle, and live workflow).
 
 **Purpose:** Replace the hardcoded PR title (`issue.title`) and body (`Closes ${issue.key}`) in `finalizeSuccess` with a templated `change_request: { title, body }` block from the workflow.
 
@@ -311,6 +313,23 @@ Use this handoff template when a slice is interrupted:
 - Making `change_request` required will break any local `workflow.yaml` that doesn't have one. Update the live file in the same PR.
 - The renderer needs a `branch` value at lifecycle pin 6 — confirm `RunContext.branch` is set by branch creation in slice 1's foundation work, otherwise either set it here or note the gap.
 - If `body` references a variable that doesn't exist (e.g. `{{ issue.foo }}`), `renderPrompt` currently returns empty string. That's consistent but silent — the slice 6 validator catches `{{ steps.* }}` issues, but generic typo'd variables stay silent. Acceptable for V1; flag if it becomes a problem.
+
+**Completed changes:**
+
+- **Workflow schema**: required `change_request: { title, body }` block added to `repoWorkflowSchema` in `server/workflow/workflow.ts`. Both fields are `z.string().min(1)`. The block is itself `.strict()`, so unknown keys (`labels`, `draft`, etc.) fail at parse with a clear Zod error. Top-level workflow stays `.strict()`, so missing `change_request` fails too.
+- **Renderer**: new `server/orchestrator/change-request-renderer.ts` exports a pure `renderChangeRequest({ template, issue, attempt, branch })` that returns `{ title, body }`. Reuses `renderPrompt` from `workflow.ts` for variable interpolation rather than duplicating substitution logic.
+- **`renderPrompt` extension**: the variable parameter type now accepts an optional `branch?: string`. The dynamic path-walk implementation already supported this; only the type widened. Step prompt callers continue to pass `{ issue, attempt }` unchanged.
+- **`finalizeSuccess` rewire**: `run-lifecycle.ts` calls `renderChangeRequest` with the workflow's template and the rendered `branch` value, then passes the rendered `title` and `body` to `codeHost.createChangeRequest`. The hardcoded `issue.title` / `Closes ${issue.key}` is gone. The adapter signature is unchanged.
+- **Live `workflow.yaml`**: added a `change_request` block using only `{{ issue.* }}` and `{{ branch }}` — no `{{ steps.*.output.* }}` (slice 4 will introduce that).
+- **Test fixture**: `createTestWorkflow` in `server/testing/support/fixtures.ts` and the inline `baseWorkflow` / `multiStepWorkflow` in the lifecycle tests now include a minimal `change_request` matching the previous hardcoded values, so existing assertions on `codeHost.changeRequests` continue to pass without change. A new lifecycle test covers the templated path explicitly with a custom title/body that reads `{{ issue.key }}`, `{{ issue.title }}`, `{{ attempt }}`, and `{{ branch }}`.
+
+**Verification:**
+
+- `pnpm lint` — pass (128 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (40 files, 250 tests; up from 242 in slice 1).
+- `pnpm test:coverage` — Statements **99.22%** / Branches **98.93%** / Functions **98.16%** / Lines **99.28%**. Matches the slice 1 baseline; functions ticked up by 0.01pp from the new pure renderer.
+- New tests cover: schema rejection of missing `change_request`, missing `title`, missing `body`, and unknown keys; renderer substitutes `{{ issue.* }}`, `{{ attempt }}`, and `{{ branch }}` in title and body; renderer preserves multi-line markdown bodies; renderer returns empty string for unknown vars; lifecycle calls `codeHost.createChangeRequest` with templated values that include the rendered branch.
 
 ## Slice 3 — Output Steps
 
