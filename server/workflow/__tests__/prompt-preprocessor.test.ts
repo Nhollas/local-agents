@@ -34,10 +34,12 @@ describe("shell block preprocessing", () => {
 		});
 
 		const match = result.match(/^issue=1 pwd=(.+)\n$/);
-		expect(match).not.toBeNull();
-		await expect(
-			realpath((match as RegExpMatchArray)[1] as string),
-		).resolves.toBe(await realpath(workspace.root));
+		const matchedPath = match?.[1];
+		expect(matchedPath).toBeDefined();
+		if (matchedPath === undefined) return;
+		await expect(realpath(matchedPath)).resolves.toBe(
+			await realpath(workspace.root),
+		);
 	});
 
 	it("runs marked shell blocks in parallel", async () => {

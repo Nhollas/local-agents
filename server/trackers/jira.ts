@@ -29,10 +29,10 @@ function extractText(value: unknown): string {
 	if (typeof value === "string") return value;
 	if (Array.isArray(value))
 		return value.map(extractText).filter(Boolean).join("\n");
-	if (value && typeof value === "object") {
-		const record = value as Record<string, unknown>;
-		if (typeof record["text"] === "string") return record["text"];
-		if (Array.isArray(record["content"])) return extractText(record["content"]);
+	if (value !== null && typeof value === "object") {
+		if ("text" in value && typeof value.text === "string") return value.text;
+		if ("content" in value && Array.isArray(value.content))
+			return extractText(value.content);
 	}
 	return "";
 }

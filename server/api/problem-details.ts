@@ -1,6 +1,5 @@
 import type { Hook } from "@hono/zod-validator";
 import type { Context, Env, ErrorHandler, ValidationTargets } from "hono";
-import { z } from "zod";
 import type { $ZodType } from "zod/v4/core";
 import * as canonicalLog from "../canonical-log.ts";
 import type { AppEnv } from "./types.ts";
@@ -75,11 +74,10 @@ export const zodProblemHook: Hook<
 > = (result) => {
 	if (result.success) return;
 
-	const flat = z.flattenError(result.error);
-	const errors: ValidationError[] = Object.entries(flat.fieldErrors).flatMap(
-		([field, messages]) =>
-			(messages as string[]).map((message) => ({ field, message })),
-	);
+	const errors: ValidationError[] = result.error.issues.map((issue) => ({
+		field: issue.path.map(String).join("."),
+		message: issue.message,
+	}));
 
 	throw new ProblemDetailsError(422, "Validation failed", { errors });
 };

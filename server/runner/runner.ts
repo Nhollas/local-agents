@@ -64,6 +64,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		event: EventPayload,
 		createdAt = new Date().toISOString(),
 	): void {
+		// Post-narrowing: TS doesn't recombine the discriminated union through a spread.
 		const fullEvent = {
 			...event,
 			runId: id,

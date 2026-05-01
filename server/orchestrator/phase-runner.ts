@@ -8,7 +8,7 @@ import {
 	markTrustedShellBlocks,
 } from "../workflow/prompt-preprocessor.ts";
 import type { RepoWorkflow, WorkflowPhase } from "../workflow/workflow.ts";
-import { getWorkflowPhases, renderPrompt } from "../workflow/workflow.ts";
+import { renderPrompt } from "../workflow/workflow.ts";
 import { logAgentMessage } from "./agent-logging.ts";
 
 export type RunAgent = (
@@ -40,7 +40,12 @@ export async function runWorkflowPhases({
 	startPhaseIndex = 0,
 	failedPhaseResumeSessionId,
 }: RunWorkflowPhasesParams): Promise<void> {
-	const phases = getWorkflowPhases(workflow);
+	const { phases } = workflow;
+	if (startPhaseIndex < 0 || startPhaseIndex >= phases.length) {
+		throw new Error(
+			`Invariant: startPhaseIndex ${startPhaseIndex} is out of range for ${phases.length} phases`,
+		);
+	}
 	let previousSessionId: string | undefined;
 
 	for (const [index, phase] of phases.entries()) {
