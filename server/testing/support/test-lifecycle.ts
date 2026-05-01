@@ -277,7 +277,14 @@ export async function createTestRunLifecycle(
 		workspaceRoot,
 		bareRepo,
 		async [Symbol.asyncDispose]() {
-			await rm(workspaceRoot, { recursive: true, force: true });
+			// maxRetries tolerates a tail of git i/o from a killed agent's
+			// ensureBranch racing with the rm.
+			await rm(workspaceRoot, {
+				recursive: true,
+				force: true,
+				maxRetries: 5,
+				retryDelay: 25,
+			});
 		},
 	};
 }
