@@ -1,4 +1,32 @@
-branch: "agent/issue-{{ issue.number }}"
+branch:
+  prompt: |
+    Propose a branch name for issue {{ issue.key }}: {{ issue.title }}.
+
+    <issue-description>
+    {{ issue.description }}
+    </issue-description>
+
+    Format: `<type>/<issue-key>-<short-desc>`
+
+    - `type` is one of: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`.
+      Pick the one that best matches the work — `feat` for new behaviour,
+      `fix` for bugs, `refactor` for non-behavioural restructuring, etc.
+    - `issue-key` is the tracker key verbatim (e.g. `AINENG-2310`).
+    - `short-desc` is a kebab-case 2-5 word summary of the change. Lowercase
+      letters, digits, and hyphens only.
+
+    Examples:
+    - `feat/AINENG-2310-state-clear-command`
+    - `fix/AINENG-1180-token-refresh-race`
+    - `refactor/AINENG-905-extract-run-lifecycle`
+  schema:
+    type: object
+    properties:
+      name:
+        type: string
+        pattern: "^(feat|fix|chore|docs|refactor|test)/[A-Z]+-[0-9]+-[a-z0-9-]+$"
+    required: [name]
+
 base_branch: main
 
 steps:
@@ -13,9 +41,9 @@ steps:
       </issue-description>
 
       Only work on this one issue. The orchestrator has cloned the repo fresh
-      and created branch `agent/issue-{{ issue.number }}` from `main` for you.
-      Make commits as you go — the orchestrator pushes the branch and opens
-      the change request after the final step completes.
+      and created branch `{{ branch }}` from `main` for you. Make commits as
+      you go — the orchestrator pushes the branch and opens the change request
+      after the final step completes.
 
       # Project Context
 
@@ -55,8 +83,8 @@ steps:
     prompt: |
       # Task
 
-      Review the code changes on branch `agent/issue-{{ issue.number }}` for
-      issue {{ issue.key }}: {{ issue.title }}.
+      Review the code changes on branch `{{ branch }}` for issue
+      {{ issue.key }}: {{ issue.title }}.
 
       <issue-description>
       {{ issue.description }}
@@ -91,9 +119,31 @@ steps:
       refinements with a Conventional Commit message. If the branch is
       already good, make no changes.
 
-change_request:
-  title: "{{ issue.title }}"
-  body: |
-    Closes {{ issue.key }}.
+  - name: summarise
+    prompt: |
+      Summarise the change on branch `{{ branch }}` for reviewers of issue
+      {{ issue.key }}.
 
-    Branch: `{{ branch }}`
+      <diff>
+      !`git diff main...HEAD`
+      </diff>
+
+      <commits>
+      !`git log main..HEAD --oneline`
+      </commits>
+
+      Produce a one-line title and a short markdown body explaining what
+      changed and why. Body should be reviewer-facing, not a commit log.
+    output_schema:
+      type: object
+      properties:
+        title: { type: string }
+        body: { type: string }
+      required: [title, body]
+
+change_request:
+  title: "{{ steps.summarise.output.title }}"
+  body: |
+    Closes {{ issue.key }}: {{ issue.title }}.
+
+    {{ steps.summarise.output.body }}
