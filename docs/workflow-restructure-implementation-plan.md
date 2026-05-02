@@ -485,7 +485,9 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 5 — Dynamic Branch Agent
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-02 on `main` (single sweep — schema + resolver + lifecycle wiring + step branch param; reviewable as one PR).
 
 **Purpose:** Let `branch` be either a static template string or a `{ prompt, schema }` object that runs a one-shot agent at clone-time to propose a branch name.
 
@@ -532,6 +534,23 @@ Use this handoff template when a slice is interrupted:
 - The branch agent has full Bash access in V1. A misbehaving branch prompt could run arbitrary commands in the workspace. Document this clearly; the deferred per-invocation tool scoping item is the mitigation.
 - Branch-name collision (the proposed name already exists on the remote) is in deferred scope. The current behaviour will be a `git checkout -b` failure that aborts the run — acceptable for V1, document the failure mode.
 - The mock invoker needs to emit a `result` message with `structured_output` for tests; reuse the helper from slice 3.
+
+**Completed changes:**
+
+- **Workflow schema** (`server/workflow/workflow.ts`): `branch` is now `z.union([z.string().min(1), branchAgentSchema])`. The new `branchAgentSchema` is a `.strict()` object with required `prompt: string` and `schema: Record<string, unknown>` (raw JSON Schema). Unknown keys on the agent block fail at parse. New exported types: `BranchAgentTemplate`, `WorkflowBranch`.
+- **Branch resolver** (`server/orchestrator/branch-resolver.ts`, new): pure async function `resolveBranch({ workflowBranch, issue, attempt, agent, cwd, model, signal })` that returns the resolved branch name. String form goes through `renderPrompt({ issue, attempt })` and never invokes the agent. Object form renders the prompt against the same vars, builds `outputFormat: { type: "json_schema", schema }`, runs one `agent.invoke()`, and walks the message stream. On `result.subtype === "success"` it returns `structured_output.name`; on any other subtype (including `error_max_structured_output_retries`) it throws with the subtype as the message. Empty/missing `name` and a stream that ends without a `result` are guarded with explicit errors.
+- **Lifecycle pin 2 rewire** (`server/orchestrator/run-lifecycle.ts`): branch is no longer rendered up-front before `runner.enqueue`. Instead the handler calls `resolveBranch(...)` inside the `try` block, after `ensureWorkspace` and before `ensureBranch` / `runRepoSetup`. A failed dynamic-branch resolve is caught by the existing handler `catch`, surfaces as `step.failed`-style run failure, and short-circuits before setup or any step fires. The resolved name is wrapped with `branchName(...)` and passed to `ensureBranch`, `runWorkflowSteps`, and `finalizeSuccess` (for change-request rendering).
+- **Step prompt `{{ branch }}` support** (`server/orchestrator/step-runner.ts`): `RunWorkflowStepsParams` and `RunWorkflowStepParams` gained a required `branch: string`, threaded into `renderPrompt({ issue, attempt, branch, outputs })`. This is what makes `{{ branch }}` resolvable in step prompts — previously it only worked in `change_request` templates. The dynamic-branch example workflow's step-level `{{ branch }}` references now interpolate correctly.
+- **Tools inheritance**: the branch agent goes through the same `agent-invoker` as step agents and inherits the same `ALLOWED_TOOLS` (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`). Per-invocation tool scoping remains deferred.
+- **No changes to `RunContext`**: the slice plan suggested storing `branch` on `RunContext`, but there's no consumer outside the lifecycle/step-runner thread, so it stays as a parameter on `runWorkflowSteps`. The runner contract is unchanged.
+
+**Verification:**
+
+- `pnpm lint` — pass (131 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (42 files, 287 tests; up from 277 in slice 4).
+- `pnpm test:coverage` — Statements **99.37%** / Branches **98.55%** / Functions **98.19%** / Lines **99.32%**. All four dimensions match or exceed the slice 4 baseline.
+- New tests: 5 in `branch-resolver.test.ts` (static render skips agent, dynamic invokes with outputFormat, missing-name guard, empty-stream guard, error subtype propagates), 1 in `step-runner.test.ts` (`{{ branch }}` substituted into a step prompt), 2 in `run-lifecycle.test.ts` (dynamic branch end-to-end with `git checkout -b`, step prompt, and change-request all reading the agent-proposed name; error subtype aborts before setup or any `step.started` event), 4 in `workflow.test.ts` (object form parses, missing `prompt` rejected, missing `schema` rejected, unknown-key rejected).
 
 ## Slice 6 — Static Reference Validation
 

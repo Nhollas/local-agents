@@ -721,6 +721,166 @@ describe("RunLifecycle.dispatch", () => {
 		expect(setup.db.select().from(runStepOutputs).all()).toEqual([]);
 	});
 
+	it("dynamic branch: resolves the branch via the agent, checks it out, and exposes it to step prompts and change_request", async () => {
+		const branchSchema = {
+			type: "object",
+			properties: { name: { type: "string", pattern: "^feat/" } },
+			required: ["name"],
+		};
+		const stepPrompts: string[] = [];
+		const branchesAtStep: string[] = [];
+		const agent = createScriptedAgent(async function* (opts, callIndex) {
+			if (callIndex === 0) {
+				yield {
+					type: "result",
+					subtype: "success",
+					duration_ms: 1,
+					duration_api_ms: 1,
+					is_error: false,
+					num_turns: 1,
+					result: "ok",
+					stop_reason: "end_turn",
+					total_cost_usd: 0,
+					usage: {} as never,
+					modelUsage: {},
+					permission_denials: [],
+					structured_output: { name: "feat/owner-repo-1-fix-it" },
+					uuid: "00000000-0000-0000-0000-000000000080",
+					session_id: "sess-branch",
+				} as never;
+				return;
+			}
+			stepPrompts.push(opts.prompt);
+			const { stdout } = await exec(
+				"git",
+				["rev-parse", "--abbrev-ref", "HEAD"],
+				{ cwd: opts.cwd },
+			);
+			branchesAtStep.push(stdout.trim());
+			yield {
+				type: "assistant",
+				session_id: "sess",
+				// biome-ignore lint/suspicious/noExplicitAny: shape decoupled from SDK
+				message: { content: [] } as any,
+				parent_tool_use_id: null,
+				uuid: "00000000-0000-0000-0000-000000000081",
+			} as never;
+		});
+
+		await using setup = await createTestRunLifecycle({ agent });
+		const issue = createTestIssue();
+
+		const handle = await setup.lifecycle.dispatch({
+			issue,
+			repo: TEST_REPO,
+			workflow: {
+				branch: {
+					prompt: "Propose a name for {{ issue.key }}",
+					schema: branchSchema,
+				},
+				base_branch: "main",
+				steps: [
+					{
+						name: "implement",
+						prompt: "Working on branch {{ branch }}",
+						resume_previous: false,
+					},
+				],
+				change_request: {
+					title: "[{{ branch }}] {{ issue.title }}",
+					body: "Branch {{ branch }} closes {{ issue.key }}",
+				},
+			},
+			attempt: 1,
+		});
+		const result = await handle.done;
+
+		expect(result).toMatchObject({ status: "completed" });
+		expect(agent.calls).toHaveLength(2);
+		expect(agent.calls[0]).toMatchObject({
+			prompt: "Propose a name for owner/repo#1".replace(
+				"owner/repo#1",
+				issue.key,
+			),
+			outputFormat: { type: "json_schema", schema: branchSchema },
+		});
+		expect(stepPrompts).toEqual(["Working on branch feat/owner-repo-1-fix-it"]);
+		expect(branchesAtStep).toEqual(["feat/owner-repo-1-fix-it"]);
+		expect(setup.codeHost.changeRequests).toEqual([
+			{
+				repo: TEST_REPO,
+				head: "feat/owner-repo-1-fix-it",
+				base: "main",
+				title: `[feat/owner-repo-1-fix-it] ${issue.title}`,
+				body: `Branch feat/owner-repo-1-fix-it closes ${issue.key}`,
+			},
+		]);
+	});
+
+	it("dynamic branch: aborts the run on error_max_structured_output_retries before setup or any step.started", async () => {
+		const ranScripts: string[] = [];
+		const agent = createScriptedAgent(async function* () {
+			yield {
+				type: "result",
+				subtype: "error_max_structured_output_retries",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: true,
+				num_turns: 1,
+				stop_reason: null,
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				errors: [],
+				uuid: "00000000-0000-0000-0000-000000000090",
+				session_id: "sess-branch",
+			} as never;
+		});
+
+		await using setup = await createTestRunLifecycle({
+			agent,
+			maxRetries: 0,
+			runShell: async (script) => {
+				ranScripts.push(script);
+			},
+			beforeFirstStep: async (wsPath) => {
+				await writeSetupScript(wsPath, "#!/usr/bin/env bash\necho hi\n");
+			},
+		});
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: {
+				branch: {
+					prompt: "Propose",
+					schema: { type: "object" },
+				},
+				base_branch: "main",
+				steps: [
+					{ name: "implement", prompt: "Fix it", resume_previous: false },
+				],
+				change_request: baseChangeRequest,
+			},
+			attempt: 1,
+		});
+		const result = await handle.done;
+
+		expect(result).toMatchObject({
+			status: "failed",
+			error: "error_max_structured_output_retries",
+		});
+		expect(ranScripts).toEqual([]);
+		expect(agent.calls).toHaveLength(1);
+
+		const [run] = setup.db.select().from(runs).all();
+		const stepStarted = getEvents(setup.db, run?.id ?? "").filter(
+			(e) => e.type === "step.started",
+		);
+		expect(stepStarted).toEqual([]);
+	});
+
 	it("retry: only writes the new run's outputs, leaving the parent's row untouched (hydration is in-memory)", async () => {
 		const parentRunIdValue = "parent-run" as never;
 		const agent = createScriptedAgent(() => yieldAssistant("sess-resume"));

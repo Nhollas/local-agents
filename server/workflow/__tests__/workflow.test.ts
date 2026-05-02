@@ -343,6 +343,77 @@ ${validChangeRequest}`;
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
+	it("accepts a dynamic branch agent block", () => {
+		const yaml = `
+branch:
+  prompt: "Propose a name for {{ issue.key }}"
+  schema:
+    type: object
+    properties:
+      name:
+        type: string
+        pattern: "^feat/"
+    required: [name]
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+${validChangeRequest}`;
+
+		const result = parseRepoWorkflow(yaml);
+
+		expect(result.branch).toEqual({
+			prompt: "Propose a name for {{ issue.key }}",
+			schema: {
+				type: "object",
+				properties: { name: { type: "string", pattern: "^feat/" } },
+				required: ["name"],
+			},
+		});
+	});
+
+	it("rejects a branch object missing prompt", () => {
+		const yaml = `
+branch:
+  schema:
+    type: object
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+${validChangeRequest}`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects a branch object missing schema", () => {
+		const yaml = `
+branch:
+  prompt: "Propose a name"
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+${validChangeRequest}`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
+	it("rejects a branch object with unknown keys", () => {
+		const yaml = `
+branch:
+  prompt: "Propose a name"
+  schema: { type: object }
+  bogus: true
+base_branch: main
+steps:
+  - name: implement
+    prompt: Fix it
+${validChangeRequest}`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
 	it("accepts a step with an output_schema (raw JSON Schema)", () => {
 		const yaml = `
 branch: my-branch

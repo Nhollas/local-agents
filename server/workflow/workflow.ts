@@ -3,12 +3,14 @@ import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
 import { stripShellBlockMarkers } from "./prompt-preprocessor.ts";
 
+const jsonSchemaDocument = z.record(z.string(), z.unknown());
+
 const workflowStepSchema = z
 	.object({
 		name: z.string().min(1),
 		prompt: z.string(),
 		resume_previous: z.boolean().optional().default(false),
-		output_schema: z.record(z.string(), z.unknown()).optional(),
+		output_schema: jsonSchemaDocument.optional(),
 	})
 	.strict();
 
@@ -23,9 +25,20 @@ const changeRequestSchema = z
 
 export type ChangeRequestTemplate = z.infer<typeof changeRequestSchema>;
 
+const branchAgentSchema = z
+	.object({
+		prompt: z.string().min(1),
+		schema: jsonSchemaDocument,
+	})
+	.strict();
+
+const branchSchema = z.union([z.string().min(1), branchAgentSchema]);
+
+export type WorkflowBranch = z.infer<typeof branchSchema>;
+
 const repoWorkflowSchema = z
 	.object({
-		branch: z.string().min(1),
+		branch: branchSchema,
 		base_branch: z.string().min(1),
 		steps: z.array(workflowStepSchema).min(1),
 		change_request: changeRequestSchema,
