@@ -51,6 +51,7 @@ if (config.tracker.kind === "github") {
 		repo: jiraRepo,
 		baseUrl: config.tracker.base_url,
 		statuses: config.tracker.statuses,
+		...(config.tracker.labels && { labels: config.tracker.labels }),
 	});
 }
 let codeHost: CodeHostAdapter;
@@ -63,7 +64,11 @@ if (config.code_host.kind === "github") {
 	const gitlab = createGitLabClient(env.GITLAB_TOKEN, {
 		baseUrl: config.code_host.base_url,
 	});
-	codeHost = gitlabCodeHostAdapter(gitlab, config.code_host.base_url);
+	codeHost = gitlabCodeHostAdapter(
+		gitlab,
+		config.code_host.base_url,
+		env.GITLAB_TOKEN,
+	);
 }
 const repo = createRunRepository(db);
 

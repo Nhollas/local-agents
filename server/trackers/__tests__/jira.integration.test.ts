@@ -149,6 +149,43 @@ describe("jiraTrackerAdapter", () => {
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 		});
 
+		it("adds a labels clause to the JQL when labels are configured", async () => {
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+					const body = (await request.json()) as { jql?: string };
+					if (
+						body.jql !==
+						'project = "PROJ" AND status = "To Do" AND labels in ("software-factory-poc", "needs-triage") ORDER BY created ASC'
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
+					return HttpResponse.json({
+						issues: [createJiraIssue("PROJ-1", "To Do")],
+					});
+				}),
+			);
+
+			const tracker = jiraTrackerAdapter(
+				createJiraClient({
+					baseUrl: JIRA_BASE_URL,
+					email: jiraEmail("agent@example.test"),
+					apiToken: jiraApiToken("jira-token"),
+					maxAttempts: 1,
+				}),
+				{
+					project: "PROJ",
+					repo: REPO,
+					baseUrl: JIRA_BASE_URL,
+					statuses,
+					labels: ["software-factory-poc", "needs-triage"],
+				},
+			);
+
+			const issues = await tracker.fetchActiveIssues(REPO, "pending");
+
+			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
+		});
+
 		it("escapes quotes and backslashes in custom status names", async () => {
 			server.use(
 				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
