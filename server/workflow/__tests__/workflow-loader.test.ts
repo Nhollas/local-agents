@@ -63,6 +63,47 @@ describe("loadWorkflow", () => {
 
 		expect(() => loadWorkflow(workflowFile.path)).toThrow();
 	});
+
+	it("rejects an output reference that points at a step the workflow doesn't define", () => {
+		using workflowFile = writeWorkflow(`
+branch: agent
+base_branch: main
+steps:
+  - name: implement
+    prompt: "Use {{ steps.missing.output.title }}"
+change_request:
+  title: "PR"
+  body: "Closes"
+`);
+
+		expect(() => loadWorkflow(workflowFile.path)).toThrow(
+			new RegExp(
+				`${workflowFile.path}.*steps\\.missing\\.output\\.title.*unknown step "missing"`,
+				"s",
+			),
+		);
+	});
+
+	it("loads cleanly when output references resolve through the schema", () => {
+		using workflowFile = writeWorkflow(`
+branch: agent
+base_branch: main
+steps:
+  - name: summarise
+    prompt: "Write a summary"
+    output_schema:
+      type: object
+      properties:
+        title: { type: string }
+  - name: implement
+    prompt: "Use {{ steps.summarise.output.title }}"
+change_request:
+  title: "PR: {{ steps.summarise.output.title }}"
+  body: "Closes"
+`);
+
+		expect(() => loadWorkflow(workflowFile.path)).not.toThrow();
+	});
 });
 
 describe("createWorkflowMap", () => {

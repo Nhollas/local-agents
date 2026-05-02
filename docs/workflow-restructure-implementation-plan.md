@@ -554,7 +554,9 @@ Use this handoff template when a slice is interrupted:
 
 ## Slice 6 — Static Reference Validation
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Started:** 2026-05-02 on `main` (single sweep — new validator module + loader wiring; reviewable as one PR).
 
 **Purpose:** Catch bad `{{ steps.X.output.Y }}` references at workflow load instead of 20 minutes into a run.
 
@@ -602,6 +604,22 @@ Use this handoff template when a slice is interrupted:
 - JSON Schema is open-ended. The walker covers `properties` + `items` for V1; anything else fails closed. A future workflow author hitting the unsupported-composition error is the signal to extend it, not break out of the design.
 - The reference extractor must not match `{{ issue.* }}` or `{{ branch }}` (those are valid templates, just not output references). Anchor the regex on `steps.`.
 - A multi-line prompt string can contain `{{ }}` inside a fenced code block intended literally for the LLM. Decide: validator treats *all* `{{ steps.* }}` as references regardless of context (simpler, document it), or skips fenced blocks (more permissive, more code). Recommend the simpler rule.
+
+**Completed changes:**
+
+- **New validator module** (`server/workflow/workflow-validator.ts`): exports `validateOutputReferences(workflow, sourcePath?)`. Pure function — extracts every `{{ steps.X.output.Y... }}` reference (regex anchored on `steps.<name>.output(.<path>)*` so `{{ issue.* }}` and `{{ branch }}` are ignored), then for each: checks the step exists, enforces backward-only ordering for step prompts, requires `output_schema` on the referenced step, and walks the schema's `properties` tree. Throws on first failure with a message of the form `<file>: <location>: invalid reference "{{ ref }}" — <reason>`. The simpler "all `{{ steps.* }}` are references regardless of fenced-code context" rule was adopted per the slice's recommendation.
+- **Schema composition fail-closed**: `$ref`, `anyOf`, `oneOf`, `allOf` at any level along the walked path trigger the "validator does not support $ref/anyOf/oneOf/allOf" error before path resolution continues. Subschemas under those keywords are not walked.
+- **Reference shape validation only on matching templates**: malformed templates like `{{ steps.foo }}` or `{{ steps.foo.bar }}` (missing the `output` keyword) do not match the regex and aren't validated — they continue to render as empty string at runtime, matching `renderPrompt` semantics. Slice 6's safety net is for *plausible* references that resolve incorrectly.
+- **Forward references**: step prompts can only reference steps that appear *earlier* in the array. `change_request.title` and `change_request.body` see all steps (post-completion) and are not subject to the forward-reference rule. Both rules are exercised by tests.
+- **Loader integration** (`server/workflow/workflow-loader.ts`): `loadWorkflow(path)` now calls `validateOutputReferences(workflow, path)` after `parseRepoWorkflow` succeeds. The Zod parse runs first, so the validator only ever sees a fully-typed `RepoWorkflow`. The file path threads into error messages so a workflow author sees exactly which file is broken.
+- **No changes to `parseRepoWorkflow`** — programmatic test fixtures still build workflows directly without validation, matching the slice's "validator runs after parse" boundary. Test code that constructs invalid references stays exercisable in unit tests by calling `validateOutputReferences` directly.
+
+**Verification:**
+
+- `pnpm lint` — pass (133 files, no fixes applied).
+- `pnpm typecheck` — pass (server + dashboard).
+- `pnpm test` — pass (43 files, 308 tests; up from 287 in slice 5). New tests: 17 in `workflow-validator.test.ts` covering every scenario in the slice plan plus whole-output references with and without `output_schema`; 2 in `workflow-loader.test.ts` covering integration (file path appears in error; clean load when references resolve).
+- `pnpm test:coverage` — Statements **99.30%** / Branches **98.40%** / Functions **98.25%** / Lines **99.36%**. Functions and lines exceed the slice 5 baseline (98.19% / 99.32%); statements and branches are within 0.15pp. `workflow-validator.ts` is at 100% across all four dimensions.
 
 ## Release-Level Acceptance
 
