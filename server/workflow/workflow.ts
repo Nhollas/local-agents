@@ -7,7 +7,12 @@ const jsonSchemaDocument = z.record(z.string(), z.unknown());
 
 const workflowStepSchema = z
 	.object({
-		name: z.string().min(1),
+		name: z
+			.string()
+			.regex(
+				/^\w+$/,
+				"step name must contain only letters, digits, and underscores",
+			),
 		prompt: z.string(),
 		resume_previous: z.boolean().optional().default(false),
 		output_schema: jsonSchemaDocument.optional(),
