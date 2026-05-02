@@ -17,6 +17,7 @@ type RunWorkflowStepsParams = {
 	workflow: RepoWorkflow;
 	issue: Issue;
 	attempt: number;
+	branch: string;
 	cwd: string;
 	model: string;
 	startStepIndex?: number;
@@ -29,6 +30,7 @@ export async function runWorkflowSteps({
 	workflow,
 	issue,
 	attempt,
+	branch,
 	cwd,
 	model,
 	startStepIndex = 0,
@@ -60,6 +62,7 @@ export async function runWorkflowSteps({
 			totalSteps: steps.length,
 			issue,
 			attempt,
+			branch,
 			cwd,
 			model,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
@@ -77,6 +80,7 @@ type RunWorkflowStepParams = {
 	totalSteps: number;
 	issue: Issue;
 	attempt: number;
+	branch: string;
 	cwd: string;
 	model: string;
 	resumeSessionId?: string;
@@ -90,6 +94,7 @@ async function runWorkflowStep({
 	totalSteps,
 	issue,
 	attempt,
+	branch,
 	cwd,
 	model,
 	resumeSessionId,
@@ -106,6 +111,7 @@ async function runWorkflowStep({
 		const renderedPrompt = renderPrompt(markTrustedShellBlocks(step.prompt), {
 			issue,
 			attempt,
+			branch,
 			outputs: ctx.outputs,
 		});
 		const prompt = await expandMarkedShellBlocks(renderedPrompt, { cwd });

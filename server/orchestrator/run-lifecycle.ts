@@ -11,8 +11,8 @@ import {
 	type RunId,
 } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
-import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
+import { resolveBranch } from "./branch-resolver.ts";
 import { renderChangeRequest } from "./change-request-renderer.ts";
 import type { Clock } from "./clock.ts";
 import { runWorkflowSteps } from "./step-runner.ts";
@@ -72,9 +72,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 		const cloneUrl = codeHost.cloneUrl(repo);
 		const ws = await ensureWorkspace(issue, workspaceRoot, cloneUrl);
-		const branch = branchName(
-			renderPrompt(workflow.branch, { issue, attempt }),
-		);
 
 		return runner.enqueue({
 			name: `issue-${issue.number}`,
@@ -97,8 +94,20 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 					async () => {
 						const startTime = clock.now();
 						let result: RunResult;
+						let branch: BranchName | undefined;
 
 						try {
+							const resolvedBranch = await resolveBranch({
+								workflowBranch: workflow.branch,
+								issue,
+								attempt,
+								agent,
+								cwd: ws.path,
+								model,
+								signal: ctx.signal,
+							});
+							branch = branchName(resolvedBranch);
+
 							await ensureBranch(ws.path, branch);
 							await runRepoSetup(ws.path, runShell);
 
@@ -108,6 +117,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								workflow,
 								issue,
 								attempt,
+								branch,
 								cwd: ws.path,
 								model,
 								...(resume?.startStepIndex != null && {
@@ -135,7 +145,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							...(result.status === "failed" && { error: result.error }),
 						});
 
-						if (result.status === "completed") {
+						if (result.status === "completed" && branch) {
 							await finalizeSuccess(
 								repo,
 								issue,

@@ -102,6 +102,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			attempt: 1,
 			cwd: "/work",
+			branch: "agent/issue-1",
 			model: "test-model",
 		});
 
@@ -160,6 +161,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			attempt: 1,
 			cwd: "/work",
+			branch: "agent/issue-1",
 			model: "test-model",
 		});
 
@@ -220,6 +222,7 @@ describe("runWorkflowSteps", () => {
 				issue,
 				attempt: 1,
 				cwd: "/work",
+				branch: "agent/issue-1",
 				model: "test-model",
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);
@@ -268,6 +271,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			attempt: 1,
 			cwd: "/work",
+			branch: "agent/issue-1",
 			model: "test-model",
 		});
 
@@ -299,10 +303,41 @@ describe("runWorkflowSteps", () => {
 			issue,
 			attempt: 1,
 			cwd: "/work",
+			branch: "agent/issue-1",
 			model: "test-model",
 		});
 
 		expect(observed).toEqual({ earlier: { x: "from-parent" } });
+	});
+
+	it("substitutes the branch param into a step prompt", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(() => yieldAssistant("sess"));
+		const workflow: RepoWorkflow = {
+			branch: "ignored",
+			base_branch: "main",
+			steps: [
+				{
+					name: "implement",
+					prompt: "Working on {{ branch }}",
+					resume_previous: false,
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		await runWorkflowSteps({
+			ctx: recorder.ctx,
+			agent,
+			workflow,
+			issue,
+			attempt: 1,
+			branch: "feat/proposed",
+			cwd: "/work",
+			model: "test-model",
+		});
+
+		expect(agent.calls[0]?.prompt).toBe("Working on feat/proposed");
 	});
 
 	it("substitutes earlier step outputs into a later step's prompt", async () => {
@@ -360,6 +395,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			attempt: 1,
 			cwd: "/work",
+			branch: "agent/issue-1",
 			model: "test-model",
 		});
 
