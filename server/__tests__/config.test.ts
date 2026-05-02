@@ -125,6 +125,52 @@ ${fullDefaults}`);
 		});
 	});
 
+	it("accepts jira tracker with optional labels", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: jira
+  base_url: https://jira.example.test
+  project: PROJ
+  statuses:
+    pending: To Do
+    running: In Progress
+    awaiting_review: In Review
+  labels:
+    - software-factory-poc
+code_host:
+  kind: github
+  repos:
+    - owner/repo
+${fullDefaults}`);
+
+		const config = loadConfig(configFile.path);
+
+		expect(config.tracker).toMatchObject({
+			kind: "jira",
+			labels: ["software-factory-poc"],
+		});
+	});
+
+	it("rejects jira tracker with an empty labels list", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: jira
+  base_url: https://jira.example.test
+  project: PROJ
+  statuses:
+    pending: To Do
+    running: In Progress
+    awaiting_review: In Review
+  labels: []
+code_host:
+  kind: github
+  repos:
+    - owner/repo
+${fullDefaults}`);
+
+		expect(() => loadConfig(configFile.path)).toThrow();
+	});
+
 	it("rejects jira tracker with zero code host repos", () => {
 		using configFile = writeConfig(`
 tracker:

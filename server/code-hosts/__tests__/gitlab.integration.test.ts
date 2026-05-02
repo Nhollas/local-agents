@@ -19,6 +19,20 @@ describe("cloneUrl", () => {
 		);
 	});
 
+	it("embeds the configured token as HTTP basic auth when provided", () => {
+		const tokenAdapter = gitlabCodeHostAdapter(
+			createGitLabClient(gitlabToken("test-token"), {
+				baseUrl: GITLAB_BASE_URL,
+			}),
+			GITLAB_BASE_URL,
+			gitlabToken("token-with/special:chars"),
+		);
+
+		expect(tokenAdapter.cloneUrl(REPO)).toBe(
+			"https://oauth2:token-with%2Fspecial%3Achars@gitlab.example.test/group/subgroup/project.git",
+		);
+	});
+
 	it("defaults to gitlab.com when no base URL is configured", async () => {
 		const defaultAdapter = gitlabCodeHostAdapter(
 			createGitLabClient(gitlabToken("test-token")),

@@ -11,6 +11,7 @@ type JiraTrackerOptions = {
 	repo: RepoSlug;
 	baseUrl: string;
 	statuses: JiraStatuses;
+	labels?: readonly string[];
 };
 
 function jiraIssueKey(project: string, num: number): string {
@@ -81,11 +82,15 @@ export function jiraTrackerAdapter(
 		},
 
 		async fetchActiveIssues(_repo, state): Promise<Issue[]> {
-			const filter = [
+			const clauses = [
 				`project = ${quoteJqlString(options.project)}`,
 				`status = ${quoteJqlString(options.statuses[state])}`,
-			].join(" AND ");
-			const jql = `${filter} ORDER BY created ASC`;
+			];
+			if (options.labels && options.labels.length > 0) {
+				const quoted = options.labels.map(quoteJqlString).join(", ");
+				clauses.push(`labels in (${quoted})`);
+			}
+			const jql = `${clauses.join(" AND ")} ORDER BY created ASC`;
 			const issues = await client.searchIssues({ jql, maxResults: 100 });
 			return issues.map((issue) =>
 				mapJiraIssue(options.project, options.baseUrl, issue),

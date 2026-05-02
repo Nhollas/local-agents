@@ -1,4 +1,5 @@
 import type { GitLabClient } from "../gitlab-client.ts";
+import type { GitLabToken } from "../types/brands.ts";
 import { decorateCodeHost } from "./decorator.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
@@ -9,6 +10,7 @@ function trimTrailingSlash(value: string): string {
 export function gitlabCodeHostAdapter(
 	client: GitLabClient,
 	baseUrl = "https://gitlab.com",
+	cloneToken?: GitLabToken,
 ): CodeHostAdapter {
 	const cloneBaseUrl = trimTrailingSlash(baseUrl);
 
@@ -23,7 +25,14 @@ export function gitlabCodeHostAdapter(
 		},
 
 		cloneUrl(repo): string {
-			return `${cloneBaseUrl}/${repo}.git`;
+			const url = `${cloneBaseUrl}/${repo}.git`;
+			if (!cloneToken) return url;
+			// Embed the token as HTTP basic auth so `git clone` (and later
+			// push/fetch from the same remote) authenticate to GitLab.
+			return url.replace(
+				/^(https?:\/\/)/,
+				`$1oauth2:${encodeURIComponent(cloneToken)}@`,
+			);
 		},
 
 		async createChangeRequest(
