@@ -279,6 +279,68 @@ describe("githubTrackerAdapter", () => {
 			]);
 		});
 
+		it("drops issues whose repository_url is missing or unparseable", async () => {
+			server.use(
+				http.get(`${GITHUB_API}/user`, () =>
+					HttpResponse.json({ login: "test-user" }),
+				),
+				http.get(`${GITHUB_API}/search/issues`, () =>
+					HttpResponse.json({
+						total_count: 3,
+						items: [
+							{
+								...createGitHubIssue(40, ["agent"]),
+								repository_url: undefined,
+							},
+							{
+								...createGitHubIssue(41, ["agent"]),
+								repository_url: "https://api.github.com/some-other-shape",
+							},
+							createGitHubIssue(42, ["agent"]),
+						],
+					}),
+				),
+			);
+
+			const github = createGitHubClient(githubToken("test-token"));
+			const tracker = githubTrackerAdapter(github, {
+				scopes: [REPO],
+				triggerLabel: TRIGGER,
+			});
+
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(issues.map((i) => i.key)).toEqual([`${REPO}#42`]);
+		});
+
+		it("dedupes issues that appear in more than one activeStates batch", async () => {
+			const captured: string[] = [];
+			server.use(
+				http.get(`${GITHUB_API}/user`, () =>
+					HttpResponse.json({ login: "test-user" }),
+				),
+				http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+					captured.push(new URL(request.url).searchParams.get("q") ?? "");
+					return HttpResponse.json({
+						total_count: 1,
+						items: [createGitHubIssue(50, ["agent"])],
+					});
+				}),
+			);
+
+			const github = createGitHubClient(githubToken("test-token"));
+			const tracker = githubTrackerAdapter(github, {
+				scopes: [REPO],
+				triggerLabel: TRIGGER,
+				activeStates: ["open", "closed"],
+			});
+
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(captured).toHaveLength(2);
+			expect(issues.map((i) => i.key)).toEqual([`${REPO}#50`]);
+		});
+
 		it("maps null body to empty string", async () => {
 			server.use(
 				http.get(`${GITHUB_API}/user`, () =>
