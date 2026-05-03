@@ -17,7 +17,6 @@ export type Config = {
 					running: string;
 					awaiting_review: string;
 				};
-				labels?: string[] | undefined;
 		  };
 	code_host:
 		| {
@@ -60,7 +59,6 @@ const configSchema = z
 							awaiting_review: z.string().min(1),
 						})
 						.strict(),
-					labels: z.array(z.string().min(1)).min(1).optional(),
 				})
 				.strict(),
 		]),

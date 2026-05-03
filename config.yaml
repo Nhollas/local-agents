@@ -6,8 +6,6 @@ tracker:
     pending: "To Do"
     running: "In Progress"
     awaiting_review: "In Review"
-  labels:
-    - software-factory-poc
 
 code_host:
   kind: gitlab

@@ -13,7 +13,6 @@ type JiraTrackerOptions = {
 	scopes: readonly RepoSlug[];
 	baseUrl: string;
 	statuses: JiraStatuses;
-	labels?: readonly string[];
 };
 
 const REPO_LABEL_PREFIX = "repo:";
@@ -124,10 +123,6 @@ export function jiraTrackerAdapter(
 				`project = ${quoteJqlString(options.project)}`,
 				`status = ${quoteJqlString(options.statuses[state])}`,
 			];
-			if (options.labels && options.labels.length > 0) {
-				const quoted = options.labels.map(quoteJqlString).join(", ");
-				clauses.push(`labels in (${quoted})`);
-			}
 			const jql = `${clauses.join(" AND ")} ORDER BY created ASC`;
 			const raw = await client.searchIssues({ jql, maxResults: 100 });
 			const issues: Issue[] = [];

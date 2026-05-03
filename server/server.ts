@@ -47,7 +47,6 @@ if (config.tracker.kind === "github") {
 		scopes: config.code_host.scopes,
 		baseUrl: config.tracker.base_url,
 		statuses: config.tracker.statuses,
-		...(config.tracker.labels && { labels: config.tracker.labels }),
 	});
 }
 let codeHost: CodeHostAdapter;
