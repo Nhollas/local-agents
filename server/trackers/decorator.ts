@@ -16,15 +16,15 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 			}
 		},
 
-		async fetchActiveIssues(repo, state) {
+		async fetchActiveIssues(state) {
 			try {
-				const issues = await inner.fetchActiveIssues(repo, state);
+				const page = await inner.fetchActiveIssues(state);
 				canonicalLog.set({
-					tracker_active_issues_count: issues.length,
+					tracker_active_issues_count: page.issues.length,
 				});
-				return issues;
+				return page;
 			} catch (err) {
-				canonicalLog.append("warnings", `fetch_active_issues_failed: ${repo}`);
+				canonicalLog.append("warnings", `fetch_active_issues_failed: ${state}`);
 				throw err;
 			}
 		},

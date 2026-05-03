@@ -34,11 +34,17 @@ type Orchestrator = {
 };
 
 type TaggedIssue = { issue: Issue; repo: RepoSlug; workflow: RepoWorkflow };
+type RunningEntry = { runIds: RunId[]; repo: RepoSlug };
+type StillRunning = {
+	issues: readonly Issue[];
+	keys: ReadonlySet<IssueKey>;
+	reposReached: ReadonlySet<RepoSlug>;
+};
 type TickState = {
-	runningByIssue: Map<IssueKey, RunId[]>;
+	runningByIssue: Map<IssueKey, RunningEntry>;
 	runningCount: number;
 	pending: TaggedIssue[];
-	stillRunning: Map<RepoSlug, Set<IssueKey>>;
+	stillRunning: StillRunning;
 };
 
 export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
@@ -78,56 +84,55 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	}
 
 	async function fetchTickState(): Promise<TickState> {
-		const entries = [...workflows.entries()];
-
 		const dbSnapshot = runRepo.getRunningSnapshot();
-		const runningByIssue = new Map<IssueKey, RunId[]>();
+		const runningByIssue = new Map<IssueKey, RunningEntry>();
 		for (const r of dbSnapshot) {
-			const ids = runningByIssue.get(r.issueKey) ?? [];
-			ids.push(r.id);
-			runningByIssue.set(r.issueKey, ids);
+			const entry = runningByIssue.get(r.issueKey) ?? {
+				runIds: [],
+				repo: r.repo,
+			};
+			entry.runIds.push(r.id);
+			runningByIssue.set(r.issueKey, entry);
 		}
 
-		const [pendingResults, runningResults] = await Promise.all([
-			Promise.allSettled(
-				entries.map(async ([repo, workflow]) => {
-					const issues = await tracker.fetchActiveIssues(repo, "pending");
-					return issues.map(
-						(issue): TaggedIssue => ({ issue, repo, workflow }),
-					);
-				}),
-			),
-			Promise.allSettled(
-				entries.map(async ([repo]) => {
-					const issues = await tracker.fetchActiveIssues(repo, "running");
-					return { repo, keys: new Set(issues.map((i) => i.key)) };
-				}),
-			),
+		const [pendingResult, runningResult] = await Promise.allSettled([
+			tracker.fetchActiveIssues("pending"),
+			tracker.fetchActiveIssues("running"),
 		]);
 
 		const pending: TaggedIssue[] = [];
-		for (const result of pendingResults) {
-			if (result.status === "fulfilled") {
-				pending.push(...result.value);
-			} else {
-				logger.warn(
-					{ err: result.reason },
-					"orchestrator.fetch_pending_failed",
-				);
+		if (pendingResult.status === "fulfilled") {
+			for (const issue of pendingResult.value.issues) {
+				const workflow = workflows.get(issue.repo);
+				if (!workflow) continue;
+				pending.push({ issue, repo: issue.repo, workflow });
 			}
+		} else {
+			logger.warn(
+				{ err: pendingResult.reason },
+				"orchestrator.fetch_pending_failed",
+			);
 		}
 		pending.sort((a, b) => a.issue.createdAt.localeCompare(b.issue.createdAt));
 
-		const stillRunning = new Map<RepoSlug, Set<IssueKey>>();
-		for (const result of runningResults) {
-			if (result.status === "fulfilled") {
-				stillRunning.set(result.value.repo, result.value.keys);
-			} else {
-				logger.warn(
-					{ err: result.reason },
-					"orchestrator.fetch_running_failed",
-				);
-			}
+		let stillRunning: StillRunning;
+		if (runningResult.status === "fulfilled") {
+			const issues = runningResult.value.issues;
+			stillRunning = {
+				issues,
+				keys: new Set(issues.map((i) => i.key)),
+				reposReached: runningResult.value.reposReached,
+			};
+		} else {
+			logger.warn(
+				{ err: runningResult.reason },
+				"orchestrator.fetch_running_failed",
+			);
+			stillRunning = {
+				issues: [],
+				keys: new Set(),
+				reposReached: new Set(),
+			};
 		}
 
 		return {
@@ -139,34 +144,34 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	}
 
 	async function reconcileStaleRuns(state: TickState) {
-		for (const [key, runIds] of state.runningByIssue) {
-			const { repo } = unwrap(tracker.parseIssueKey(key));
-			const repoKeys = state.stillRunning.get(repo);
-			if (repoKeys && !repoKeys.has(key)) {
-				logger.info({ key }, "orchestrator.reconcile_terminal");
-				for (const id of runIds) {
-					const killed = runner.kill(id);
-					if (!killed) {
-						runRepo.failRun(id, {
-							error: "Stale run from previous session",
-							completedAt: new Date().toISOString(),
-						});
-					}
+		const { issues, keys, reposReached } = state.stillRunning;
+
+		for (const [key, { runIds, repo }] of state.runningByIssue) {
+			if (!reposReached.has(repo)) continue;
+			if (keys.has(key)) continue;
+			logger.info({ key }, "orchestrator.reconcile_terminal");
+			for (const id of runIds) {
+				const killed = runner.kill(id);
+				if (!killed) {
+					runRepo.failRun(id, {
+						error: "Stale run from previous session",
+						completedAt: new Date().toISOString(),
+					});
 				}
 			}
 		}
 
-		for (const [repo, keys] of state.stillRunning) {
-			for (const key of keys) {
-				if (state.runningByIssue.has(key)) continue;
-				const { number } = unwrap(tracker.parseIssueKey(key));
-				logger.info({ key }, "orchestrator.reconcile_orphan");
-				await tracker
-					.transitionState(repo, number, "running", "pending")
-					.catch((err) =>
-						logger.warn({ key, err }, "orchestrator.orphan_recovery_failed"),
-					);
-			}
+		for (const issue of issues) {
+			if (state.runningByIssue.has(issue.key)) continue;
+			logger.info({ key: issue.key }, "orchestrator.reconcile_orphan");
+			await tracker
+				.transitionState(issue.repo, issue.number, "running", "pending")
+				.catch((err) =>
+					logger.warn(
+						{ key: issue.key, err },
+						"orchestrator.orphan_recovery_failed",
+					),
+				);
 		}
 	}
 
@@ -201,7 +206,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			}
 
 			runningCount++;
-			state.runningByIssue.set(issue.key, []);
+			state.runningByIssue.set(issue.key, { runIds: [], repo });
 			logger.info({ issue: issue.key }, "orchestrator.dispatched");
 		}
 	}
@@ -236,9 +241,10 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			return { error: "Issue already has a running agent" };
 		}
 
-		const { repo, number: issueNumber } = unwrap(
+		const { number: issueNumber } = unwrap(
 			tracker.parseIssueKey(failedRun.issueKey),
 		);
+		const repo = failedRun.repo;
 		const workflow = workflows.get(repo);
 		if (!workflow) return { error: "No workflow for repo" };
 

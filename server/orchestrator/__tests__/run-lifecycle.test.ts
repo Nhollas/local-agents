@@ -892,6 +892,7 @@ describe("RunLifecycle.dispatch", () => {
 				id: parentRunIdValue,
 				agentName: "issue-1",
 				status: "failed",
+				repo: TEST_REPO,
 				startedAt: "2026-01-01T00:00:00Z",
 				completedAt: "2026-01-01T00:00:01Z",
 				durationMs: 1,

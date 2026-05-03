@@ -48,40 +48,39 @@ function parseJiraKey(project: string, key: string): number | null {
 	return Number.parseInt(matchedNumber, 10);
 }
 
-function mapJiraIssue(
-	project: string,
-	baseUrl: string,
-	issue: JiraIssue,
-): Issue {
-	const num = parseJiraKey(project, issue.key);
-	/* v8 ignore next 3 -- defensive check; Jira API returns keys matching its own search filter */
-	if (num == null) {
-		throw new Error(`Invalid Jira issue key from API: ${issue.key}`);
-	}
-	return {
-		key: issueKey(issue.key),
-		number: issueNumber(num),
-		title: issue.fields.summary,
-		description: extractText(issue.fields.description),
-		labels: [issue.fields.status.name],
-		url: `${trimTrailingSlash(baseUrl)}/browse/${issue.key}`,
-		createdAt: issue.fields.created,
-	};
-}
-
 export function jiraTrackerAdapter(
 	client: JiraClient,
 	options: JiraTrackerOptions,
 ): TrackerAdapter {
+	const baseUrl = trimTrailingSlash(options.baseUrl);
+
+	function mapIssue(issue: JiraIssue): Issue {
+		const num = parseJiraKey(options.project, issue.key);
+		/* v8 ignore next 3 -- defensive check; Jira API returns keys matching its own search filter */
+		if (num == null) {
+			throw new Error(`Invalid Jira issue key from API: ${issue.key}`);
+		}
+		return {
+			key: issueKey(issue.key),
+			number: issueNumber(num),
+			repo: options.repo,
+			title: issue.fields.summary,
+			description: extractText(issue.fields.description),
+			labels: [issue.fields.status.name],
+			url: `${baseUrl}/browse/${issue.key}`,
+			createdAt: issue.fields.created,
+		};
+	}
+
 	return decorateTracker({
 		async fetchIssue(_repo, issueNum): Promise<Issue> {
 			const issue = await client.getIssue(
 				jiraIssueKey(options.project, issueNum),
 			);
-			return mapJiraIssue(options.project, options.baseUrl, issue);
+			return mapIssue(issue);
 		},
 
-		async fetchActiveIssues(_repo, state): Promise<Issue[]> {
+		async fetchActiveIssues(state) {
 			const clauses = [
 				`project = ${quoteJqlString(options.project)}`,
 				`status = ${quoteJqlString(options.statuses[state])}`,
@@ -91,10 +90,11 @@ export function jiraTrackerAdapter(
 				clauses.push(`labels in (${quoted})`);
 			}
 			const jql = `${clauses.join(" AND ")} ORDER BY created ASC`;
-			const issues = await client.searchIssues({ jql, maxResults: 100 });
-			return issues.map((issue) =>
-				mapJiraIssue(options.project, options.baseUrl, issue),
-			);
+			const raw = await client.searchIssues({ jql, maxResults: 100 });
+			return {
+				issues: raw.map(mapIssue),
+				reposReached: new Set([options.repo]),
+			};
 		},
 
 		async transitionState(_repo, issueNum, _from, to): Promise<void> {
@@ -120,7 +120,6 @@ export function jiraTrackerAdapter(
 				});
 			}
 			return ok({
-				repo: options.repo,
 				number: issueNumber(num),
 			});
 		},

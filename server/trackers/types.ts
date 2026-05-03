@@ -4,6 +4,7 @@ import type { Result } from "../types/result.ts";
 export type Issue = {
 	key: IssueKey;
 	number: IssueNumber;
+	repo: RepoSlug;
 	title: string;
 	description: string;
 	labels: string[];
@@ -19,9 +20,14 @@ export type ParseIssueKeyError = {
 	message: string;
 };
 
+export type ActiveIssuesPage = {
+	issues: Issue[];
+	reposReached: ReadonlySet<RepoSlug>;
+};
+
 export type TrackerAdapter = {
 	fetchIssue(repo: RepoSlug, issueNumber: IssueNumber): Promise<Issue>;
-	fetchActiveIssues(repo: RepoSlug, state: TrackerState): Promise<Issue[]>;
+	fetchActiveIssues(state: TrackerState): Promise<ActiveIssuesPage>;
 	transitionState(
 		repo: RepoSlug,
 		issueNumber: IssueNumber,
@@ -30,5 +36,5 @@ export type TrackerAdapter = {
 	): Promise<void>;
 	parseIssueKey(
 		key: string,
-	): Result<{ repo: RepoSlug; number: IssueNumber }, ParseIssueKeyError>;
+	): Result<{ number: IssueNumber }, ParseIssueKeyError>;
 };

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
-import { branchName, issueKey, issueNumber } from "../../types/brands.ts";
+import {
+	branchName,
+	issueKey,
+	issueNumber,
+	repoSlug,
+} from "../../types/brands.ts";
 import { renderChangeRequest } from "../change-request-renderer.ts";
 
 const issue: Issue = {
 	key: issueKey("owner/repo#42"),
 	number: issueNumber(42),
+	repo: repoSlug("owner/repo"),
 	title: "Fix login bug",
 	description: "Login throws on null email",
 	labels: ["bug"],

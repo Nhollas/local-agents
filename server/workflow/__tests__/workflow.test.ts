@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
-import { issueKey, issueNumber } from "../../types/brands.ts";
+import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import { parseRepoWorkflow, renderPrompt } from "../workflow.ts";
 
 const baseIssue: Issue = {
 	key: issueKey("owner/repo#1"),
 	number: issueNumber(1),
+	repo: repoSlug("owner/repo"),
 	title: "Fix the thing",
 	description: "Detailed description",
 	labels: ["bug", "urgent"],

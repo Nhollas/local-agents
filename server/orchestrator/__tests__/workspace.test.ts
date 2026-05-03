@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
-import { issueKey, issueNumber } from "../../types/brands.ts";
+import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import {
 	ensureWorkspace,
 	realRunShell,
@@ -19,6 +19,7 @@ function createIssue(num: number): Issue {
 	return {
 		key: issueKey(`test-owner/test-repo#${num}`),
 		number: issueNumber(num),
+		repo: repoSlug("test-owner/test-repo"),
 		title: `Issue ${num}`,
 		description: "",
 		labels: [],

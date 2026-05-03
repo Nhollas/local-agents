@@ -10,7 +10,7 @@ import {
 	runStepOutputs,
 	runs,
 } from "./db/schema.ts";
-import type { IssueKey, RunId } from "./types/brands.ts";
+import type { IssueKey, RepoSlug, RunId } from "./types/brands.ts";
 import { assertNever } from "./types/exhaustive.ts";
 
 type RunRow = typeof runs.$inferSelect;
@@ -18,6 +18,7 @@ type RunRow = typeof runs.$inferSelect;
 type RunBase = {
 	id: RunId;
 	agentName: string;
+	repo: RepoSlug;
 	issueKey: IssueKey | null;
 	issueTitle: string | null;
 	startedAt: string;
@@ -48,6 +49,7 @@ function rowToRun(row: RunRow): Run {
 	const base: RunBase = {
 		id: row.id,
 		agentName: row.agentName,
+		repo: row.repo,
 		issueKey: row.issueKey,
 		issueTitle: row.issueTitle,
 		startedAt: row.startedAt,
@@ -95,6 +97,7 @@ export type RunRepository = {
 	insertRun(run: {
 		id: RunId;
 		agentName: string;
+		repo: RepoSlug;
 		issueKey: IssueKey;
 		issueTitle: string;
 		startedAt: string;
@@ -117,7 +120,7 @@ export type RunRepository = {
 		data: Record<string, unknown>;
 		createdAt: string;
 	}): void;
-	getRunningSnapshot(): { id: RunId; issueKey: IssueKey }[];
+	getRunningSnapshot(): { id: RunId; issueKey: IssueKey; repo: RepoSlug }[];
 	getRunById(id: RunId): Run | undefined;
 	getRuns(filters: {
 		agent?: string | undefined;
@@ -172,12 +175,12 @@ export function createRunRepository(db: Db): RunRepository {
 
 		getRunningSnapshot() {
 			return db
-				.select({ id: runs.id, issueKey: runs.issueKey })
+				.select({ id: runs.id, issueKey: runs.issueKey, repo: runs.repo })
 				.from(runs)
 				.where(and(eq(runs.status, "running"), isNotNull(runs.issueKey)))
 				.all()
 				.filter(
-					(row): row is { id: RunId; issueKey: IssueKey } =>
+					(row): row is { id: RunId; issueKey: IssueKey; repo: RepoSlug } =>
 						row.issueKey != null,
 				);
 		},

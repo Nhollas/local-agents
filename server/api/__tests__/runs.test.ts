@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../../testing/support/test-api.ts";
 import { seedEvent, seedRun } from "../../testing/support/test-db.ts";
-import { issueKey, runId } from "../../types/brands.ts";
+import { issueKey, repoSlug, runId } from "../../types/brands.ts";
 
 describe("GET /runs", () => {
 	it("returns empty array when no runs exist", async () => {
@@ -29,6 +29,7 @@ describe("GET /runs", () => {
 				agentName: "test-agent",
 				status: "completed",
 				error: null,
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-03T00:00:00Z",
@@ -44,6 +45,7 @@ describe("GET /runs", () => {
 				agentName: "test-agent",
 				status: "completed",
 				error: null,
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-02T00:00:00Z",
@@ -59,6 +61,7 @@ describe("GET /runs", () => {
 				agentName: "test-agent",
 				status: "completed",
 				error: null,
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-01T00:00:00Z",
@@ -95,6 +98,7 @@ describe("GET /runs", () => {
 				agentName: "agent-alpha",
 				status: "completed",
 				error: null,
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-01T00:00:00Z",
@@ -136,6 +140,7 @@ describe("GET /runs", () => {
 				agentName: "test-agent",
 				status: "running",
 				error: null,
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-01T00:00:00Z",
@@ -170,6 +175,7 @@ describe("GET /runs", () => {
 				agentName: "test-agent",
 				status: "failed",
 				error: "agent timed out",
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-03T00:00:00Z",
@@ -199,6 +205,7 @@ describe("GET /runs", () => {
 				agentName: "test-agent",
 				status: "completed",
 				error: null,
+				repo: "test-owner/test-repo",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-03T00:00:00Z",
@@ -246,6 +253,7 @@ describe("GET /runs/:id", () => {
 			agentName: "my-agent",
 			status: "completed",
 			error: null,
+			repo: "test-owner/test-repo",
 			issueKey: null,
 			issueTitle: null,
 			startedAt: "2025-01-01T00:00:00Z",
@@ -295,6 +303,7 @@ describe("POST /runs/:id/kill", () => {
 		const { app, runner } = createTestApi();
 		const { runId } = runner.enqueue({
 			name: "long-job",
+			repo: repoSlug("test/repo"),
 			issueKey: issueKey("test/repo#1"),
 			issueTitle: "Long running job",
 			handler: () => new Promise(() => {}),

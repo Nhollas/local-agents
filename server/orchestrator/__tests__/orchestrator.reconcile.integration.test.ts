@@ -10,7 +10,7 @@ import {
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
-import { issueKey, runId as rid } from "../../types/brands.ts";
+import { issueKey, repoSlug, runId as rid } from "../../types/brands.ts";
 
 describe("Orchestrator reconciliation", () => {
 	it("kills agent when issue no longer has the running label", async () => {
@@ -45,6 +45,7 @@ describe("Orchestrator reconciliation", () => {
 				agentName: "issue-1",
 				status: "running",
 				error: null,
+				repo: REPO,
 				issueKey: `${REPO}#1`,
 				issueTitle: "Issue 1",
 				startedAt: expect.any(String),
@@ -72,6 +73,7 @@ describe("Orchestrator reconciliation", () => {
 				agentName: "issue-1",
 				status: "failed",
 				error: "Run killed by user",
+				repo: REPO,
 				issueKey: `${REPO}#1`,
 				issueTitle: "Issue 1",
 				startedAt: runsBefore[0]?.startedAt,
@@ -121,6 +123,7 @@ describe("Orchestrator reconciliation", () => {
 				agentName: "issue-2",
 				status: "running",
 				error: null,
+				repo: REPO,
 				issueKey: `${REPO}#2`,
 				issueTitle: "Issue 2",
 				startedAt: expect.any(String),
@@ -211,6 +214,7 @@ describe("Orchestrator reconciliation", () => {
 				agentName: "issue-1",
 				status: "running",
 				error: null,
+				repo: REPO,
 				issueKey: `${REPO}#1`,
 				issueTitle: "Issue 1",
 				startedAt: expect.any(String),
@@ -352,6 +356,7 @@ describe("Orchestrator reconciliation", () => {
 				id: rid("stale-run"),
 				agentName: "issue-5",
 				status: "running",
+				repo: repoSlug(REPO),
 				issueKey: issueKey(`${REPO}#5`),
 				issueTitle: "Stale issue",
 				startedAt: "2025-01-01T00:00:00Z",
@@ -368,6 +373,7 @@ describe("Orchestrator reconciliation", () => {
 				agentName: "issue-5",
 				status: "failed",
 				error: "Stale run from previous session",
+				repo: REPO,
 				issueKey: `${REPO}#5`,
 				issueTitle: "Stale issue",
 				startedAt: "2025-01-01T00:00:00Z",
@@ -425,6 +431,7 @@ describe("Orchestrator reconciliation", () => {
 				id: rid("completed-orphan"),
 				agentName: "issue-1",
 				status: "completed",
+				repo: repoSlug(REPO),
 				issueKey: issueKey(`${REPO}#1`),
 				issueTitle: "Issue 1",
 				startedAt: new Date().toISOString(),

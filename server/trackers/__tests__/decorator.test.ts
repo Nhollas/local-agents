@@ -16,10 +16,9 @@ function createFakeTracker(
 		fetchIssue: async () => {
 			throw new Error("not implemented");
 		},
-		fetchActiveIssues: async () => [],
+		fetchActiveIssues: async () => ({ issues: [], reposReached: new Set() }),
 		transitionState: async () => {},
-		parseIssueKey: () =>
-			ok({ repo: repoSlug("owner/repo"), number: issueNumber(1) }),
+		parseIssueKey: () => ok({ number: issueNumber(1) }),
 		...overrides,
 	};
 }
@@ -38,6 +37,22 @@ describe("decorateTracker", () => {
 			await expect(
 				decorated.fetchIssue(repoSlug("owner/repo"), issueNumber(42)),
 			).rejects.toThrow("not found");
+		});
+	});
+
+	describe("fetchActiveIssues", () => {
+		it("re-throws when inner fetchActiveIssues fails", async () => {
+			const decorated = decorateTracker(
+				createFakeTracker({
+					fetchActiveIssues: async () => {
+						throw new Error("upstream down");
+					},
+				}),
+			);
+
+			await expect(decorated.fetchActiveIssues("pending")).rejects.toThrow(
+				"upstream down",
+			);
 		});
 	});
 
@@ -98,15 +113,13 @@ describe("decorateTracker", () => {
 		it("delegates to inner tracker", () => {
 			const decorated = decorateTracker(
 				createFakeTracker({
-					parseIssueKey: () =>
-						ok({ repo: repoSlug("owner/repo"), number: issueNumber(42) }),
+					parseIssueKey: () => ok({ number: issueNumber(42) }),
 				}),
 			);
 
 			expect(decorated.parseIssueKey("owner/repo#42")).toEqual({
 				ok: true,
 				value: {
-					repo: "owner/repo",
 					number: 42,
 				},
 			});

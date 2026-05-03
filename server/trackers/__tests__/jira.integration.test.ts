@@ -56,6 +56,7 @@ describe("jiraTrackerAdapter", () => {
 			await expect(tracker.fetchIssue(REPO, issueNumber(42))).resolves.toEqual({
 				key: "PROJ-42",
 				number: 42,
+				repo: REPO,
 				title: "Issue PROJ-42",
 				description: "Description for PROJ-42",
 				labels: ["To Do"],
@@ -144,9 +145,10 @@ describe("jiraTrackerAdapter", () => {
 			);
 
 			const tracker = createTracker();
-			const issues = await tracker.fetchActiveIssues(REPO, "pending");
+			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
+			expect(issues.map((issue) => issue.repo)).toEqual([REPO]);
 		});
 
 		it("adds a labels clause to the JQL when labels are configured", async () => {
@@ -181,9 +183,10 @@ describe("jiraTrackerAdapter", () => {
 				},
 			);
 
-			const issues = await tracker.fetchActiveIssues(REPO, "pending");
+			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
+			expect(issues.map((issue) => issue.repo)).toEqual([REPO]);
 		});
 
 		it("escapes quotes and backslashes in custom status names", async () => {
@@ -218,9 +221,8 @@ describe("jiraTrackerAdapter", () => {
 				},
 			);
 
-			await expect(tracker.fetchActiveIssues(REPO, "pending")).resolves.toEqual(
-				[],
-			);
+			const { issues } = await tracker.fetchActiveIssues("pending");
+			expect(issues).toEqual([]);
 		});
 	});
 
@@ -290,13 +292,12 @@ describe("jiraTrackerAdapter", () => {
 	});
 
 	describe("parseIssueKey", () => {
-		it("parses native Jira issue keys to the configured code-host repo", () => {
+		it("parses native Jira issue keys to an issue number", () => {
 			const tracker = createTracker();
 
 			expect(tracker.parseIssueKey("PROJ-42")).toEqual({
 				ok: true,
 				value: {
-					repo: REPO,
 					number: 42,
 				},
 			});
