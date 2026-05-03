@@ -145,14 +145,15 @@ describe("Orchestrator reconciliation", () => {
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
-			http.get(`${GITHUB_API}/search/issues`, () => {
-				pendingFetches++;
-				return HttpResponse.json({ items: [] });
-			}),
-			http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
-				const labels = new URL(request.url).searchParams.get("labels") ?? "";
-				if (labels.includes("agent:running")) runningFetches++;
-				return HttpResponse.json([]);
+			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+				const q = new URL(request.url).searchParams.get("q") ?? "";
+				const positive = q.split(/\s+/).filter((t) => t.startsWith("label:"));
+				if (positive.includes("label:agent:running")) {
+					runningFetches++;
+				} else {
+					pendingFetches++;
+				}
+				return HttpResponse.json({ total_count: 0, items: [] });
 			}),
 		);
 
@@ -175,18 +176,22 @@ describe("Orchestrator reconciliation", () => {
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
-			http.get(`${GITHUB_API}/search/issues`, () =>
-				HttpResponse.json({ items: pendingIssues }),
-			),
-			http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
-				const labels = new URL(request.url).searchParams.get("labels") ?? "";
-				if (labels.includes("agent:running")) {
+			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+				const q = new URL(request.url).searchParams.get("q") ?? "";
+				const positive = q.split(/\s+/).filter((t) => t.startsWith("label:"));
+				if (positive.includes("label:agent:running")) {
 					if (failRunningFetch) {
 						return new HttpResponse(null, { status: 500 });
 					}
-					return HttpResponse.json([createGitHubIssue(1, ["agent:running"])]);
+					return HttpResponse.json({
+						total_count: 1,
+						items: [createGitHubIssue(1, ["agent", "agent:running"])],
+					});
 				}
-				return HttpResponse.json([]);
+				return HttpResponse.json({
+					total_count: pendingIssues.length,
+					items: pendingIssues,
+				});
 			}),
 			http.delete(
 				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,

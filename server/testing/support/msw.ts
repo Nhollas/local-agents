@@ -33,23 +33,23 @@ export function githubHandlers({
 			if (!issue) return new HttpResponse(null, { status: 404 });
 			return HttpResponse.json(issue);
 		}),
-		http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
-			const url = new URL(request.url);
-			const labels = (url.searchParams.get("labels") ?? "")
-				.split(",")
-				.filter(Boolean);
-			const stateLabel = labels.find((l) => l !== "agent");
-			if (stateLabel) {
-				return HttpResponse.json(resolve(stateLabel));
-			}
-			return HttpResponse.json(
-				labels.includes("agent") ? resolve("agent") : [],
-			);
-		}),
 		http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
 			const q = new URL(request.url).searchParams.get("q") ?? "";
-			if (!q.includes("label:agent")) return HttpResponse.json({ items: [] });
-			return HttpResponse.json({ items: resolve("agent") });
+			const positive = new Set(
+				q.split(/\s+/).filter((t) => t.startsWith("label:")),
+			);
+			if (!positive.has("label:agent")) {
+				return HttpResponse.json({ total_count: 0, items: [] });
+			}
+			let items: GitHubIssue[];
+			if (positive.has("label:agent:running")) {
+				items = resolve("agent:running");
+			} else if (positive.has("label:agent:awaiting-review")) {
+				items = resolve("agent:awaiting-review");
+			} else {
+				items = resolve("agent");
+			}
+			return HttpResponse.json({ total_count: items.length, items });
 		}),
 		http.delete<{ label: string }>(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,

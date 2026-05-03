@@ -40,8 +40,8 @@ describe("Orchestrator multi-repo scheduling", () => {
 		expect(issuesFetchCount).toBe(1);
 	});
 
-	it("fetch failure for one repo does not block other repos", async () => {
-		const REPO2 = repoSlug("test-owner/second-repo");
+	it("fetch failure for one org does not block other orgs", async () => {
+		const REPO2 = repoSlug("other-org/second-repo");
 
 		server.use(
 			http.get(`${GITHUB_API}/user`, () =>
@@ -49,19 +49,17 @@ describe("Orchestrator multi-repo scheduling", () => {
 			),
 			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
 				const q = new URL(request.url).searchParams.get("q") ?? "";
-				if (q.includes(`repo:${REPO} `)) {
+				if (q.startsWith(`org:test-owner `)) {
 					return new HttpResponse(null, { status: 500 });
 				}
-				if (q.includes(`repo:${REPO2} `)) {
+				if (q.startsWith(`org:other-org `)) {
 					return HttpResponse.json({
-						items: [createGitHubIssue(10, ["agent"])],
+						total_count: 1,
+						items: [createGitHubIssue(10, ["agent"], undefined, REPO2)],
 					});
 				}
-				return HttpResponse.json({ items: [] });
+				return HttpResponse.json({ total_count: 0, items: [] });
 			}),
-			http.get(`${GITHUB_API}/repos/:owner/:repo/issues`, () =>
-				HttpResponse.json([]),
-			),
 			http.delete(
 				`${GITHUB_API}/repos/${REPO2}/issues/:number/labels/:label`,
 				() => new HttpResponse(null, { status: 204 }),
@@ -79,7 +77,7 @@ describe("Orchestrator multi-repo scheduling", () => {
 
 		await using ctx = await createTestOrchestrator({
 			maxConcurrency: 5,
-			trackerRepos: [REPO, REPO2],
+			trackerScopes: [REPO, REPO2],
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO2}#10`);
@@ -97,7 +95,7 @@ describe("Orchestrator multi-repo scheduling", () => {
 	});
 
 	it("dispatches issues across multiple repos in oldest-first order", async () => {
-		const REPO2 = repoSlug("test-owner/second-repo");
+		const REPO2 = repoSlug("other-org/second-repo");
 
 		server.use(
 			http.get(`${GITHUB_API}/user`, () =>
@@ -105,21 +103,22 @@ describe("Orchestrator multi-repo scheduling", () => {
 			),
 			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
 				const q = new URL(request.url).searchParams.get("q") ?? "";
-				if (q.includes(`repo:${REPO} `)) {
+				if (q.startsWith(`org:test-owner `)) {
 					return HttpResponse.json({
+						total_count: 1,
 						items: [createGitHubIssue(1, ["agent"], "2025-01-01T00:00:00Z")],
 					});
 				}
-				if (q.includes(`repo:${REPO2} `)) {
+				if (q.startsWith(`org:other-org `)) {
 					return HttpResponse.json({
-						items: [createGitHubIssue(2, ["agent"], "2025-01-02T00:00:00Z")],
+						total_count: 1,
+						items: [
+							createGitHubIssue(2, ["agent"], "2025-01-02T00:00:00Z", REPO2),
+						],
 					});
 				}
-				return HttpResponse.json({ items: [] });
+				return HttpResponse.json({ total_count: 0, items: [] });
 			}),
-			http.get(`${GITHUB_API}/repos/:owner/:repo/issues`, () =>
-				HttpResponse.json([]),
-			),
 			http.delete(
 				`${GITHUB_API}/repos/:owner/:repo/issues/:number/labels/:label`,
 				() => new HttpResponse(null, { status: 204 }),
@@ -138,7 +137,7 @@ describe("Orchestrator multi-repo scheduling", () => {
 		await using ctx = await createTestOrchestrator({
 			maxConcurrency: 5,
 			configOverrides: { max_concurrent: 5 },
-			trackerRepos: [REPO, REPO2],
+			trackerScopes: [REPO, REPO2],
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);

@@ -41,14 +41,16 @@ export function createGitHubIssue(
 	number: number,
 	labels: string[],
 	createdAt = "2025-01-01T00:00:00Z",
+	repo = REPO,
 ) {
 	return {
 		number,
 		title: `Issue ${number}`,
 		body: `Description for issue ${number}`,
 		labels: labels.map((name) => ({ name })),
-		html_url: `https://github.com/${REPO}/issues/${number}`,
+		html_url: `https://github.com/${repo}/issues/${number}`,
 		created_at: createdAt,
+		repository_url: `${GITHUB_API}/repos/${repo}`,
 	};
 }
 

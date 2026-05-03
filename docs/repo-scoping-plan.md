@@ -221,7 +221,9 @@ After this slice, an issue is eligible only when (a) it carries the configured t
 
 ## Slice 5 — GitHub Tracker: Org-Level Issue Scanning
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (334 tests).
 
 **Purpose:** Make group-prefix scopes meaningful for the GitHub tracker. Today the GitHub adapter calls `listIssues` once per configured repo; this is incompatible with a scope like `acme` that should match any repo in the org. Switch to an org-level or search-based fetch that works across the full scope.
 

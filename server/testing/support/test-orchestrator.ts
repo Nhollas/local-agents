@@ -25,7 +25,7 @@ type CreateTestOrchestratorOptions = {
 	agent?: AgentInvoker;
 	configOverrides?: Parameters<typeof createTestConfig>[0];
 	workflow?: RepoWorkflow;
-	trackerRepos?: readonly RepoSlug[];
+	trackerScopes?: readonly RepoSlug[];
 	maxConcurrency?: number;
 	codeHost?: (defaults: CodeHostAdapter) => CodeHostAdapter;
 	tracker?: (defaults: TrackerAdapter) => TrackerAdapter;
@@ -46,9 +46,9 @@ export async function createTestOrchestrator(
 	});
 
 	const defaultCodeHost = githubCodeHostAdapter(github);
-	const trackerRepos = options.trackerRepos ?? [REPO];
+	const trackerScopes = options.trackerScopes ?? [REPO];
 	const defaultTracker = githubTrackerAdapter(github, {
-		repos: trackerRepos,
+		scopes: trackerScopes,
 		triggerLabel: "agent",
 	});
 

@@ -3,6 +3,7 @@ import type { Config } from "../config.ts";
 import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
+import { resolveRepo } from "../scope-resolver.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey, RepoSlug, RunId } from "../types/brands.ts";
 import { unwrap } from "../types/result.ts";
@@ -37,7 +38,7 @@ type RunningEntry = { runIds: RunId[]; repo: RepoSlug };
 type StillRunning = {
 	issues: readonly Issue[];
 	keys: ReadonlySet<IssueKey>;
-	reposReached: ReadonlySet<RepoSlug>;
+	scopesReached: ReadonlySet<RepoSlug>;
 };
 type TickState = {
 	runningByIssue: Map<IssueKey, RunningEntry>;
@@ -117,7 +118,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			stillRunning = {
 				issues,
 				keys: new Set(issues.map((i) => i.key)),
-				reposReached: runningResult.value.reposReached,
+				scopesReached: runningResult.value.scopesReached,
 			};
 		} else {
 			logger.warn(
@@ -127,7 +128,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			stillRunning = {
 				issues: [],
 				keys: new Set(),
-				reposReached: new Set(),
+				scopesReached: new Set(),
 			};
 		}
 
@@ -140,10 +141,11 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	}
 
 	async function reconcileStaleRuns(state: TickState) {
-		const { issues, keys, reposReached } = state.stillRunning;
+		const { issues, keys, scopesReached } = state.stillRunning;
+		const reachableScopes = [...scopesReached];
 
 		for (const [key, { runIds, repo }] of state.runningByIssue) {
-			if (!reposReached.has(repo)) continue;
+			if (!resolveRepo(repo, reachableScopes)) continue;
 			if (keys.has(key)) continue;
 			logger.info({ key }, "orchestrator.reconcile_terminal");
 			for (const id of runIds) {

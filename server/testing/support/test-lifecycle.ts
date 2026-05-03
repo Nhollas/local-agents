@@ -86,7 +86,7 @@ export function createInMemoryTracker(initial?: Issue): InMemoryTracker {
 		async fetchActiveIssues() {
 			return {
 				issues: issue ? [issue] : [],
-				reposReached: new Set([TEST_REPO]),
+				scopesReached: new Set([TEST_REPO]),
 			};
 		},
 		async transitionState(repo, number, from, to) {
