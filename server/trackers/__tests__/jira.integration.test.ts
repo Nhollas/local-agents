@@ -460,6 +460,36 @@ describe("jiraTrackerAdapter", () => {
 		});
 	});
 
+	describe("markFailed", () => {
+		it("adds the failed label and removes the trigger label", async () => {
+			const captured: { key: string; body: unknown }[] = [];
+			server.use(
+				http.put(`${JIRA_API}/issue/:key`, async ({ request, params }) => {
+					captured.push({
+						key: String(params["key"]),
+						body: await request.json(),
+					});
+					return new HttpResponse(null, { status: 204 });
+				}),
+			);
+
+			const tracker = createTracker();
+
+			await tracker.markFailed(REPO, issueNumber(42));
+
+			expect(captured).toEqual([
+				{
+					key: "PROJ-42",
+					body: {
+						update: {
+							labels: [{ add: "agent-failed" }, { remove: "agent" }],
+						},
+					},
+				},
+			]);
+		});
+	});
+
 	describe("parseIssueKey", () => {
 		it("parses native Jira issue keys to an issue number", () => {
 			const tracker = createTracker();

@@ -134,6 +134,30 @@ describe("RunLifecycle.dispatch", () => {
 		).rejects.toThrow();
 	});
 
+	it("step failure: markFailed throws is swallowed, run still resolves as failed", async () => {
+		const tracker = createInMemoryTracker(createTestIssue());
+		tracker.failMarkFailed();
+		// biome-ignore lint/correctness/useYield: throws before yielding
+		const explodingAgent = createScriptedAgent(async function* () {
+			throw new Error("step exploded");
+		});
+
+		await using setup = await createTestRunLifecycle({
+			agent: explodingAgent,
+			tracker,
+		});
+
+		const handle = await setup.lifecycle.dispatch({
+			issue: createTestIssue(),
+			repo: TEST_REPO,
+			workflow: baseWorkflow,
+		});
+		const result = await handle.done;
+
+		expect(result).toMatchObject({ status: "failed", error: "step exploded" });
+		expect(tracker.failedIssues).toEqual([]);
+	});
+
 	it("PR creation failure: tracker transition still attempted, run still completes", async () => {
 		const tracker = createInMemoryTracker(createTestIssue());
 		const codeHost = createInMemoryCodeHost("file:///dummy");
