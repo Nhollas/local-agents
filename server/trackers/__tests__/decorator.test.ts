@@ -18,6 +18,7 @@ function createFakeTracker(
 		},
 		fetchActiveIssues: async () => ({ issues: [], scopesReached: new Set() }),
 		transitionState: async () => {},
+		markFailed: async () => {},
 		parseIssueKey: () => ok({ number: issueNumber(1) }),
 		...overrides,
 	};

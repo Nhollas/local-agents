@@ -20,20 +20,19 @@ const issue: Issue = {
 };
 
 describe("renderChangeRequest", () => {
-	it("substitutes issue, attempt, and branch in title and body", () => {
+	it("substitutes issue and branch in title and body", () => {
 		const result = renderChangeRequest({
 			template: {
 				title: "[{{ issue.key }}] {{ issue.title }}",
-				body: "Closes {{ issue.key }}\nBranch: {{ branch }}\nAttempt: {{ attempt }}",
+				body: "Closes {{ issue.key }}\nBranch: {{ branch }}",
 			},
 			issue,
-			attempt: 2,
 			branch: branchName("agent/issue-42"),
 		});
 
 		expect(result).toEqual({
 			title: "[owner/repo#42] Fix login bug",
-			body: "Closes owner/repo#42\nBranch: agent/issue-42\nAttempt: 2",
+			body: "Closes owner/repo#42\nBranch: agent/issue-42",
 		});
 	});
 
@@ -52,7 +51,6 @@ describe("renderChangeRequest", () => {
 		const result = renderChangeRequest({
 			template: { title: "{{ issue.title }}", body },
 			issue,
-			attempt: 1,
 			branch: branchName("agent/issue-42"),
 		});
 
@@ -77,7 +75,6 @@ describe("renderChangeRequest", () => {
 				body: "{{ steps.summarise.output.title }}",
 			},
 			issue,
-			attempt: 1,
 			branch: branchName("agent/issue-42"),
 		});
 
@@ -91,7 +88,6 @@ describe("renderChangeRequest", () => {
 				body: "Summary: {{ steps.summarise.output.summary }}",
 			},
 			issue,
-			attempt: 1,
 			branch: branchName("agent/issue-42"),
 			outputs: {
 				summarise: {

@@ -22,10 +22,6 @@ type RunBase = {
 	issueKey: IssueKey | null;
 	issueTitle: string | null;
 	startedAt: string;
-	attempt: number;
-	parentRunId: RunId | null;
-	stepIndex: number;
-	sessionId: string | null;
 };
 
 export type RunningRun = RunBase & { status: "running" };
@@ -53,10 +49,6 @@ function rowToRun(row: RunRow): Run {
 		issueKey: row.issueKey,
 		issueTitle: row.issueTitle,
 		startedAt: row.startedAt,
-		attempt: row.attempt,
-		parentRunId: row.parentRunId,
-		stepIndex: row.stepIndex,
-		sessionId: row.sessionId,
 	};
 
 	switch (row.status) {
@@ -101,11 +93,7 @@ export type RunRepository = {
 		issueKey: IssueKey;
 		issueTitle: string;
 		startedAt: string;
-		attempt: number;
-		parentRunId: RunId | null;
 	}): void;
-	setSessionId(runId: RunId, sessionId: string | null): void;
-	setStepIndex(runId: RunId, stepIndex: number): void;
 	completeRun(
 		runId: RunId,
 		params: { completedAt: string; durationMs: number },
@@ -129,7 +117,6 @@ export type RunRepository = {
 	}): Run[];
 	getRunEvents(runId: RunId): RunEvent[];
 	writeStepOutput(runId: RunId, stepName: string, value: unknown): void;
-	getStepOutputs(runId: RunId): Record<string, unknown>;
 };
 
 export function createRunRepository(db: Db): RunRepository {
@@ -138,14 +125,6 @@ export function createRunRepository(db: Db): RunRepository {
 			db.insert(runs)
 				.values({ ...run, status: "running" })
 				.run();
-		},
-
-		setSessionId(runId, sessionId) {
-			db.update(runs).set({ sessionId }).where(eq(runs.id, runId)).run();
-		},
-
-		setStepIndex(runId, stepIndex) {
-			db.update(runs).set({ stepIndex }).where(eq(runs.id, runId)).run();
 		},
 
 		completeRun(runId, params) {
@@ -226,17 +205,6 @@ export function createRunRepository(db: Db): RunRepository {
 					set: { outputJson: value, createdAt },
 				})
 				.run();
-		},
-
-		getStepOutputs(runId) {
-			const rows = db
-				.select()
-				.from(runStepOutputs)
-				.where(eq(runStepOutputs.runId, runId))
-				.all();
-			const out: Record<string, unknown> = {};
-			for (const row of rows) out[row.stepName] = row.outputJson;
-			return out;
 		},
 	};
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../../testing/support/test-api.ts";
 import { seedEvent, seedRun } from "../../testing/support/test-db.ts";
-import { issueKey, repoSlug, runId } from "../../types/brands.ts";
+import { issueKey, repoSlug } from "../../types/brands.ts";
 
 describe("GET /runs", () => {
 	it("returns empty array when no runs exist", async () => {
@@ -35,10 +35,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-03T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 			{
 				id: "middle",
@@ -51,10 +47,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-02T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 			{
 				id: "oldest",
@@ -67,10 +59,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -104,10 +92,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -146,10 +130,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: null,
 				durationMs: null,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -181,10 +161,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-03T00:00:00Z",
 				completedAt: "2025-01-03T00:00:02Z",
 				durationMs: 1500,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -211,10 +187,6 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-03T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -259,10 +231,6 @@ describe("GET /runs/:id", () => {
 			startedAt: "2025-01-01T00:00:00Z",
 			completedAt: expect.any(String),
 			durationMs: 0,
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
 			events: [
 				{
 					id: "evt-1",
@@ -326,40 +294,6 @@ describe("POST /runs/:id/kill", () => {
 			status: 404,
 			title: "Not Found",
 			detail: "Run not found or not running",
-			requestId: expect.any(String),
-		});
-	});
-});
-
-describe("POST /runs/:id/retry", () => {
-	it("returns 201 with new runId on successful retry", async () => {
-		const { app, db } = createTestApi({
-			retryRun: async () => ({ runId: runId("new-run-1") }),
-		});
-		seedRun(db, { id: "failed-1", status: "failed" });
-
-		const res = await app.request("/runs/failed-1/retry", { method: "POST" });
-
-		expect(res.status).toBe(201);
-		expect(await res.json()).toEqual({ runId: "new-run-1" });
-	});
-
-	it("returns 400 when retryRun returns an error", async () => {
-		const { app, db } = createTestApi({
-			retryRun: async () => ({ error: "Run is not failed" }),
-		});
-		seedRun(db, { id: "completed-1", status: "completed" });
-
-		const res = await app.request("/runs/completed-1/retry", {
-			method: "POST",
-		});
-
-		expect(res.status).toBe(400);
-		expect(await res.json()).toEqual({
-			type: "about:blank",
-			status: 400,
-			title: "Bad Request",
-			detail: "Run is not failed",
 			requestId: expect.any(String),
 		});
 	});

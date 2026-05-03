@@ -388,6 +388,51 @@ describe("jiraTrackerAdapter", () => {
 			).resolves.toBeUndefined();
 		});
 
+		it("matches transition target status case-insensitively", async () => {
+			server.use(
+				http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+					HttpResponse.json({
+						transitions: [
+							{ id: "11", name: "Start", to: { name: "In Progress" } },
+						],
+					}),
+				),
+				http.post(`${JIRA_API}/issue/:key/transitions`, async ({ request }) => {
+					const body = await request.json();
+					if (
+						JSON.stringify(body) !==
+						JSON.stringify({ transition: { id: "11" } })
+					) {
+						return new HttpResponse(null, { status: 400 });
+					}
+					return new HttpResponse(null, { status: 204 });
+				}),
+			);
+
+			const tracker = jiraTrackerAdapter(
+				createJiraClient({
+					baseUrl: JIRA_BASE_URL,
+					email: jiraEmail("agent@example.test"),
+					apiToken: jiraApiToken("jira-token"),
+					maxAttempts: 1,
+				}),
+				{
+					project: "PROJ",
+					scopes: [REPO],
+					baseUrl: JIRA_BASE_URL,
+					statuses: {
+						...statuses,
+						running: "IN PROGRESS",
+					},
+					triggerLabel: "agent",
+				},
+			);
+
+			await expect(
+				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
+			).resolves.toBeUndefined();
+		});
+
 		it("fails when Jira does not expose a transition to the target status", async () => {
 			server.use(
 				http.get(`${JIRA_API}/issue/:key/transitions`, () =>

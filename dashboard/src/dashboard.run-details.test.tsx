@@ -1,11 +1,7 @@
 import { HttpResponse, http } from "msw";
 import { describe } from "vitest";
-import {
-	createRunDetailFromApi,
-	createRunEvent,
-	createRunFromApi,
-} from "./testing/contract";
-import { expect, test } from "./testing/fixture";
+import { createRunDetailFromApi, createRunEvent } from "./testing/contract";
+import { test } from "./testing/fixture";
 import { browserWorker } from "./testing/msw";
 
 describe("Dashboard - run details", () => {
@@ -118,91 +114,6 @@ describe("Dashboard - run details", () => {
 		await dashboard.expectEvents(2);
 	});
 
-	test("retries a failed run from the detail view and navigates back", async ({
-		dashboardPage,
-	}) => {
-		const retryHandler = http.post("/runs/run-abc/retry", () => {
-			return HttpResponse.json({ runId: "new-run-1" }, { status: 201 });
-		});
-
-		browserWorker.use(
-			retryHandler,
-			http.get("/runs", () =>
-				HttpResponse.json([
-					createRunFromApi({
-						id: "run-abc",
-						agentName: "pr-summary",
-						status: "failed",
-						error: "Agent crashed",
-					}),
-				]),
-			),
-			http.get("/runs/run-abc", () =>
-				HttpResponse.json(
-					createRunDetailFromApi({
-						id: "run-abc",
-						agentName: "pr-summary",
-						status: "failed",
-						error: "Agent crashed",
-					}),
-				),
-			),
-		);
-
-		const dashboard = await dashboardPage.mount();
-
-		await dashboard.selectRun("run-abc");
-		await dashboard.expectRunDetails("pr-summary");
-
-		await dashboard.retryRun("run-abc");
-
-		await expect.poll(() => retryHandler.isUsed).toBe(true);
-		await dashboard.expectAgentVisible("pr-summary");
-	});
-
-	test("stays on detail view when retry fails", async ({ dashboardPage }) => {
-		const retryHandler = http.post("/runs/run-abc/retry", () => {
-			return HttpResponse.json(
-				{ error: "Run already retried" },
-				{ status: 409 },
-			);
-		});
-
-		browserWorker.use(
-			retryHandler,
-			http.get("/runs", () =>
-				HttpResponse.json([
-					createRunFromApi({
-						id: "run-abc",
-						agentName: "pr-summary",
-						status: "failed",
-						error: "Agent crashed",
-					}),
-				]),
-			),
-			http.get("/runs/run-abc", () =>
-				HttpResponse.json(
-					createRunDetailFromApi({
-						id: "run-abc",
-						agentName: "pr-summary",
-						status: "failed",
-						error: "Agent crashed",
-					}),
-				),
-			),
-		);
-
-		const dashboard = await dashboardPage.mount();
-
-		await dashboard.selectRun("run-abc");
-		await dashboard.expectRunDetails("pr-summary");
-
-		await dashboard.retryRun("run-abc");
-
-		await expect.poll(() => retryHandler.isUsed).toBe(true);
-		await dashboard.expectRunDetails("pr-summary");
-	});
-
 	test("navigates back to the feed when back button is clicked", async ({
 		dashboardPage,
 		sseStream,
@@ -232,39 +143,6 @@ describe("Dashboard - run details", () => {
 
 		await dashboard.goBack();
 		await dashboard.expectAgentVisible("pr-summary");
-	});
-
-	test("shows attempt number for retried runs", async ({ dashboardPage }) => {
-		browserWorker.use(
-			http.get("/runs", () =>
-				HttpResponse.json([
-					createRunFromApi({
-						id: "run-abc",
-						agentName: "pr-summary",
-						status: "failed",
-						error: "Agent crashed",
-						attempt: 3,
-					}),
-				]),
-			),
-			http.get("/runs/run-abc", () =>
-				HttpResponse.json(
-					createRunDetailFromApi({
-						id: "run-abc",
-						agentName: "pr-summary",
-						status: "failed",
-						error: "Agent crashed",
-						attempt: 3,
-					}),
-				),
-			),
-		);
-
-		const dashboard = await dashboardPage.mount();
-		await dashboard.selectRun("run-abc");
-		await dashboard.expectRunDetails("pr-summary");
-
-		await expect.element(dashboard.getByText("Attempt")).toBeVisible();
 	});
 
 	test("appends live SSE events to the event timeline", async ({

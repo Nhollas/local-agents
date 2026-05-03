@@ -7,7 +7,6 @@ import { logAgentMessage } from "./agent-logging.ts";
 type ResolveBranchParams = {
 	workflowBranch: WorkflowBranch;
 	issue: Issue;
-	attempt: number;
 	agent: AgentInvoker;
 	cwd: string;
 	model: string;
@@ -17,17 +16,16 @@ type ResolveBranchParams = {
 export async function resolveBranch({
 	workflowBranch,
 	issue,
-	attempt,
 	agent,
 	cwd,
 	model,
 	signal,
 }: ResolveBranchParams): Promise<string> {
 	if (typeof workflowBranch === "string") {
-		return renderPrompt(workflowBranch, { issue, attempt });
+		return renderPrompt(workflowBranch, { issue });
 	}
 
-	const prompt = renderPrompt(workflowBranch.prompt, { issue, attempt });
+	const prompt = renderPrompt(workflowBranch.prompt, { issue });
 	const outputFormat: OutputFormat = {
 		type: "json_schema",
 		schema: workflowBranch.schema,

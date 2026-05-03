@@ -4,12 +4,7 @@ import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import {
-	type BranchName,
-	branchName,
-	type RepoSlug,
-	type RunId,
-} from "../types/brands.ts";
+import { type BranchName, branchName, type RepoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
@@ -28,12 +23,6 @@ export type RunRequest = {
 	issue: Issue;
 	repo: RepoSlug;
 	workflow: RepoWorkflow;
-	attempt: number;
-	resume?: {
-		parentRunId: RunId;
-		startStepIndex: number;
-		sessionId?: string;
-	};
 };
 
 export type RunLifecycle = {
@@ -50,13 +39,11 @@ type RunLifecycleDeps = {
 	runShell: RunShell;
 	workspaceRoot: string;
 	model: string;
-	maxRetries: number;
 };
 
 export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	const {
 		runner,
-		repo: runRepo,
 		tracker,
 		codeHost,
 		agent,
@@ -64,11 +51,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		runShell,
 		workspaceRoot,
 		model,
-		maxRetries,
 	} = deps;
 
 	async function dispatch(req: RunRequest): Promise<RunHandle> {
-		const { issue, repo, workflow, attempt, resume } = req;
+		const { issue, repo, workflow } = req;
 
 		const cloneUrl = codeHost.cloneUrl(repo);
 		const ws = await ensureWorkspace(issue, workspaceRoot, cloneUrl);
@@ -78,11 +64,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			repo,
 			issueKey: issue.key,
 			issueTitle: issue.title,
-			attempt,
-			...(resume?.parentRunId != null && {
-				parentRunId: resume.parentRunId,
-				initialOutputs: runRepo.getStepOutputs(resume.parentRunId),
-			}),
 			handler: (ctx) =>
 				canonicalLog.run(
 					{
@@ -90,7 +71,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						run_id: ctx.runId,
 						agent: `issue-${issue.number}`,
 						issue_key: issue.key,
-						attempt,
 					},
 					async () => {
 						const startTime = clock.now();
@@ -101,7 +81,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							const resolvedBranch = await resolveBranch({
 								workflowBranch: workflow.branch,
 								issue,
-								attempt,
 								agent,
 								cwd: ws.path,
 								model,
@@ -117,16 +96,9 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								agent,
 								workflow,
 								issue,
-								attempt,
 								branch,
 								cwd: ws.path,
 								model,
-								...(resume?.startStepIndex != null && {
-									startStepIndex: resume.startStepIndex,
-								}),
-								...(resume?.sessionId && {
-									failedStepResumeSessionId: resume.sessionId,
-								}),
 							});
 
 							result = {
@@ -147,26 +119,13 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						});
 
 						if (result.status === "completed" && branch) {
-							await finalizeSuccess(
-								repo,
-								issue,
-								workflow,
-								branch,
-								attempt,
-								ctx.outputs,
-							);
+							await finalizeSuccess(repo, issue, workflow, branch, ctx.outputs);
 						}
 
-						const retriesExhausted = maxRetries - attempt < 0;
-						const shouldCleanup =
-							result.status === "completed" || retriesExhausted;
+						await removeWorkspace(ws.path);
 
-						if (shouldCleanup) {
-							await removeWorkspace(ws.path);
-						}
-
-						if (result.status === "failed" && retriesExhausted) {
-							await rollbackTrackerToPending(repo, issue);
+						if (result.status === "failed" && !ctx.signal.aborted) {
+							await markIssueFailed(repo, issue);
 						}
 
 						return result;
@@ -181,13 +140,11 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		issue: Issue,
 		workflow: RepoWorkflow,
 		branch: BranchName,
-		attempt: number,
 		outputs: Record<string, unknown>,
 	): Promise<void> {
 		const { title, body } = renderChangeRequest({
 			template: workflow.change_request,
 			issue,
-			attempt,
 			branch,
 			outputs,
 		});
@@ -216,16 +173,13 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			);
 	}
 
-	async function rollbackTrackerToPending(
-		repo: RepoSlug,
-		issue: Issue,
-	): Promise<void> {
+	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {
 		await tracker
-			.transitionState(repo, issue.number, "running", "pending")
+			.markFailed(repo, issue.number)
 			.catch((err) =>
 				canonicalLog.append(
 					"warnings",
-					`state_rollback_failed: ${canonicalLog.errorMessage(err)}`,
+					`mark_failed_failed: ${canonicalLog.errorMessage(err)}`,
 				),
 			);
 	}

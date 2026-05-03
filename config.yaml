@@ -1,7 +1,7 @@
 tracker:
   kind: jira
-  base_url: todo
-  project: AIENG
+  base_url: https://nhollas.atlassian.net/
+  project: KAN
   trigger_label: local-agents
   statuses:
     pending: "To Do"
@@ -12,11 +12,10 @@ code_host:
   kind: gitlab
   base_url: https://gitlab.com
   scopes:
-    - todo
+    - Nhollas
 
 defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
-  max_retries: 3
   model: claude-sonnet-4-6
   workspace_root: /tmp/local-agent-workspaces

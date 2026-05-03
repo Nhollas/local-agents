@@ -58,6 +58,7 @@ export function githubTrackerAdapter(
 		running: `${triggerLabel}:running`,
 		awaiting_review: `${triggerLabel}:awaiting-review`,
 	};
+	const failedLabel = `${triggerLabel}-failed`;
 	const orgs = distinctOrgs(scopes);
 
 	let usernamePromise: Promise<string> | undefined;
@@ -155,6 +156,13 @@ export function githubTrackerAdapter(
 				to === "pending"
 					? Promise.resolve()
 					: client.addIssueLabels(repo, issueNum, [stateLabels[to]]),
+			]);
+		},
+
+		async markFailed(repo, issueNum): Promise<void> {
+			await Promise.all([
+				client.addIssueLabels(repo, issueNum, [failedLabel]),
+				client.removeIssueLabel(repo, issueNum, triggerLabel),
 			]);
 		},
 

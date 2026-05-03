@@ -54,6 +54,10 @@ export type JiraClient = {
 	}): Promise<JiraIssue[]>;
 	listTransitions(key: string): Promise<JiraTransition[]>;
 	transitionIssue(key: string, transitionId: string): Promise<void>;
+	updateLabels(
+		key: string,
+		changes: { add?: string[]; remove?: string[] },
+	): Promise<void>;
 };
 
 type JiraClientOptions = HttpClientOptions & {
@@ -127,6 +131,18 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 						id: transitionId,
 					},
 				},
+			});
+		},
+
+		async updateLabels(key, changes) {
+			const ops: Array<{ add: string } | { remove: string }> = [
+				...(changes.add ?? []).map((label) => ({ add: label })),
+				...(changes.remove ?? []).map((label) => ({ remove: label })),
+			];
+			if (ops.length === 0) return;
+			await request(`/issue/${encodeIssueKey(key)}`, {
+				method: "PUT",
+				body: { update: { labels: ops } },
 			});
 		},
 	};

@@ -51,10 +51,6 @@ describe("Orchestrator reconciliation", () => {
 				startedAt: expect.any(String),
 				completedAt: null,
 				durationMs: null,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 
@@ -79,10 +75,6 @@ describe("Orchestrator reconciliation", () => {
 				startedAt: runsBefore[0]?.startedAt,
 				completedAt: expect.any(String),
 				durationMs: expect.any(Number),
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -129,10 +121,6 @@ describe("Orchestrator reconciliation", () => {
 				startedAt: expect.any(String),
 				completedAt: null,
 				durationMs: null,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 	});
@@ -225,10 +213,6 @@ describe("Orchestrator reconciliation", () => {
 				startedAt: expect.any(String),
 				completedAt: null,
 				durationMs: null,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 
@@ -365,7 +349,6 @@ describe("Orchestrator reconciliation", () => {
 				issueKey: issueKey(`${REPO}#5`),
 				issueTitle: "Stale issue",
 				startedAt: "2025-01-01T00:00:00Z",
-				attempt: 1,
 			})
 			.run();
 
@@ -384,10 +367,6 @@ describe("Orchestrator reconciliation", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: null,
-				sessionId: null,
-				attempt: 1,
-				parentRunId: null,
-				stepIndex: 0,
 			},
 		]);
 
@@ -438,7 +417,6 @@ describe("Orchestrator reconciliation", () => {
 				startedAt: new Date().toISOString(),
 				completedAt: new Date().toISOString(),
 				durationMs: 1,
-				attempt: 1,
 			})
 			.run();
 

@@ -13,8 +13,6 @@ export function dashboardPageObject(page: BrowserPage) {
 			page.getByRole("button", { name: `View run ${runId}` }),
 		getKillButton: (runId: string) =>
 			page.getByRole("button", { name: `Kill run ${runId}` }),
-		getRetryButton: (runId: string) =>
-			page.getByRole("button", { name: `Retry run ${runId}` }),
 		getBackButton: () => page.getByRole("button", { name: /back to feed/i }),
 		getRunDetailHeading: () => page.getByRole("heading", { level: 2 }),
 		getErrorAlert: () => page.getByRole("alert"),
@@ -84,10 +82,6 @@ export function dashboardPageObject(page: BrowserPage) {
 
 		killRun: async (runId: string) => {
 			await self.getKillButton(runId).click();
-		},
-
-		retryRun: async (runId: string) => {
-			await self.getRetryButton(runId).click();
 		},
 
 		goBack: async () => {

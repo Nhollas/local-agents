@@ -36,9 +36,6 @@ export function createRunFromApi(overrides?: Partial<RunFromApi>): RunFromApi {
 		startedAt: "2026-03-20T12:00:00.000Z",
 		completedAt: "2026-03-20T12:00:01.500Z",
 		durationMs: 1500,
-		sessionId: null,
-		attempt: 1,
-		parentRunId: null,
 		...overrides,
 	};
 }

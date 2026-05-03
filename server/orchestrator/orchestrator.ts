@@ -6,7 +6,6 @@ import type { Runner } from "../runner/runner.ts";
 import { resolveRepo } from "../scope-resolver.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey, RepoSlug, RunId } from "../types/brands.ts";
-import { unwrap } from "../types/result.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { type AgentInvoker, claudeSdkAgentInvoker } from "./agent-invoker.ts";
 import { type Clock, systemClock } from "./clock.ts";
@@ -27,7 +26,6 @@ type OrchestratorConfig = {
 
 type Orchestrator = {
 	tick(): Promise<void>;
-	retryRun(failedRunId: RunId): Promise<{ runId: RunId } | { error: string }>;
 	/** Wait for all post-run work (PR creation, label swaps, cleanup) to finish. */
 	settled(): Promise<void>;
 	start(): void;
@@ -75,7 +73,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		runShell,
 		workspaceRoot: defaults.workspace_root,
 		model: defaults.model,
-		maxRetries: defaults.max_retries,
 	});
 
 	function trackPostRun(done: Promise<unknown>): void {
@@ -184,12 +181,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			await tracker.transitionState(repo, issue.number, "pending", "running");
 
 			try {
-				const handle = await lifecycle.dispatch({
-					issue,
-					repo,
-					workflow,
-					attempt: 1,
-				});
+				const handle = await lifecycle.dispatch({ issue, repo, workflow });
 				trackPostRun(handle.done);
 			} catch (err) {
 				logger.warn({ issue: issue.key, err }, "orchestrator.dispatch_failed");
@@ -223,54 +215,8 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		}
 	}
 
-	async function retryRun(
-		failedRunId: RunId,
-	): Promise<{ runId: RunId } | { error: string }> {
-		const failedRun = runRepo.getRunById(failedRunId);
-		if (!failedRun) return { error: "Run not found" };
-		if (failedRun.status !== "failed") return { error: "Run is not failed" };
-		if (!failedRun.issueKey) return { error: "No issue key" };
-
-		const attempt = failedRun.attempt + 1;
-		if (attempt > defaults.max_retries + 1)
-			return { error: "Max retries exceeded" };
-
-		const snapshot = runRepo.getRunningSnapshot();
-		if (snapshot.some((r) => r.issueKey === failedRun.issueKey)) {
-			return { error: "Issue already has a running agent" };
-		}
-
-		const { number: issueNumber } = unwrap(
-			tracker.parseIssueKey(failedRun.issueKey),
-		);
-		const repo = failedRun.repo;
-
-		const issue = await tracker.fetchIssue(repo, issueNumber);
-
-		const handle = await lifecycle.dispatch({
-			issue,
-			repo,
-			workflow,
-			attempt,
-			resume: {
-				parentRunId: failedRunId,
-				startStepIndex: failedRun.stepIndex,
-				...(failedRun.sessionId && { sessionId: failedRun.sessionId }),
-			},
-		});
-		trackPostRun(handle.done);
-
-		logger.info(
-			{ issue: issue.key, attempt, parentRunId: failedRunId },
-			"orchestrator.retry_dispatched",
-		);
-
-		return { runId: handle.runId };
-	}
-
 	return {
 		tick,
-		retryRun,
 		async settled() {
 			await Promise.all(pendingPostRuns);
 		},

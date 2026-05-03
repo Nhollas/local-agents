@@ -34,6 +34,7 @@ export type TrackerAdapter = {
 		from: TrackerState,
 		to: TrackerState,
 	): Promise<void>;
+	markFailed(repo: RepoSlug, issueNumber: IssueNumber): Promise<void>;
 	parseIssueKey(
 		key: string,
 	): Result<{ number: IssueNumber }, ParseIssueKeyError>;

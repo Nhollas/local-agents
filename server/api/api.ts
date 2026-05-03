@@ -6,7 +6,7 @@ import type { runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { Run, RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
-import { runId as brandRunId, type RunId } from "../types/brands.ts";
+import { runId as brandRunId } from "../types/brands.ts";
 import { assertNever } from "../types/exhaustive.ts";
 import { canonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
@@ -25,10 +25,6 @@ const runsQuerySchema = z.object({
 const runParamSchema = z.object({
 	id: z.string().min(1).transform(brandRunId),
 });
-
-export type RetryFn = (
-	failedRunId: RunId,
-) => Promise<{ runId: RunId } | { error: string }>;
 
 type HealthCheckResult = {
 	status: "healthy" | "unhealthy";
@@ -56,12 +52,10 @@ function runToWire(run: Run): RunWire {
 export function createApi({
 	runner,
 	repo,
-	retryRun,
 	checkHealth,
 }: {
 	runner: Runner;
 	repo: RunRepository;
-	retryRun: RetryFn;
 	checkHealth: HealthCheck;
 }) {
 	const app = new Hono<AppEnv>();
@@ -127,17 +121,6 @@ export function createApi({
 			if (!killed)
 				throw new ProblemDetailsError(404, "Run not found or not running");
 			return c.json({ killed: true });
-		},
-	);
-
-	app.post(
-		"/runs/:id/retry",
-		zValidator("param", runParamSchema, zodProblemHook),
-		async (c) => {
-			const { id } = c.req.valid("param");
-			const result = await retryRun(id);
-			if ("error" in result) throw new ProblemDetailsError(400, result.error);
-			return c.json({ runId: result.runId }, 201);
 		},
 	);
 

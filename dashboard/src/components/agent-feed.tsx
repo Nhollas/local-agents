@@ -1,5 +1,4 @@
 import { useKillRun } from "../hooks/use-kill-run.ts";
-import { useRetryRun } from "../hooks/use-retry-run.ts";
 import { formatDuration, formatTime } from "../lib/format.ts";
 import type { Run } from "../lib/types.ts";
 import { StatusBadge } from "./status-badge.tsx";
@@ -12,7 +11,6 @@ type Props = {
 
 export function AgentFeed({ name, runs, onSelectRun }: Props) {
 	const killMutation = useKillRun();
-	const retryMutation = useRetryRun();
 
 	return (
 		<section
@@ -60,19 +58,6 @@ export function AgentFeed({ name, runs, onSelectRun }: Props) {
 									className="px-2 py-0.5 rounded border border-error-border bg-error-muted text-error hover:brightness-125 transition-all"
 								>
 									Kill
-								</button>
-							)}
-							{run.status === "failed" && (
-								<button
-									type="button"
-									aria-label={`Retry run ${run.id}`}
-									onClick={(e) => {
-										e.stopPropagation();
-										retryMutation.mutate(run.id);
-									}}
-									className="px-2 py-0.5 rounded border border-warning-border bg-warning-muted text-warning hover:brightness-125 transition-all"
-								>
-									Retry
 								</button>
 							)}
 						</div>

@@ -16,12 +16,9 @@ type RunWorkflowStepsParams = {
 	agent: AgentInvoker;
 	workflow: RepoWorkflow;
 	issue: Issue;
-	attempt: number;
 	branch: string;
 	cwd: string;
 	model: string;
-	startStepIndex?: number;
-	failedStepResumeSessionId?: string;
 };
 
 export async function runWorkflowSteps({
@@ -29,30 +26,17 @@ export async function runWorkflowSteps({
 	agent,
 	workflow,
 	issue,
-	attempt,
 	branch,
 	cwd,
 	model,
-	startStepIndex = 0,
-	failedStepResumeSessionId,
 }: RunWorkflowStepsParams): Promise<void> {
 	const { steps } = workflow;
-	if (startStepIndex < 0 || startStepIndex >= steps.length) {
-		throw new Error(
-			`Invariant: startStepIndex ${startStepIndex} is out of range for ${steps.length} steps`,
-		);
-	}
 	let previousSessionId: string | undefined;
 
 	for (const [index, step] of steps.entries()) {
-		if (index < startStepIndex) continue;
-
-		let stepResumeSessionId: string | undefined;
-		if (index === startStepIndex && failedStepResumeSessionId) {
-			stepResumeSessionId = failedStepResumeSessionId;
-		} else if (step.resume_previous) {
-			stepResumeSessionId = previousSessionId;
-		}
+		const stepResumeSessionId = step.resume_previous
+			? previousSessionId
+			: undefined;
 
 		const completedSessionId = await runWorkflowStep({
 			ctx,
@@ -61,7 +45,6 @@ export async function runWorkflowSteps({
 			stepIndex: index,
 			totalSteps: steps.length,
 			issue,
-			attempt,
 			branch,
 			cwd,
 			model,
@@ -79,7 +62,6 @@ type RunWorkflowStepParams = {
 	stepIndex: number;
 	totalSteps: number;
 	issue: Issue;
-	attempt: number;
 	branch: string;
 	cwd: string;
 	model: string;
@@ -93,7 +75,6 @@ async function runWorkflowStep({
 	stepIndex,
 	totalSteps,
 	issue,
-	attempt,
 	branch,
 	cwd,
 	model,
@@ -101,7 +82,6 @@ async function runWorkflowStep({
 }: RunWorkflowStepParams): Promise<string | undefined> {
 	const startedAt = Date.now();
 	let currentSessionId = resumeSessionId;
-	ctx.setStepIndex(stepIndex);
 	emitStepMarker(ctx, {
 		type: "step.started",
 		data: { name: step.name, index: stepIndex, total: totalSteps },
@@ -110,7 +90,6 @@ async function runWorkflowStep({
 	try {
 		const renderedPrompt = renderPrompt(markTrustedShellBlocks(step.prompt), {
 			issue,
-			attempt,
 			branch,
 			outputs: ctx.outputs,
 		});
@@ -149,7 +128,6 @@ async function runWorkflowStep({
 			}
 		}
 
-		ctx.setSessionId(currentSessionId ?? null);
 		emitStepMarker(ctx, {
 			type: "step.completed",
 			data: {
@@ -160,7 +138,6 @@ async function runWorkflowStep({
 		});
 		return currentSessionId;
 	} catch (err) {
-		ctx.setSessionId(currentSessionId ?? null);
 		emitStepMarker(ctx, {
 			type: "step.failed",
 			data: {

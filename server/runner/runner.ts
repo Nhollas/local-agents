@@ -15,8 +15,6 @@ export type RunContext = {
 	runId: RunId;
 	emitToolUse: (tool: string, target: string) => void;
 	emitStepEvent: (event: StepEvent) => void;
-	setSessionId: (id: string | null) => void;
-	setStepIndex: (index: number) => void;
 	setStepOutput: (stepName: string, value: unknown) => void;
 	outputs: Record<string, unknown>;
 	signal: AbortSignal;
@@ -28,9 +26,6 @@ export type AgentJob = {
 	issueKey: IssueKey;
 	issueTitle: string;
 	handler: (ctx: RunContext) => Promise<RunResult>;
-	attempt?: number;
-	parentRunId?: RunId;
-	initialOutputs?: Record<string, unknown>;
 };
 
 export type RunResult =
@@ -117,8 +112,6 @@ export function createRunner(config: RunnerConfig): Runner {
 			issueKey: job.issueKey,
 			issueTitle: job.issueTitle,
 			startedAt,
-			attempt: job.attempt ?? 1,
-			parentRunId: job.parentRunId ?? null,
 		});
 
 		emitEvent(
@@ -134,15 +127,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		queue.enqueue(async () => {
 			const executionStart = Date.now();
 
-			const setSessionId = (sessionId: string | null) => {
-				repo.setSessionId(id, sessionId);
-			};
-
-			const setStepIndex = (index: number) => {
-				repo.setStepIndex(id, index);
-			};
-
-			const outputs: Record<string, unknown> = { ...job.initialOutputs };
+			const outputs: Record<string, unknown> = {};
 
 			const setStepOutput = (stepName: string, value: unknown) => {
 				outputs[stepName] = value;
@@ -175,8 +160,6 @@ export function createRunner(config: RunnerConfig): Runner {
 					runId: id,
 					emitToolUse,
 					emitStepEvent,
-					setSessionId,
-					setStepIndex,
 					setStepOutput,
 					outputs,
 					signal: controller.signal,

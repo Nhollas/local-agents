@@ -10,9 +10,6 @@ export type RunFromApi = {
 	startedAt: string;
 	completedAt: string | null;
 	durationMs: number | null;
-	sessionId: string | null;
-	attempt: number;
-	parentRunId: string | null;
 };
 
 export type RunEventFromApi = {
@@ -39,13 +36,11 @@ function mapApiRun(r: RunFromApi): Run {
 		agentName: r.agentName,
 		status: r.status,
 		startedAt: r.startedAt,
-		attempt: r.attempt,
 		...(r.error != null && { error: r.error }),
 		...(r.issueKey != null && { issueKey: r.issueKey }),
 		...(r.issueTitle != null && { issueTitle: r.issueTitle }),
 		...(r.completedAt != null && { completedAt: r.completedAt }),
 		...(r.durationMs != null && { durationMs: r.durationMs }),
-		...(r.parentRunId != null && { parentRunId: r.parentRunId }),
 	};
 }
 
@@ -62,8 +57,4 @@ export async function fetchRunDetail(runId: string): Promise<RunDetailFromApi> {
 
 export async function killRun(runId: string): Promise<void> {
 	await apiFetch(`/runs/${runId}/kill`, { method: "POST" });
-}
-
-export async function retryRun(runId: string): Promise<void> {
-	await apiFetch(`/runs/${runId}/retry`, { method: "POST" });
 }
