@@ -33,7 +33,7 @@ const github = createGitHubClient(env.GITHUB_TOKEN ?? githubToken(""));
 let tracker: TrackerAdapter;
 if (config.tracker.kind === "github") {
 	tracker = githubTrackerAdapter(github, {
-		repos: config.code_host.scopes,
+		scopes: config.code_host.scopes,
 		triggerLabel: config.tracker.trigger_label,
 	});
 } else {

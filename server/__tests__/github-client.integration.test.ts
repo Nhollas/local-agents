@@ -99,14 +99,18 @@ describe("GitHub client retry", () => {
 		);
 	});
 
-	it("searchIssues GETs /search/issues with the q param and returns items[]", async () => {
+	it("searchIssues GETs /search/issues with the q param and per_page=100 and returns items[]", async () => {
 		server.use(
 			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
 				const url = new URL(request.url);
-				if (url.searchParams.get("q") !== "repo:owner/repo label:agent") {
+				if (
+					url.searchParams.get("q") !== "repo:owner/repo label:agent" ||
+					url.searchParams.get("per_page") !== "100"
+				) {
 					return new HttpResponse(null, { status: 400 });
 				}
 				return HttpResponse.json({
+					total_count: 1,
 					items: [
 						{
 							number: 7,
@@ -115,6 +119,7 @@ describe("GitHub client retry", () => {
 							labels: [{ name: "agent" }],
 							html_url: "https://github.com/owner/repo/issues/7",
 							created_at: "2025-02-01T00:00:00Z",
+							repository_url: "https://api.github.com/repos/owner/repo",
 						},
 					],
 				});
@@ -134,8 +139,36 @@ describe("GitHub client retry", () => {
 				labels: [{ name: "agent" }],
 				html_url: "https://github.com/owner/repo/issues/7",
 				created_at: "2025-02-01T00:00:00Z",
+				repository_url: "https://api.github.com/repos/owner/repo",
 			},
 		]);
+	});
+
+	it("searchIssues throws when total_count exceeds the page size (truncation)", async () => {
+		server.use(
+			http.get(`${GITHUB_API}/search/issues`, () =>
+				HttpResponse.json({
+					total_count: 250,
+					items: Array.from({ length: 100 }, (_, n) => ({
+						number: n + 1,
+						title: `Issue ${n + 1}`,
+						body: null,
+						labels: [{ name: "agent" }],
+						html_url: `https://github.com/owner/repo/issues/${n + 1}`,
+						created_at: "2025-02-01T00:00:00Z",
+						repository_url: "https://api.github.com/repos/owner/repo",
+					})),
+				}),
+			),
+		);
+
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
+
+		await expect(client.searchIssues("org:acme label:agent")).rejects.toThrow(
+			/250 results.*cap.*100/i,
+		);
 	});
 
 	it("retries on network errors", async () => {

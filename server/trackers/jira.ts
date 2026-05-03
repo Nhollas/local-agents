@@ -129,15 +129,11 @@ export function jiraTrackerAdapter(
 			const jql = `${clauses.join(" AND ")} ORDER BY created ASC`;
 			const raw = await client.searchIssues({ jql, maxResults: 100 });
 			const issues: Issue[] = [];
-			const reposReached = new Set<RepoSlug>(options.scopes);
 			for (const r of raw) {
 				const mapped = resolveScopedIssue(r);
-				if (mapped) {
-					issues.push(mapped);
-					reposReached.add(mapped.repo);
-				}
+				if (mapped) issues.push(mapped);
 			}
-			return { issues, reposReached };
+			return { issues, scopesReached: new Set<RepoSlug>(options.scopes) };
 		},
 
 		async transitionState(_repo, issueNum, _from, to): Promise<void> {

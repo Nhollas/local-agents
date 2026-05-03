@@ -16,7 +16,7 @@ function createFakeTracker(
 		fetchIssue: async () => {
 			throw new Error("not implemented");
 		},
-		fetchActiveIssues: async () => ({ issues: [], reposReached: new Set() }),
+		fetchActiveIssues: async () => ({ issues: [], scopesReached: new Set() }),
 		transitionState: async () => {},
 		parseIssueKey: () => ok({ number: issueNumber(1) }),
 		...overrides,

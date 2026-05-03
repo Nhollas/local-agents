@@ -22,7 +22,7 @@ export type ParseIssueKeyError = {
 
 export type ActiveIssuesPage = {
 	issues: Issue[];
-	reposReached: ReadonlySet<RepoSlug>;
+	scopesReached: ReadonlySet<RepoSlug>;
 };
 
 export type TrackerAdapter = {

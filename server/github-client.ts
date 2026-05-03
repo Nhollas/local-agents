@@ -25,6 +25,7 @@ const githubIssueSchema = z.object({
 	labels: z.array(z.object({ name: z.string() })),
 	html_url: z.string(),
 	created_at: z.string(),
+	repository_url: z.string().optional(),
 });
 
 export type GitHubIssue = z.infer<typeof githubIssueSchema>;
@@ -50,15 +51,6 @@ export type GitHubClient = {
 		},
 	): Promise<{ number: number; html_url: string }>;
 	getIssue(repo: RepoSlug, issueNumber: IssueNumber): Promise<GitHubIssue>;
-	listIssues(
-		repo: RepoSlug,
-		params: {
-			labels: string;
-			state: string;
-			creator: string;
-			per_page: string;
-		},
-	): Promise<GitHubIssue[]>;
 	searchIssues(query: string): Promise<GitHubIssue[]>;
 	removeIssueLabel(
 		repo: RepoSlug,
@@ -121,18 +113,23 @@ export function createGitHubClient(
 			});
 		},
 
-		listIssues(repo, params) {
-			const query = new URLSearchParams(params);
-			return request(`/repos/${repo}/issues?${query}`, {
-				schema: z.array(githubIssueSchema),
-			});
-		},
-
 		async searchIssues(query) {
-			const params = new URLSearchParams({ q: query });
-			const result = await request(`/search/issues?${params}`, {
-				schema: z.object({ items: z.array(githubIssueSchema) }),
+			const perPage = 100;
+			const params = new URLSearchParams({
+				q: query,
+				per_page: String(perPage),
 			});
+			const result = await request(`/search/issues?${params}`, {
+				schema: z.object({
+					total_count: z.number(),
+					items: z.array(githubIssueSchema),
+				}),
+			});
+			if (result.total_count > perPage) {
+				throw new Error(
+					`GitHub search returned ${result.total_count} results; per-page cap is ${perPage}. Query: ${query}`,
+				);
+			}
 			return result.items;
 		},
 

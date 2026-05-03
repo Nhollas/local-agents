@@ -1,6 +1,12 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { GitHubClient, GitHubIssue } from "../github-client.ts";
-import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
+import { resolveRepo } from "../scope-resolver.ts";
+import {
+	issueKey,
+	issueNumber,
+	type RepoSlug,
+	repoSlug,
+} from "../types/brands.ts";
 import { err, ok } from "../types/result.ts";
 import { decorateTracker } from "./decorator.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
@@ -8,10 +14,27 @@ import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
 type IssueState = "open" | "closed" | "all";
 
 type GitHubTrackerOptions = {
-	repos: readonly RepoSlug[];
+	scopes: readonly RepoSlug[];
 	triggerLabel: string;
 	activeStates?: readonly IssueState[];
 };
+
+const REPOSITORY_URL_PATTERN = /\/repos\/([^/]+\/[^/]+)$/;
+
+function parseRepoFromUrl(url: string | undefined): RepoSlug | null {
+	if (!url) return null;
+	const match = REPOSITORY_URL_PATTERN.exec(url);
+	return match?.[1] ? repoSlug(match[1]) : null;
+}
+
+function orgOf(scope: RepoSlug): string {
+	const slash = scope.indexOf("/");
+	return slash === -1 ? scope : scope.slice(0, slash);
+}
+
+function distinctOrgs(scopes: readonly RepoSlug[]): string[] {
+	return [...new Set(scopes.map(orgOf))];
+}
 
 function mapGitHubIssue(repo: RepoSlug, i: GitHubIssue): Issue {
 	return {
@@ -30,11 +53,12 @@ export function githubTrackerAdapter(
 	client: GitHubClient,
 	options: GitHubTrackerOptions,
 ): TrackerAdapter {
-	const { repos, triggerLabel, activeStates = ["open"] as const } = options;
+	const { scopes, triggerLabel, activeStates = ["open"] as const } = options;
 	const stateLabels: Record<Exclude<TrackerState, "pending">, string> = {
 		running: `${triggerLabel}:running`,
 		awaiting_review: `${triggerLabel}:awaiting-review`,
 	};
+	const orgs = distinctOrgs(scopes);
 
 	let usernamePromise: Promise<string> | undefined;
 	function getUsername(): Promise<string> {
@@ -42,51 +66,67 @@ export function githubTrackerAdapter(
 		return usernamePromise;
 	}
 
-	async function fetchPending(repo: RepoSlug): Promise<Issue[]> {
+	type OrgSearchResult = {
+		org: string;
+		items: readonly GitHubIssue[] | null;
+	};
+
+	async function searchAcrossOrgs(suffix: string): Promise<OrgSearchResult[]> {
 		const username = await getUsername();
-		const batches = await Promise.all(
-			activeStates.map((s) =>
-				client.searchIssues(
-					`repo:${repo} type:issue author:${username} state:${s} label:${triggerLabel} -label:${stateLabels.running} -label:${stateLabels.awaiting_review}`,
-				),
-			),
+		return Promise.all(
+			orgs.map(async (org) => {
+				const batches = await Promise.all(
+					activeStates.map((s) =>
+						client
+							.searchIssues(
+								`org:${org} type:issue author:${username} state:${s} ${suffix}`,
+							)
+							.catch((err: unknown) => {
+								canonicalLog.append(
+									"warnings",
+									`fetch_active_issues_failed: org=${org} ${canonicalLog.errorMessage(err)}`,
+								);
+								return null;
+							}),
+					),
+				);
+				const failed = batches.some((b) => b === null);
+				const items = failed ? null : dedupe(batches.flatMap((b) => b ?? []));
+				return { org, items };
+			}),
 		);
-		return dedupe(batches.flat()).map((i) => mapGitHubIssue(repo, i));
 	}
 
-	async function fetchByStateLabel(
-		repo: RepoSlug,
-		stateLabel: string,
-	): Promise<Issue[]> {
-		const username = await getUsername();
-		const batches = await Promise.all(
-			activeStates.map((s) =>
-				client.listIssues(repo, {
-					labels: `${triggerLabel},${stateLabel}`,
-					state: s,
-					creator: username,
-					per_page: "100",
-				}),
-			),
-		);
-		return dedupe(batches.flat()).map((i) => mapGitHubIssue(repo, i));
+	function scopesForOrgs(reachedOrgs: ReadonlySet<string>): RepoSlug[] {
+		return scopes.filter((s) => reachedOrgs.has(orgOf(s)));
 	}
 
 	function dedupe(issues: GitHubIssue[]): GitHubIssue[] {
-		const seen = new Set<number>();
+		const seen = new Set<string>();
 		return issues.filter((i) => {
-			if (seen.has(i.number)) return false;
-			seen.add(i.number);
+			if (seen.has(i.html_url)) return false;
+			seen.add(i.html_url);
 			return true;
 		});
 	}
 
-	async function fetchForRepo(
-		repo: RepoSlug,
-		state: TrackerState,
-	): Promise<Issue[]> {
-		if (state === "pending") return fetchPending(repo);
-		return fetchByStateLabel(repo, stateLabels[state]);
+	function resolveAndMap(items: readonly GitHubIssue[]): Issue[] {
+		const issues: Issue[] = [];
+		for (const item of items) {
+			const repoFromUrl = parseRepoFromUrl(item.repository_url);
+			if (!repoFromUrl) continue;
+			const resolved = resolveRepo(repoFromUrl, scopes);
+			if (!resolved) continue;
+			issues.push(mapGitHubIssue(resolved, item));
+		}
+		return issues;
+	}
+
+	function suffixForState(state: TrackerState): string {
+		if (state === "pending") {
+			return `label:${triggerLabel} -label:${stateLabels.running} -label:${stateLabels.awaiting_review}`;
+		}
+		return `label:${triggerLabel} label:${stateLabels[state]}`;
 	}
 
 	return decorateTracker({
@@ -96,26 +136,15 @@ export function githubTrackerAdapter(
 		},
 
 		async fetchActiveIssues(state) {
-			const results = await Promise.allSettled(
-				repos.map(async (repo) => ({
-					repo,
-					issues: await fetchForRepo(repo, state),
-				})),
+			const results = await searchAcrossOrgs(suffixForState(state));
+			const reachedOrgs = new Set(
+				results.filter((r) => r.items !== null).map((r) => r.org),
 			);
-			const issues: Issue[] = [];
-			const reposReached = new Set<RepoSlug>();
-			for (const [i, result] of results.entries()) {
-				if (result.status === "fulfilled") {
-					reposReached.add(result.value.repo);
-					issues.push(...result.value.issues);
-				} else {
-					canonicalLog.append(
-						"warnings",
-						`fetch_active_issues_failed: ${repos[i]}`,
-					);
-				}
-			}
-			return { issues, reposReached };
+			const items = results.flatMap((r) => r.items ?? []);
+			return {
+				issues: resolveAndMap(items),
+				scopesReached: new Set(scopesForOrgs(reachedOrgs)),
+			};
 		},
 
 		async transitionState(repo, issueNum, from, to): Promise<void> {
