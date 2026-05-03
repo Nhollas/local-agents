@@ -3,15 +3,13 @@ import { describe, expect, it } from "vitest";
 import { runs } from "../../db/schema.ts";
 import {
 	createGitHubIssue,
-	createTestWorkflow,
 	GITHUB_API,
 	hangingAgent,
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
-import { type RepoSlug, repoSlug } from "../../types/brands.ts";
-import type { RepoWorkflow } from "../../workflow/workflow.ts";
+import { repoSlug } from "../../types/brands.ts";
 
 describe("Orchestrator multi-repo scheduling", () => {
 	it("ticking guard prevents concurrent ticks", async () => {
@@ -77,10 +75,7 @@ describe("Orchestrator multi-repo scheduling", () => {
 
 		await using ctx = await createTestOrchestrator({
 			maxConcurrency: 5,
-			workflows: new Map<RepoSlug, RepoWorkflow>([
-				[REPO, createTestWorkflow()],
-				[REPO2, createTestWorkflow()],
-			]),
+			trackerRepos: [REPO, REPO2],
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO2}#10`);
@@ -142,10 +137,7 @@ describe("Orchestrator multi-repo scheduling", () => {
 		await using ctx = await createTestOrchestrator({
 			maxConcurrency: 5,
 			configOverrides: { max_concurrent: 5 },
-			workflows: new Map<RepoSlug, RepoWorkflow>([
-				[REPO, createTestWorkflow()],
-				[REPO2, createTestWorkflow()],
-			]),
+			trackerRepos: [REPO, REPO2],
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace(`${REPO}#1`);

@@ -8,7 +8,7 @@ export function createTestConfig(
 		tracker: { kind: "github" },
 		code_host: {
 			kind: "github",
-			repos: [repoSlug("test-owner/test-repo")],
+			scopes: [repoSlug("test-owner/test-repo")],
 		},
 		defaults: {
 			polling_interval_ms: 100,

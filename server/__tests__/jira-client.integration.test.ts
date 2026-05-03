@@ -18,7 +18,13 @@ describe("Jira client", () => {
 					body["jql"] !== 'project = "PROJ"' ||
 					body["maxResults"] !== 100 ||
 					JSON.stringify(body["fields"]) !==
-						JSON.stringify(["summary", "description", "status", "created"])
+						JSON.stringify([
+							"summary",
+							"description",
+							"status",
+							"created",
+							"labels",
+						])
 				) {
 					return new HttpResponse(null, { status: 400 });
 				}

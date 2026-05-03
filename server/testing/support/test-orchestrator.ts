@@ -24,7 +24,8 @@ type CreateTestOrchestratorOptions = {
 	runAgent?: LegacyRunAgent;
 	agent?: AgentInvoker;
 	configOverrides?: Parameters<typeof createTestConfig>[0];
-	workflows?: Map<RepoSlug, RepoWorkflow>;
+	workflow?: RepoWorkflow;
+	trackerRepos?: readonly RepoSlug[];
 	maxConcurrency?: number;
 	codeHost?: (defaults: CodeHostAdapter) => CodeHostAdapter;
 	tracker?: (defaults: TrackerAdapter) => TrackerAdapter;
@@ -45,9 +46,7 @@ export async function createTestOrchestrator(
 	});
 
 	const defaultCodeHost = githubCodeHostAdapter(github);
-	const trackerRepos = options.workflows
-		? [...options.workflows.keys()]
-		: [REPO];
+	const trackerRepos = options.trackerRepos ?? [REPO];
 	const defaultTracker = githubTrackerAdapter(github, { repos: trackerRepos });
 
 	const agent = options.agent ?? adaptRunAgent(options.runAgent ?? noopAgent);
@@ -62,9 +61,7 @@ export async function createTestOrchestrator(
 			workspace_root: workspace.root,
 			...options.configOverrides,
 		}),
-		workflows:
-			options.workflows ??
-			new Map<RepoSlug, RepoWorkflow>([[REPO, createTestWorkflow()]]),
+		workflow: options.workflow ?? createTestWorkflow(),
 		runner,
 		agent,
 	});

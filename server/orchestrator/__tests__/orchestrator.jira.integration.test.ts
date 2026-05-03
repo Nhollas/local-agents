@@ -54,7 +54,9 @@ describe("Orchestrator Jira dispatch", () => {
 				const jql = body.jql ?? "";
 				if (jql.includes('status = "To Do"')) {
 					return HttpResponse.json({
-						issues: [createJiraIssue("PROJ-42", "To Do")],
+						issues: [
+							createJiraIssue("PROJ-42", "To Do", undefined, [`repo:${REPO}`]),
+						],
 					});
 				}
 				return HttpResponse.json({ issues: [] });
@@ -78,7 +80,7 @@ describe("Orchestrator Jira dispatch", () => {
 				apiToken: jiraApiToken("jira-token"),
 				maxAttempts: 1,
 			}),
-			{ project: "PROJ", repo: REPO, baseUrl: JIRA_BASE_URL, statuses },
+			{ project: "PROJ", scopes: [REPO], baseUrl: JIRA_BASE_URL, statuses },
 		);
 
 		// Strict codeHost stub: returns success only when called against the
@@ -96,7 +98,7 @@ describe("Orchestrator Jira dispatch", () => {
 					return { number: 1, url: "https://example.test/change/1" };
 				},
 			}),
-			workflows: new Map([[REPO, createTestWorkflow()]]),
+			workflow: createTestWorkflow(),
 		});
 		const { orchestrator, runner, workspace } = ctx;
 		await workspace.preCreateWorkspace("PROJ-42");

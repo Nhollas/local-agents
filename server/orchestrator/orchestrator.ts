@@ -17,7 +17,7 @@ type OrchestratorConfig = {
 	tracker: TrackerAdapter;
 	codeHost: CodeHostAdapter;
 	config: Config;
-	workflows: Map<RepoSlug, RepoWorkflow>;
+	workflow: RepoWorkflow;
 	runner: Runner;
 	agent?: AgentInvoker;
 	clock?: Clock;
@@ -33,7 +33,6 @@ type Orchestrator = {
 	stop(): void;
 };
 
-type TaggedIssue = { issue: Issue; repo: RepoSlug; workflow: RepoWorkflow };
 type RunningEntry = { runIds: RunId[]; repo: RepoSlug };
 type StillRunning = {
 	issues: readonly Issue[];
@@ -43,7 +42,7 @@ type StillRunning = {
 type TickState = {
 	runningByIssue: Map<IssueKey, RunningEntry>;
 	runningCount: number;
-	pending: TaggedIssue[];
+	pending: Issue[];
 	stillRunning: StillRunning;
 };
 
@@ -57,7 +56,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		tracker,
 		codeHost,
 		config,
-		workflows,
+		workflow,
 		runner,
 		agent = claudeSdkAgentInvoker(),
 		clock = systemClock(),
@@ -100,20 +99,17 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			tracker.fetchActiveIssues("running"),
 		]);
 
-		const pending: TaggedIssue[] = [];
-		if (pendingResult.status === "fulfilled") {
-			for (const issue of pendingResult.value.issues) {
-				const workflow = workflows.get(issue.repo);
-				if (!workflow) continue;
-				pending.push({ issue, repo: issue.repo, workflow });
-			}
-		} else {
+		const pending: Issue[] =
+			pendingResult.status === "fulfilled"
+				? [...pendingResult.value.issues]
+				: [];
+		if (pendingResult.status === "rejected") {
 			logger.warn(
 				{ err: pendingResult.reason },
 				"orchestrator.fetch_pending_failed",
 			);
 		}
-		pending.sort((a, b) => a.issue.createdAt.localeCompare(b.issue.createdAt));
+		pending.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
 		let stillRunning: StillRunning;
 		if (runningResult.status === "fulfilled") {
@@ -178,10 +174,11 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	async function dispatchPendingIssues(state: TickState) {
 		let { runningCount } = state;
 
-		for (const { issue, repo, workflow } of state.pending) {
+		for (const issue of state.pending) {
 			if (state.runningByIssue.has(issue.key)) continue;
 			if (runningCount >= defaults.max_concurrent) break;
 
+			const { repo } = issue;
 			await tracker.transitionState(repo, issue.number, "pending", "running");
 
 			try {
@@ -245,8 +242,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			tracker.parseIssueKey(failedRun.issueKey),
 		);
 		const repo = failedRun.repo;
-		const workflow = workflows.get(repo);
-		if (!workflow) return { error: "No workflow for repo" };
 
 		const issue = await tracker.fetchIssue(repo, issueNumber);
 

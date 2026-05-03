@@ -10,8 +10,7 @@ import {
 import { githubHandlers, server } from "../../testing/support/msw.ts";
 import { seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
-import { type RepoSlug, runId as rid } from "../../types/brands.ts";
-import type { RepoWorkflow } from "../../workflow/workflow.ts";
+import { runId as rid } from "../../types/brands.ts";
 
 describe("Orchestrator scheduling", () => {
 	it("transitions pending → running on dispatch", async () => {
@@ -260,16 +259,6 @@ describe("Orchestrator retryRun eligibility", () => {
 		seedRun(ctx.db, { ...failedRunDefaults, id: "maxed", attempt: 4 });
 		const result = await ctx.orchestrator.retryRun(rid("maxed"));
 		expect(result).toEqual({ error: "Max retries exceeded" });
-	});
-
-	it("rejects when no workflow exists for the repo", async () => {
-		server.use(...githubHandlers());
-		await using ctx = await createTestOrchestrator({
-			workflows: new Map<RepoSlug, RepoWorkflow>(),
-		});
-		seedRun(ctx.db, { ...failedRunDefaults, id: "no-wf" });
-		const result = await ctx.orchestrator.retryRun(rid("no-wf"));
-		expect(result).toEqual({ error: "No workflow for repo" });
 	});
 
 	it("rejects when issue already has a running agent", async () => {

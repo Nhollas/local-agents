@@ -2,7 +2,13 @@ import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
 import type { JiraApiToken, JiraEmail } from "./types/brands.ts";
 
-const ISSUE_FIELDS = ["summary", "description", "status", "created"] as const;
+const ISSUE_FIELDS = [
+	"summary",
+	"description",
+	"status",
+	"created",
+	"labels",
+] as const;
 const DEFAULT_SEARCH_MAX_RESULTS = 100;
 
 const jiraIssueSchema = z.object({
@@ -11,6 +17,7 @@ const jiraIssueSchema = z.object({
 		summary: z.string(),
 		description: z.unknown().nullable().optional(),
 		created: z.string(),
+		labels: z.array(z.string()),
 		status: z.object({
 			name: z.string(),
 		}),

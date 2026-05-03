@@ -30,19 +30,19 @@ const fullDefaults = `defaults:
 `;
 
 describe("loadConfig", () => {
-	it("accepts repos under code_host", () => {
+	it("accepts scopes under code_host", () => {
 		using configFile = writeConfig(`
 tracker:
   kind: github
 code_host:
   kind: github
-  repos:
+  scopes:
     - owner/repo
 ${fullDefaults}`);
 
 		const config = loadConfig(configFile.path);
 
-		expect(config.code_host.repos).toEqual(["owner/repo"]);
+		expect(config.code_host.scopes).toEqual(["owner/repo"]);
 		expect(config.defaults.workspace_root).toBe("/tmp/workspaces");
 	});
 
@@ -53,7 +53,7 @@ tracker:
 code_host:
   kind: gitlab
   base_url: https://gitlab.example.test
-  repos:
+  scopes:
     - platform/team/project
 ${fullDefaults}`);
 
@@ -61,7 +61,7 @@ ${fullDefaults}`);
 
 		expect(config.code_host).toEqual({
 			kind: "gitlab",
-			repos: ["platform/team/project"],
+			scopes: ["platform/team/project"],
 			base_url: "https://gitlab.example.test",
 		});
 	});
@@ -72,7 +72,7 @@ tracker:
   kind: github
 code_host:
   kind: gitlab
-  repos:
+  scopes:
     - group/project
 ${fullDefaults}`);
 
@@ -88,7 +88,7 @@ tracker:
 code_host:
   kind: gitlab
   base_url: https://gitlab.example.test
-  repos:
+  scopes:
     - group/project
 ${fullDefaults}`);
 
@@ -107,7 +107,7 @@ tracker:
     awaiting_review: Code Review
 code_host:
   kind: github
-  repos:
+  scopes:
     - owner/repo
 ${fullDefaults}`);
 
@@ -125,7 +125,7 @@ ${fullDefaults}`);
 		});
 	});
 
-	it("accepts jira tracker with optional labels", () => {
+	it("rejects jira tracker with zero code host scopes", () => {
 		using configFile = writeConfig(`
 tracker:
   kind: jira
@@ -135,43 +135,15 @@ tracker:
     pending: To Do
     running: In Progress
     awaiting_review: In Review
-  labels:
-    - software-factory-poc
 code_host:
   kind: github
-  repos:
-    - owner/repo
-${fullDefaults}`);
-
-		const config = loadConfig(configFile.path);
-
-		expect(config.tracker).toMatchObject({
-			kind: "jira",
-			labels: ["software-factory-poc"],
-		});
-	});
-
-	it("rejects jira tracker with an empty labels list", () => {
-		using configFile = writeConfig(`
-tracker:
-  kind: jira
-  base_url: https://jira.example.test
-  project: PROJ
-  statuses:
-    pending: To Do
-    running: In Progress
-    awaiting_review: In Review
-  labels: []
-code_host:
-  kind: github
-  repos:
-    - owner/repo
+  scopes: []
 ${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
 	});
 
-	it("rejects jira tracker with zero code host repos", () => {
+	it("accepts jira tracker with multiple code host scopes", () => {
 		using configFile = writeConfig(`
 tracker:
   kind: jira
@@ -183,35 +155,17 @@ tracker:
     awaiting_review: In Review
 code_host:
   kind: github
-  repos: []
-${fullDefaults}`);
-
-		expect(() => loadConfig(configFile.path)).toThrow();
-	});
-
-	it("rejects jira tracker with multiple code host repos", () => {
-		using configFile = writeConfig(`
-tracker:
-  kind: jira
-  base_url: https://jira.example.test
-  project: PROJ
-  statuses:
-    pending: To Do
-    running: In Progress
-    awaiting_review: In Review
-code_host:
-  kind: github
-  repos:
+  scopes:
     - owner/repo-a
     - owner/repo-b
 ${fullDefaults}`);
 
-		expect(() => loadConfig(configFile.path)).toThrow(
-			"Jira tracker requires exactly one code_host.repos entry",
-		);
+		const config = loadConfig(configFile.path);
+
+		expect(config.code_host.scopes).toEqual(["owner/repo-a", "owner/repo-b"]);
 	});
 
-	it("rejects config without code_host repos", () => {
+	it("rejects config without code_host scopes", () => {
 		using configFile = writeConfig(`
 tracker:
   kind: github
@@ -228,7 +182,7 @@ tracker:
   kind: github
 code_host:
   kind: github
-  repos:
+  scopes:
     - owner/repo
 `);
 
@@ -241,10 +195,23 @@ tracker:
   kind: github
 code_host:
   kind: github
-  repos:
+  scopes:
     - owner/repo
 repos:
   - old-owner/old-repo
+${fullDefaults}`);
+
+		expect(() => loadConfig(configFile.path)).toThrow();
+	});
+
+	it("rejects code_host.repos under the new schema", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: github
+code_host:
+  kind: github
+  repos:
+    - owner/repo
 ${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();

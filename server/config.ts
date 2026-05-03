@@ -17,16 +17,15 @@ export type Config = {
 					running: string;
 					awaiting_review: string;
 				};
-				labels?: string[] | undefined;
 		  };
 	code_host:
 		| {
 				kind: "github";
-				repos: RepoSlug[];
+				scopes: RepoSlug[];
 		  }
 		| {
 				kind: "gitlab";
-				repos: RepoSlug[];
+				scopes: RepoSlug[];
 				base_url: string;
 		  };
 	defaults: {
@@ -60,7 +59,6 @@ const configSchema = z
 							awaiting_review: z.string().min(1),
 						})
 						.strict(),
-					labels: z.array(z.string().min(1)).min(1).optional(),
 				})
 				.strict(),
 		]),
@@ -68,13 +66,13 @@ const configSchema = z
 			z
 				.object({
 					kind: z.literal("github"),
-					repos: z.array(repoSlugSchema).min(1),
+					scopes: z.array(repoSlugSchema).min(1),
 				})
 				.strict(),
 			z
 				.object({
 					kind: z.literal("gitlab"),
-					repos: z.array(repoSlugSchema).min(1),
+					scopes: z.array(repoSlugSchema).min(1),
 					base_url: z.url(),
 				})
 				.strict(),
@@ -89,16 +87,7 @@ const configSchema = z
 			})
 			.strict(),
 	})
-	.strict()
-	.superRefine((config, ctx) => {
-		if (config.tracker.kind === "jira" && config.code_host.repos.length !== 1) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["code_host", "repos"],
-				message: "Jira tracker requires exactly one code_host.repos entry",
-			});
-		}
-	});
+	.strict();
 
 export function loadConfig(filePath: string): Config {
 	const raw = readFileSync(filePath, "utf-8");
