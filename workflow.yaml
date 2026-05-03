@@ -50,12 +50,6 @@ steps:
       Read `AGENTS.md` first if it exists, then `README.md`. Then read any
       project docs relevant to the change, especially anything under `docs/`.
 
-      Recent commits:
-
-      <recent-commits>
-      !`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
-      </recent-commits>
-
       Top-level layout:
 
       <repo-tree>

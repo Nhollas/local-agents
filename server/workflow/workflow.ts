@@ -67,7 +67,6 @@ export function renderPrompt(
 	template: string,
 	vars: {
 		issue: Issue;
-		attempt?: number;
 		branch?: string;
 		outputs?: Record<string, unknown> | undefined;
 	},

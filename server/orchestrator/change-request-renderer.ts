@@ -6,7 +6,6 @@ import { renderPrompt } from "../workflow/workflow.ts";
 type RenderChangeRequestParams = {
 	template: ChangeRequestTemplate;
 	issue: Issue;
-	attempt: number;
 	branch: BranchName;
 	outputs?: Record<string, unknown>;
 };
@@ -14,11 +13,10 @@ type RenderChangeRequestParams = {
 export function renderChangeRequest({
 	template,
 	issue,
-	attempt,
 	branch,
 	outputs,
 }: RenderChangeRequestParams): { title: string; body: string } {
-	const vars = { issue, attempt, branch, outputs };
+	const vars = { issue, branch, outputs };
 	return {
 		title: renderPrompt(template.title, vars),
 		body: renderPrompt(template.body, vars),

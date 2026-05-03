@@ -39,15 +39,6 @@ describe("renderPrompt", () => {
 		expect(result).toBe("Labels: bug, urgent");
 	});
 
-	it("renders the attempt variable", () => {
-		const result = renderPrompt("Attempt #{{ attempt }}", {
-			issue: baseIssue,
-			attempt: 3,
-		});
-
-		expect(result).toBe("Attempt #3");
-	});
-
 	it("resolves a top-level scalar step output reference", () => {
 		const result = renderPrompt("Title: {{ steps.summarise.output.title }}", {
 			issue: baseIssue,

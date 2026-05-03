@@ -108,7 +108,6 @@ const checkHealth: HealthCheck = () => {
 const app = createApi({
 	runner,
 	repo,
-	retryRun: orchestrator.retryRun,
 	checkHealth,
 });
 
@@ -138,6 +137,9 @@ async function shutdown(signal: string) {
 
 	orchestrator.stop();
 	httpServer.close();
+	if ("closeAllConnections" in httpServer) {
+		httpServer.closeAllConnections();
+	}
 
 	// Drain in-flight runs with a timeout
 	const drainResult = await Promise.race([
@@ -153,6 +155,7 @@ async function shutdown(signal: string) {
 
 	closeDb();
 	logger.info("shutdown.complete");
+	process.exit(drainResult === "timeout" ? 1 : 0);
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));

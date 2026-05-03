@@ -57,7 +57,9 @@ type ChangeRequestRecord = {
 
 type InMemoryTracker = TrackerAdapter & {
 	transitions: StateTransition[];
+	failedIssues: { repo: RepoSlug; number: IssueNumber }[];
 	failTransitions(predicate: (t: StateTransition) => boolean): void;
+	failMarkFailed(): void;
 	setIssue(issue: Issue): void;
 };
 
@@ -68,16 +70,22 @@ type InMemoryCodeHost = CodeHostAdapter & {
 
 export function createInMemoryTracker(initial?: Issue): InMemoryTracker {
 	const transitions: StateTransition[] = [];
+	const failedIssues: { repo: RepoSlug; number: IssueNumber }[] = [];
 	let issue = initial;
 	let shouldFail: ((t: StateTransition) => boolean) | undefined;
+	let markFailedShouldFail = false;
 
 	return {
 		transitions,
+		failedIssues,
 		setIssue(newIssue) {
 			issue = newIssue;
 		},
 		failTransitions(predicate) {
 			shouldFail = predicate;
+		},
+		failMarkFailed() {
+			markFailedShouldFail = true;
 		},
 		async fetchIssue() {
 			if (!issue) throw new Error("Tracker has no issue configured");
@@ -94,6 +102,10 @@ export function createInMemoryTracker(initial?: Issue): InMemoryTracker {
 			transitions.push(t);
 			if (shouldFail?.(t))
 				throw new Error(`tracker transition failed: ${from}→${to}`);
+		},
+		async markFailed(repo, number) {
+			if (markFailedShouldFail) throw new Error("markFailed failed");
+			failedIssues.push({ repo, number });
 		},
 		parseIssueKey(key) {
 			const hashIndex = key.lastIndexOf("#");
@@ -197,7 +209,6 @@ type TestLifecycleOptions = {
 	clock?: Clock;
 	runShell?: RunShell;
 	model?: string;
-	maxRetries?: number;
 	tracker?: InMemoryTracker;
 	codeHost?: InMemoryCodeHost;
 	issue?: Issue;
@@ -269,7 +280,6 @@ export async function createTestRunLifecycle(
 		runShell: options.runShell ?? realRunShell,
 		workspaceRoot,
 		model: options.model ?? "test-model",
-		maxRetries: options.maxRetries ?? 2,
 	});
 
 	return {

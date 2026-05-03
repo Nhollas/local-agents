@@ -46,7 +46,6 @@ describe("resolveBranch", () => {
 		const result = await resolveBranch({
 			workflowBranch: "agent/issue-{{ issue.number }}",
 			issue,
-			attempt: 1,
 			agent,
 			cwd: "/work",
 			model: "test-model",
@@ -84,7 +83,6 @@ describe("resolveBranch", () => {
 				schema: branchSchema,
 			},
 			issue,
-			attempt: 1,
 			agent,
 			cwd: "/work",
 			model: "test-model",
@@ -129,7 +127,6 @@ describe("resolveBranch", () => {
 			resolveBranch({
 				workflowBranch: { prompt: "Propose", schema: branchSchema },
 				issue,
-				attempt: 1,
 				agent,
 				cwd: "/work",
 				model: "test-model",
@@ -154,7 +151,6 @@ describe("resolveBranch", () => {
 			resolveBranch({
 				workflowBranch: { prompt: "Propose", schema: branchSchema },
 				issue,
-				attempt: 1,
 				agent,
 				cwd: "/work",
 				model: "test-model",
@@ -190,7 +186,6 @@ describe("resolveBranch", () => {
 					schema: branchSchema,
 				},
 				issue,
-				attempt: 1,
 				agent,
 				cwd: "/work",
 				model: "test-model",

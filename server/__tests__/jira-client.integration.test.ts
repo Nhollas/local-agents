@@ -45,4 +45,65 @@ describe("Jira client", () => {
 
 		expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 	});
+
+	describe("updateLabels", () => {
+		it("PUTs an add+remove label update for the issue", async () => {
+			const captured: { method: string; key: string; body: unknown }[] = [];
+			server.use(
+				http.put(`${JIRA_API}/issue/:key`, async ({ request, params }) => {
+					captured.push({
+						method: request.method,
+						key: String(params["key"]),
+						body: await request.json(),
+					});
+					return new HttpResponse(null, { status: 204 });
+				}),
+			);
+
+			const client = createJiraClient({
+				baseUrl: JIRA_BASE_URL,
+				email: jiraEmail("agent@example.test"),
+				apiToken: jiraApiToken("jira-token"),
+				maxAttempts: 1,
+			});
+
+			await client.updateLabels("PROJ-7", {
+				add: ["agent-failed"],
+				remove: ["agent"],
+			});
+
+			expect(captured).toEqual([
+				{
+					method: "PUT",
+					key: "PROJ-7",
+					body: {
+						update: {
+							labels: [{ add: "agent-failed" }, { remove: "agent" }],
+						},
+					},
+				},
+			]);
+		});
+
+		it("does not call Jira when there are no add or remove ops", async () => {
+			let called = false;
+			server.use(
+				http.put(`${JIRA_API}/issue/:key`, () => {
+					called = true;
+					return new HttpResponse(null, { status: 204 });
+				}),
+			);
+
+			const client = createJiraClient({
+				baseUrl: JIRA_BASE_URL,
+				email: jiraEmail("agent@example.test"),
+				apiToken: jiraApiToken("jira-token"),
+				maxAttempts: 1,
+			});
+
+			await client.updateLabels("PROJ-7", {});
+
+			expect(called).toBe(false);
+		});
+	});
 });

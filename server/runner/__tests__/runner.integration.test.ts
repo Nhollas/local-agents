@@ -66,10 +66,6 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: null,
 			durationMs: null,
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
 		});
 
 		resolveHandler({ status: "completed", durationMs: 0 });
@@ -116,10 +112,6 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: null,
 			durationMs: null,
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
 		});
 
 		resolveBlocker({ status: "completed", durationMs: 0 });
@@ -155,10 +147,6 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
 		});
 	});
 
@@ -329,10 +317,6 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
 		});
 	});
 
@@ -340,100 +324,6 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		expect(runner.kill(rid("nonexistent-id"))).toBe(false);
-	});
-
-	it("stores attempt and parentRunId on the run record", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
-
-		const { runId } = runner.enqueue({
-			name: "retry-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#1"),
-			issueTitle: "Retry issue",
-			handler: completedHandler,
-			attempt: 2,
-			parentRunId: rid("prev-id"),
-		});
-
-		await runner.queue.waitForIdle();
-
-		const run = getRun(db, runId);
-		expect(run).toEqual({
-			id: runId,
-			agentName: "retry-job",
-			status: "completed",
-			error: null,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#1"),
-			issueTitle: "Retry issue",
-			startedAt: expect.any(String),
-			completedAt: expect.any(String),
-			durationMs: expect.any(Number),
-			sessionId: null,
-			attempt: 2,
-			parentRunId: "prev-id",
-			stepIndex: 0,
-		});
-	});
-
-	it("persists the latest sessionId when handler calls setSessionId multiple times", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
-
-		const { runId } = runner.enqueue({
-			name: "multi-session-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#8"),
-			issueTitle: "Multi session issue",
-			handler: async (ctx) => {
-				ctx.setSessionId("first-session");
-				ctx.setSessionId("second-session");
-				ctx.setSessionId("third-session");
-				return { status: "completed", durationMs: 0 };
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		const run = getRun(db, runId);
-		expect(run).toEqual({
-			id: runId,
-			agentName: "multi-session-job",
-			status: "completed",
-			error: null,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#8"),
-			issueTitle: "Multi session issue",
-			startedAt: expect.any(String),
-			completedAt: expect.any(String),
-			durationMs: expect.any(Number),
-			sessionId: "third-session",
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
-		});
-	});
-
-	it("persists step index progress from the run context", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
-
-		const { runId } = runner.enqueue({
-			name: "step-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#9"),
-			issueTitle: "Step issue",
-			handler: async (ctx) => {
-				ctx.setStepIndex(2);
-				return { status: "completed", durationMs: 0 };
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		const run = getRun(db, runId);
-		expect(run).toMatchObject({
-			id: runId,
-			stepIndex: 2,
-		});
 	});
 
 	it("uses default maxConcurrency when not specified", async () => {
@@ -456,40 +346,5 @@ describe("Runner integration", () => {
 		const run = getRun(db, runId);
 		expect(run).toBeDefined();
 		expect(run?.status).toBe("completed");
-	});
-
-	it("captures sessionId via setSessionId callback", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
-
-		const { runId } = runner.enqueue({
-			name: "session-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#2"),
-			issueTitle: "Session issue",
-			handler: async (ctx) => {
-				ctx.setSessionId("sess-123");
-				return { status: "completed", durationMs: 0 };
-			},
-		});
-
-		await runner.queue.waitForIdle();
-
-		const run = getRun(db, runId);
-		expect(run).toEqual({
-			id: runId,
-			agentName: "session-job",
-			status: "completed",
-			error: null,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#2"),
-			issueTitle: "Session issue",
-			startedAt: expect.any(String),
-			completedAt: expect.any(String),
-			durationMs: expect.any(Number),
-			sessionId: "sess-123",
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
-		});
 	});
 });

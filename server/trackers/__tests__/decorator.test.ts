@@ -18,6 +18,7 @@ function createFakeTracker(
 		},
 		fetchActiveIssues: async () => ({ issues: [], scopesReached: new Set() }),
 		transitionState: async () => {},
+		markFailed: async () => {},
 		parseIssueKey: () => ok({ number: issueNumber(1) }),
 		...overrides,
 	};
@@ -105,6 +106,38 @@ describe("decorateTracker", () => {
 					"pending",
 					"running",
 				),
+			).rejects.toThrow("GitHub API 500");
+		});
+	});
+
+	describe("markFailed", () => {
+		it("delegates to inner tracker on success", async () => {
+			const calls: { repo: RepoSlug; issueNumber: IssueNumber }[] = [];
+
+			const decorated = decorateTracker(
+				createFakeTracker({
+					markFailed: async (repo, issueNum) => {
+						calls.push({ repo, issueNumber: issueNum });
+					},
+				}),
+			);
+
+			await decorated.markFailed(repoSlug("owner/repo"), issueNumber(42));
+
+			expect(calls).toEqual([{ repo: "owner/repo", issueNumber: 42 }]);
+		});
+
+		it("re-throws when inner markFailed fails", async () => {
+			const decorated = decorateTracker(
+				createFakeTracker({
+					markFailed: async () => {
+						throw new Error("GitHub API 500");
+					},
+				}),
+			);
+
+			await expect(
+				decorated.markFailed(repoSlug("owner/repo"), issueNumber(1)),
 			).rejects.toThrow("GitHub API 500");
 		});
 	});

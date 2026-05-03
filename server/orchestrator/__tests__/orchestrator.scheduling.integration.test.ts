@@ -8,9 +8,7 @@ import {
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { githubHandlers, server } from "../../testing/support/msw.ts";
-import { seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
-import { runId as rid } from "../../types/brands.ts";
 
 describe("Orchestrator scheduling", () => {
 	it("transitions pending → running on dispatch", async () => {
@@ -208,98 +206,5 @@ describe("Orchestrator scheduling", () => {
 
 		orchestrator.stop();
 		vi.useRealTimers();
-	});
-});
-
-describe("Orchestrator retryRun eligibility", () => {
-	const failedRunDefaults = {
-		agentName: "issue-1",
-		status: "failed" as const,
-		issueKey: `${REPO}#1`,
-		issueTitle: "Test issue",
-		completedAt: new Date().toISOString(),
-		error: "agent exploded",
-		sessionId: "sess-abc",
-		attempt: 1,
-	};
-
-	it("rejects when run does not exist", async () => {
-		server.use(...githubHandlers());
-		await using ctx = await createTestOrchestrator();
-		const result = await ctx.orchestrator.retryRun(rid("nonexistent"));
-		expect(result).toEqual({ error: "Run not found" });
-	});
-
-	it("rejects when run is not failed", async () => {
-		server.use(...githubHandlers());
-		await using ctx = await createTestOrchestrator();
-		seedRun(ctx.db, {
-			...failedRunDefaults,
-			id: "ok",
-			status: "completed",
-			error: undefined,
-		});
-		const result = await ctx.orchestrator.retryRun(rid("ok"));
-		expect(result).toEqual({ error: "Run is not failed" });
-	});
-
-	it("rejects when run has no issue key", async () => {
-		server.use(...githubHandlers());
-		await using ctx = await createTestOrchestrator();
-		seedRun(ctx.db, { ...failedRunDefaults, id: "no-key", issueKey: null });
-		const result = await ctx.orchestrator.retryRun(rid("no-key"));
-		expect(result).toEqual({ error: "No issue key" });
-	});
-
-	it("rejects when max retries exceeded", async () => {
-		server.use(...githubHandlers());
-		await using ctx = await createTestOrchestrator({
-			configOverrides: { max_retries: 3 },
-		});
-		seedRun(ctx.db, { ...failedRunDefaults, id: "maxed", attempt: 4 });
-		const result = await ctx.orchestrator.retryRun(rid("maxed"));
-		expect(result).toEqual({ error: "Max retries exceeded" });
-	});
-
-	it("rejects when issue already has a running agent", async () => {
-		server.use(...githubHandlers());
-		await using ctx = await createTestOrchestrator();
-		seedRun(ctx.db, { ...failedRunDefaults, id: "failed-dup" });
-		seedRun(ctx.db, {
-			id: "running-1",
-			agentName: "issue-1",
-			status: "running",
-			issueKey: `${REPO}#1`,
-		});
-		const result = await ctx.orchestrator.retryRun(rid("failed-dup"));
-		expect(result).toEqual({ error: "Issue already has a running agent" });
-	});
-
-	it("dispatches a retry when eligible", async () => {
-		server.use(
-			...githubHandlers({
-				issues: [createGitHubIssue(1, ["agent:running"])],
-			}),
-		);
-		await using ctx = await createTestOrchestrator();
-		await ctx.workspace.preCreateWorkspace(`${REPO}#1`);
-		seedRun(ctx.db, { ...failedRunDefaults, id: "ok" });
-
-		const result = await ctx.orchestrator.retryRun(rid("ok"));
-		expect(result).toEqual({ runId: expect.any(String) });
-
-		await ctx.runner.queue.waitForIdle();
-		await ctx.orchestrator.settled();
-
-		const retryRow = ctx.db
-			.select()
-			.from(runs)
-			.all()
-			.find((r) => r.id !== "ok");
-		expect(retryRow).toMatchObject({
-			status: "completed",
-			attempt: 2,
-			parentRunId: "ok",
-		});
 	});
 });

@@ -73,10 +73,6 @@ describe("run repository row projection", () => {
 			completedAt: "2025-01-01T00:00:02Z",
 			durationMs: 2000,
 			error: "exploded",
-			sessionId: null,
-			attempt: 1,
-			parentRunId: null,
-			stepIndex: 0,
 		});
 	});
 });
@@ -110,24 +106,5 @@ describe("step outputs", () => {
 		const rows = db.select().from(runStepOutputs).all();
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.outputJson).toEqual({ v: 2 });
-	});
-
-	it("getStepOutputs returns the full map keyed by stepName for a run", () => {
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		repo.writeStepOutput(runId("r1"), "summarise", { title: "T" });
-		repo.writeStepOutput(runId("r1"), "tag", { tags: ["x"] });
-		repo.writeStepOutput(runId("r2"), "other", { ignored: true });
-
-		expect(repo.getStepOutputs(runId("r1"))).toEqual({
-			summarise: { title: "T" },
-			tag: { tags: ["x"] },
-		});
-	});
-
-	it("getStepOutputs returns an empty map when there are no rows for the run", () => {
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		expect(repo.getStepOutputs(runId("missing"))).toEqual({});
 	});
 });

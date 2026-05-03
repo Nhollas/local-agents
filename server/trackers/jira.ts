@@ -62,6 +62,7 @@ export function jiraTrackerAdapter(
 	options: JiraTrackerOptions,
 ): TrackerAdapter {
 	const baseUrl = trimTrailingSlash(options.baseUrl);
+	const failedLabel = `${options.triggerLabel}-failed`;
 
 	function logDrop(issueKeyValue: string, reason: DropReason): void {
 		canonicalLog.append("dropped_issues", {
@@ -136,14 +137,24 @@ export function jiraTrackerAdapter(
 			return { issues, scopesReached: new Set<RepoSlug>(options.scopes) };
 		},
 
+		async markFailed(_repo, issueNum): Promise<void> {
+			const key = jiraIssueKey(options.project, issueNum);
+			await client.updateLabels(key, {
+				add: [failedLabel],
+				remove: [options.triggerLabel],
+			});
+		},
+
 		async transitionState(_repo, issueNum, _from, to): Promise<void> {
 			const key = jiraIssueKey(options.project, issueNum);
-			const targetStatus = options.statuses[to];
+			const targetStatus = options.statuses[to].toLowerCase();
 			const transitions = await client.listTransitions(key);
-			const transition = transitions.find((t) => t.to.name === targetStatus);
+			const transition = transitions.find(
+				(t) => t.to.name.toLowerCase() === targetStatus,
+			);
 			if (!transition) {
 				throw new Error(
-					`No Jira transition for ${key} to status ${targetStatus}`,
+					`No Jira transition for ${key} to status ${options.statuses[to]}`,
 				);
 			}
 			await client.transitionIssue(key, transition.id);

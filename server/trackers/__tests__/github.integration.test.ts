@@ -13,6 +13,38 @@ import { githubTrackerAdapter } from "../github.ts";
 const TRIGGER = "agent";
 
 describe("githubTrackerAdapter", () => {
+	describe("fetchIssue", () => {
+		it("maps a GitHub issue and falls back to empty description when body is null", async () => {
+			server.use(
+				http.get(`${GITHUB_API}/repos/${REPO}/issues/:number`, ({ params }) => {
+					return HttpResponse.json({
+						...createGitHubIssue(Number(params["number"]), ["agent"]),
+						body: null,
+					});
+				}),
+			);
+
+			const github = createGitHubClient(githubToken("test-token"));
+			const tracker = githubTrackerAdapter(github, {
+				scopes: [REPO],
+				triggerLabel: TRIGGER,
+			});
+
+			const issue = await tracker.fetchIssue(REPO, issueNumber(42));
+
+			expect(issue).toEqual({
+				key: `${REPO}#42`,
+				number: 42,
+				repo: REPO,
+				title: "Issue 42",
+				description: "",
+				labels: ["agent"],
+				url: `https://github.com/${REPO}/issues/42`,
+				createdAt: "2025-01-01T00:00:00Z",
+			});
+		});
+	});
+
 	describe("fetchActiveIssues", () => {
 		it("pending issues one search per distinct org and stamps repo from repository_url", async () => {
 			const captured: string[] = [];
@@ -509,6 +541,48 @@ describe("githubTrackerAdapter", () => {
 			);
 
 			expect(calls).toEqual([{ method: "DELETE", label: "agent:running" }]);
+		});
+	});
+
+	describe("markFailed", () => {
+		it("adds the failed label and removes the trigger label", async () => {
+			const calls: { method: string; label: string }[] = [];
+
+			server.use(
+				http.delete(
+					`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
+					({ params }) => {
+						calls.push({
+							method: "DELETE",
+							label: decodeURIComponent(String(params["label"])),
+						});
+						return new HttpResponse(null, { status: 204 });
+					},
+				),
+				http.post(
+					`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+					async ({ request }) => {
+						const body = (await request.json()) as { labels: string[] };
+						for (const label of body.labels) {
+							calls.push({ method: "POST", label });
+						}
+						return HttpResponse.json([]);
+					},
+				),
+			);
+
+			const github = createGitHubClient(githubToken("test-token"));
+			const tracker = githubTrackerAdapter(github, {
+				scopes: [REPO],
+				triggerLabel: TRIGGER,
+			});
+
+			await tracker.markFailed(REPO, issueNumber(42));
+
+			expect(calls.sort((a, b) => a.method.localeCompare(b.method))).toEqual([
+				{ method: "DELETE", label: "agent" },
+				{ method: "POST", label: "agent-failed" },
+			]);
 		});
 	});
 

@@ -76,6 +76,13 @@ export async function createTestOrchestrator(
 		runner,
 		workspace,
 		async [Symbol.asyncDispose]() {
+			// Abort any in-flight runs so their orphan handlers don't keep doing
+			// work (git, MSW POSTs) into the next test. The signal.aborted flag
+			// is what tells the lifecycle to skip markIssueFailed.
+			for (const run of repo.getRunningSnapshot()) {
+				runner.kill(run.id);
+			}
+			await runner.queue.waitForIdle();
 			await workspace[Symbol.asyncDispose]();
 		},
 	};

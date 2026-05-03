@@ -33,7 +33,6 @@ export type Config = {
 	defaults: {
 		polling_interval_ms: number;
 		max_concurrent: number;
-		max_retries: number;
 		model: string;
 		workspace_root: string;
 	};
@@ -85,7 +84,6 @@ const configSchema = z
 			.object({
 				polling_interval_ms: z.number().int().positive(),
 				max_concurrent: z.number().int().positive(),
-				max_retries: z.number().int().nonnegative(),
 				model: z.string().min(1),
 				workspace_root: z.string().min(1),
 			})

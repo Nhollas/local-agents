@@ -42,6 +42,19 @@ export function decorateTracker(inner: TrackerAdapter): TrackerAdapter {
 			}
 		},
 
+		async markFailed(repo, issueNumber) {
+			try {
+				await inner.markFailed(repo, issueNumber);
+				canonicalLog.append("state_transitions", { to: "failed" });
+			} catch (err) {
+				canonicalLog.append(
+					"warnings",
+					`mark_failed_failed: ${repo}#${issueNumber}`,
+				);
+				throw err;
+			}
+		},
+
 		parseIssueKey(key) {
 			return inner.parseIssueKey(key);
 		},

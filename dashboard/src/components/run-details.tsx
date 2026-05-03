@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRetryRun } from "../hooks/use-retry-run.ts";
 import { fetchRunDetail } from "../lib/api.ts";
 import { formatDuration } from "../lib/format.ts";
 import type { Run } from "../lib/types.ts";
@@ -15,7 +14,6 @@ export function RunDetails({ run, onBack }: Props) {
 		queryKey: ["runs", run.id],
 		queryFn: () => fetchRunDetail(run.id),
 	});
-	const retryMutation = useRetryRun({ onSuccess: onBack });
 	const events = detail?.events ?? [];
 
 	return (
@@ -31,19 +29,7 @@ export function RunDetails({ run, onBack }: Props) {
 			<div className="rounded-lg border border-border bg-surface-1 p-4 space-y-4">
 				<div className="flex items-center justify-between">
 					<h2 className="font-medium">{run.agentName}</h2>
-					<div className="flex items-center gap-2">
-						{run.status === "failed" && (
-							<button
-								type="button"
-								aria-label={`Retry run ${run.id}`}
-								onClick={() => retryMutation.mutate(run.id)}
-								className="px-2 py-0.5 rounded border border-warning-border bg-warning-muted text-warning text-xs hover:brightness-125 transition-all"
-							>
-								Retry
-							</button>
-						)}
-						<StatusBadge status={run.status} />
-					</div>
+					<StatusBadge status={run.status} />
 				</div>
 
 				<dl className="grid grid-cols-2 gap-2 text-sm">
@@ -59,12 +45,6 @@ export function RunDetails({ run, onBack }: Props) {
 					)}
 					<dt className="text-text-muted">Duration</dt>
 					<dd>{formatDuration(run.durationMs)}</dd>
-					{run.attempt != null && run.attempt > 1 && (
-						<>
-							<dt className="text-text-muted">Attempt</dt>
-							<dd>{run.attempt}</dd>
-						</>
-					)}
 				</dl>
 
 				{run.error && (

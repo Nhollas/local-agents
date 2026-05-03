@@ -1,6 +1,5 @@
 import {
 	index,
-	integer,
 	// biome-ignore lint/suspicious/noDeprecatedImports: only the variadic overload is deprecated; we use primaryKey({ columns }) below.
 	primaryKey,
 	real,
@@ -20,10 +19,6 @@ export const runs = sqliteTable("runs", {
 	startedAt: text("started_at").notNull(),
 	completedAt: text("completed_at"),
 	durationMs: real("duration_ms"),
-	sessionId: text("session_id"),
-	attempt: integer("attempt").notNull().default(1),
-	parentRunId: text("parent_run_id").$type<RunId>(),
-	stepIndex: integer("step_index").notNull().default(0),
 });
 
 export const runEvents = sqliteTable(
