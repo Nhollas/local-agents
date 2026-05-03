@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { eventBus, type RunEvent, type StepEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
-import { type IssueKey, type RunId, runId } from "../types/brands.ts";
+import {
+	type IssueKey,
+	type RepoSlug,
+	type RunId,
+	runId,
+} from "../types/brands.ts";
 import { createJobQueue, type JobQueue } from "./queue.ts";
 
 export const ABORT_ERROR = "Run killed by user";
@@ -19,6 +24,7 @@ export type RunContext = {
 
 export type AgentJob = {
 	name: string;
+	repo: RepoSlug;
 	issueKey: IssueKey;
 	issueTitle: string;
 	handler: (ctx: RunContext) => Promise<RunResult>;
@@ -107,6 +113,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		repo.insertRun({
 			id,
 			agentName: job.name,
+			repo: job.repo,
 			issueKey: job.issueKey,
 			issueTitle: job.issueTitle,
 			startedAt,

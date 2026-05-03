@@ -84,7 +84,10 @@ export function createInMemoryTracker(initial?: Issue): InMemoryTracker {
 			return issue;
 		},
 		async fetchActiveIssues() {
-			return issue ? [issue] : [];
+			return {
+				issues: issue ? [issue] : [],
+				reposReached: new Set([TEST_REPO]),
+			};
 		},
 		async transitionState(repo, number, from, to) {
 			const t: StateTransition = { repo, number, from, to };
@@ -95,7 +98,6 @@ export function createInMemoryTracker(initial?: Issue): InMemoryTracker {
 		parseIssueKey(key) {
 			const hashIndex = key.lastIndexOf("#");
 			return ok({
-				repo: repoSlug(key.slice(0, hashIndex)),
 				number: issueNumber(Number.parseInt(key.slice(hashIndex + 1), 10)),
 			});
 		},
@@ -131,6 +133,7 @@ export function createTestIssue(overrides: Partial<Issue> = {}): Issue {
 	return {
 		key: `${TEST_REPO}#1` as Issue["key"],
 		number: issueNumber(1),
+		repo: TEST_REPO,
 		title: "Fix login bug",
 		description: "Login throws on null email",
 		labels: ["bug"],

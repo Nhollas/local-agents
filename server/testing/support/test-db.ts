@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { Db } from "../../db/db.ts";
 import { migrate } from "../../db/migrate.ts";
 import { runEvents, runs } from "../../db/schema.ts";
-import { issueKey, runId } from "../../types/brands.ts";
+import { issueKey, repoSlug, runId } from "../../types/brands.ts";
 
 export function createTestDb(): Db {
 	const sqlite = new Database(":memory:");
@@ -16,9 +16,10 @@ export function createTestDb(): Db {
 
 type LooseRunInsert = Omit<
 	Partial<typeof runs.$inferInsert>,
-	"id" | "issueKey" | "parentRunId"
+	"id" | "repo" | "issueKey" | "parentRunId"
 > & {
 	id: string;
+	repo?: string;
 	issueKey?: string | null;
 	parentRunId?: string | null;
 };
@@ -30,7 +31,7 @@ const variantDefaultsByStatus = {
 } as const;
 
 export function seedRun(db: Db, overrides: LooseRunInsert) {
-	const { id, issueKey: keyStr, parentRunId, ...rest } = overrides;
+	const { id, repo, issueKey: keyStr, parentRunId, ...rest } = overrides;
 	const status = rest.status ?? "completed";
 	const now = new Date().toISOString();
 	const completedAt = status === "running" ? null : now;
@@ -44,6 +45,7 @@ export function seedRun(db: Db, overrides: LooseRunInsert) {
 			...rest,
 			status,
 			id: runId(id),
+			repo: repoSlug(repo ?? "test-owner/test-repo"),
 			...(keyStr != null && { issueKey: issueKey(keyStr) }),
 			...(parentRunId != null && { parentRunId: runId(parentRunId) }),
 		})

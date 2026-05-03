@@ -82,7 +82,9 @@ Slices 4 → 5 are also sequential. Slice 4's new pending filter (`trigger_label
 
 ## Slice 2 — `Issue.repo` and `TrackerAdapter` Shape
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (319 tests).
 
 **Purpose:** Lift the assumption that the orchestrator knows the repo before asking the tracker. Make `Issue` carry its resolved repo, and let adapters return all eligible issues in a single call rather than being asked per repo. This is a pure structural refactor — no user-visible behaviour change.
 

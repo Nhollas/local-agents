@@ -75,6 +75,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 		return runner.enqueue({
 			name: `issue-${issue.number}`,
+			repo,
 			issueKey: issue.key,
 			issueTitle: issue.title,
 			attempt,

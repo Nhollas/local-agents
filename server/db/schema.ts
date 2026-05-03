@@ -7,13 +7,14 @@ import {
 	sqliteTable,
 	text,
 } from "drizzle-orm/sqlite-core";
-import type { IssueKey, RunId } from "../types/brands.ts";
+import type { IssueKey, RepoSlug, RunId } from "../types/brands.ts";
 
 export const runs = sqliteTable("runs", {
 	id: text("id").primaryKey().$type<RunId>(),
 	agentName: text("agent_name").notNull(),
 	status: text("status").notNull().$type<RunStatus>(),
 	error: text("error"),
+	repo: text("repo").notNull().$type<RepoSlug>(),
 	issueKey: text("issue_key").$type<IssueKey>(),
 	issueTitle: text("issue_title"),
 	startedAt: text("started_at").notNull(),

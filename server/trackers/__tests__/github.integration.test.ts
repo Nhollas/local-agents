@@ -7,7 +7,7 @@ import {
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
-import { githubToken, issueNumber } from "../../types/brands.ts";
+import { githubToken, issueNumber, repoSlug } from "../../types/brands.ts";
 import { githubTrackerAdapter } from "../github.ts";
 
 describe("githubTrackerAdapter", () => {
@@ -29,13 +29,17 @@ describe("githubTrackerAdapter", () => {
 			);
 
 			const github = createGitHubClient(githubToken("test-token"));
-			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
+			const tracker = githubTrackerAdapter(github, {
+				repos: [REPO],
+				activeStates: ["open", "closed"],
+			});
 
-			const issues = await tracker.fetchActiveIssues(REPO, "pending");
+			const { issues } = await tracker.fetchActiveIssues("pending");
 			expect(issues).toEqual([
 				{
 					key: `${REPO}#10`,
 					number: 10,
+					repo: REPO,
 					title: "Issue 10",
 					description: "Description for issue 10",
 					labels: ["agent"],
@@ -66,13 +70,17 @@ describe("githubTrackerAdapter", () => {
 			);
 
 			const github = createGitHubClient(githubToken("test-token"));
-			const tracker = githubTrackerAdapter(github, ["open", "closed"]);
+			const tracker = githubTrackerAdapter(github, {
+				repos: [REPO],
+				activeStates: ["open", "closed"],
+			});
 
-			const issues = await tracker.fetchActiveIssues(REPO, "pending");
+			const { issues } = await tracker.fetchActiveIssues("pending");
 			expect(issues).toEqual([
 				{
 					key: `${REPO}#1`,
 					number: 1,
+					repo: REPO,
 					title: "Issue 1",
 					description: "Description for issue 1",
 					labels: ["agent"],
@@ -82,12 +90,39 @@ describe("githubTrackerAdapter", () => {
 				{
 					key: `${REPO}#2`,
 					number: 2,
+					repo: REPO,
 					title: "Issue 2",
 					description: "Description for issue 2",
 					labels: ["agent"],
 					url: `https://github.com/${REPO}/issues/2`,
 					createdAt: "2025-01-02T00:00:00Z",
 				},
+			]);
+		});
+
+		it("fetches across each configured repo and stamps each issue with its source repo", async () => {
+			const repoA = repoSlug("acme/widgets");
+			const repoB = repoSlug("acme/services");
+
+			server.use(
+				http.get(`${GITHUB_API}/user`, () =>
+					HttpResponse.json({ login: "test-user" }),
+				),
+				http.get(`${GITHUB_API}/repos/${repoA}/issues`, () =>
+					HttpResponse.json([createGitHubIssue(1, ["agent"])]),
+				),
+				http.get(`${GITHUB_API}/repos/${repoB}/issues`, () =>
+					HttpResponse.json([createGitHubIssue(2, ["agent"])]),
+				),
+			);
+
+			const github = createGitHubClient(githubToken("test-token"));
+			const tracker = githubTrackerAdapter(github, { repos: [repoA, repoB] });
+
+			const { issues } = await tracker.fetchActiveIssues("pending");
+			expect(issues.map((i) => ({ key: i.key, repo: i.repo }))).toEqual([
+				{ key: `${repoA}#1`, repo: repoA },
+				{ key: `${repoB}#2`, repo: repoB },
 			]);
 		});
 
@@ -107,13 +142,14 @@ describe("githubTrackerAdapter", () => {
 			);
 
 			const github = createGitHubClient(githubToken("test-token"));
-			const tracker = githubTrackerAdapter(github);
+			const tracker = githubTrackerAdapter(github, { repos: [REPO] });
 
-			const issues = await tracker.fetchActiveIssues(REPO, "pending");
+			const { issues } = await tracker.fetchActiveIssues("pending");
 			expect(issues).toEqual([
 				{
 					key: `${REPO}#5`,
 					number: 5,
+					repo: REPO,
 					title: "Issue 5",
 					description: "",
 					labels: ["agent"],
@@ -159,7 +195,7 @@ describe("githubTrackerAdapter", () => {
 			);
 
 			const github = createGitHubClient(githubToken("test-token"));
-			const tracker = githubTrackerAdapter(github);
+			const tracker = githubTrackerAdapter(github, { repos: [REPO] });
 
 			await expect(
 				tracker.transitionState(
@@ -173,14 +209,13 @@ describe("githubTrackerAdapter", () => {
 	});
 
 	describe("parseIssueKey", () => {
-		it("parses GitHub issue keys", () => {
+		it("parses GitHub issue keys to an issue number", () => {
 			const github = createGitHubClient(githubToken("test-token"));
-			const tracker = githubTrackerAdapter(github);
+			const tracker = githubTrackerAdapter(github, { repos: [REPO] });
 
 			expect(tracker.parseIssueKey("owner/repo#42")).toEqual({
 				ok: true,
 				value: {
-					repo: "owner/repo",
 					number: 42,
 				},
 			});
@@ -188,7 +223,7 @@ describe("githubTrackerAdapter", () => {
 
 		it("returns Err for malformed GitHub issue keys", () => {
 			const github = createGitHubClient(githubToken("test-token"));
-			const tracker = githubTrackerAdapter(github);
+			const tracker = githubTrackerAdapter(github, { repos: [REPO] });
 
 			expect(tracker.parseIssueKey("owner/repo")).toEqual({
 				ok: false,

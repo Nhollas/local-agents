@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runStepOutputs, runs } from "../db/schema.ts";
 import { createRunRepository } from "../run-repository.ts";
 import { createTestDb } from "../testing/support/test-db.ts";
-import { issueKey, runId } from "../types/brands.ts";
+import { issueKey, repoSlug, runId } from "../types/brands.ts";
 
 describe("run repository row projection", () => {
 	it("throws when a completed row is missing completedAt", () => {
@@ -13,6 +13,7 @@ describe("run repository row projection", () => {
 				id: runId("bad-completed"),
 				agentName: "agent",
 				status: "completed",
+				repo: repoSlug("acme/widgets"),
 				startedAt: "2025-01-01T00:00:00Z",
 				durationMs: 100,
 			})
@@ -31,6 +32,7 @@ describe("run repository row projection", () => {
 				id: runId("bad-failed"),
 				agentName: "agent",
 				status: "failed",
+				repo: repoSlug("acme/widgets"),
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: "2025-01-01T00:00:01Z",
 			})
@@ -49,7 +51,8 @@ describe("run repository row projection", () => {
 				id: runId("failed-1"),
 				agentName: "agent",
 				status: "failed",
-				issueKey: issueKey("owner/repo#1"),
+				repo: repoSlug("acme/widgets"),
+				issueKey: issueKey("acme/widgets#1"),
 				issueTitle: "boom",
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: "2025-01-01T00:00:02Z",
@@ -63,7 +66,8 @@ describe("run repository row projection", () => {
 			id: "failed-1",
 			agentName: "agent",
 			status: "failed",
-			issueKey: "owner/repo#1",
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#1",
 			issueTitle: "boom",
 			startedAt: "2025-01-01T00:00:00Z",
 			completedAt: "2025-01-01T00:00:02Z",

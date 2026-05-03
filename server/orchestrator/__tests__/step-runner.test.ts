@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { StepEvent } from "../../event-bus.ts";
 import type { RunContext } from "../../runner/runner.ts";
 import type { Issue } from "../../trackers/types.ts";
-import { issueKey, issueNumber, runId } from "../../types/brands.ts";
+import { issueKey, issueNumber, repoSlug, runId } from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 import type {
 	AgentInvokeOptions,
@@ -14,6 +14,7 @@ import { runWorkflowSteps } from "../step-runner.ts";
 const issue: Issue = {
 	key: issueKey("owner/repo#1"),
 	number: issueNumber(1),
+	repo: repoSlug("owner/repo"),
 	title: "Fix it",
 	description: "",
 	labels: [],

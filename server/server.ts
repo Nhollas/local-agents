@@ -32,7 +32,7 @@ migrate(db);
 const github = createGitHubClient(env.GITHUB_TOKEN ?? githubToken(""));
 let tracker: TrackerAdapter;
 if (config.tracker.kind === "github") {
-	tracker = githubTrackerAdapter(github);
+	tracker = githubTrackerAdapter(github, { repos: config.code_host.repos });
 } else {
 	const jiraRepo = config.code_host.repos[0];
 	if (!jiraRepo) {
