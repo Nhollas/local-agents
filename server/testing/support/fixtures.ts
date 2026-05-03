@@ -56,6 +56,7 @@ export function createJiraIssue(
 	key: string,
 	status = "To Do",
 	created = "2025-01-01T00:00:00.000+0000",
+	labels: string[] = [],
 ) {
 	return {
 		key,
@@ -72,6 +73,7 @@ export function createJiraIssue(
 				],
 			},
 			created,
+			labels,
 			status: { name: status },
 		},
 	};

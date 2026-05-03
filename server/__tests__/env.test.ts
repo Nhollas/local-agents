@@ -10,7 +10,7 @@ function gitlabConfig(): Pick<Config, "tracker" | "code_host"> {
 		tracker: { kind: "github" },
 		code_host: {
 			kind: "gitlab",
-			repos: [repoSlug("group/project")],
+			scopes: [repoSlug("group/project")],
 			base_url: "https://gitlab.com",
 		},
 	};
@@ -30,7 +30,7 @@ function jiraConfig(): Pick<Config, "tracker" | "code_host"> {
 		},
 		code_host: {
 			kind: "gitlab",
-			repos: [repoSlug("group/project")],
+			scopes: [repoSlug("group/project")],
 			base_url: "https://gitlab.com",
 		},
 	};

@@ -124,7 +124,9 @@ Slices 4 → 5 are also sequential. Slice 4's new pending filter (`trigger_label
 
 ## Slice 3 — Scope-Based Config and Jira Label Resolution
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (323 tests).
 
 **Purpose:** Make the user-visible feature land. Replace `code_host.repos[]` with `code_host.scopes[]`, drop the 1-repo-per-Jira-project constraint, and have the Jira tracker resolve each issue's target repo from a `repo:<path>` label. Out-of-scope labels are silently ignored.
 

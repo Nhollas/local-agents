@@ -12,7 +12,7 @@ tracker:
 code_host:
   kind: gitlab
   base_url: https://gitlab.com
-  repos:
+  scopes:
     - todo
 
 defaults:

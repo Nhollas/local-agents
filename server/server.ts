@@ -18,7 +18,7 @@ import { githubTrackerAdapter } from "./trackers/github.ts";
 import { jiraTrackerAdapter } from "./trackers/jira.ts";
 import type { TrackerAdapter } from "./trackers/types.ts";
 import { githubToken } from "./types/brands.ts";
-import { createWorkflowMap, loadWorkflow } from "./workflow/workflow-loader.ts";
+import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
 const baseEnv = loadEnv();
 const config = loadConfig(baseEnv.CONFIG_PATH);
@@ -32,12 +32,8 @@ migrate(db);
 const github = createGitHubClient(env.GITHUB_TOKEN ?? githubToken(""));
 let tracker: TrackerAdapter;
 if (config.tracker.kind === "github") {
-	tracker = githubTrackerAdapter(github, { repos: config.code_host.repos });
+	tracker = githubTrackerAdapter(github, { repos: config.code_host.scopes });
 } else {
-	const jiraRepo = config.code_host.repos[0];
-	if (!jiraRepo) {
-		throw new Error("Jira tracker requires exactly one code_host.repos entry");
-	}
 	if (!env.JIRA_EMAIL || !env.JIRA_API_TOKEN) {
 		throw new Error("JIRA_EMAIL and JIRA_API_TOKEN are required for Jira");
 	}
@@ -48,7 +44,7 @@ if (config.tracker.kind === "github") {
 	});
 	tracker = jiraTrackerAdapter(jira, {
 		project: config.tracker.project,
-		repo: jiraRepo,
+		scopes: config.code_host.scopes,
 		baseUrl: config.tracker.base_url,
 		statuses: config.tracker.statuses,
 		...(config.tracker.labels && { labels: config.tracker.labels }),
@@ -77,16 +73,14 @@ const runner = createRunner({
 	maxConcurrency: config.defaults.max_concurrent,
 });
 
-// Load the global workflow once at startup.
 const workflow = loadWorkflow();
-const workflows = createWorkflowMap(config.code_host.repos, workflow);
 
 const orchestrator = createOrchestrator({
 	runRepo: repo,
 	tracker,
 	codeHost,
 	config,
-	workflows,
+	workflow,
 	runner,
 });
 
@@ -125,8 +119,7 @@ const httpServer = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 		{
 			port: info.port,
 			codeHost: config.code_host.kind,
-			repos: config.code_host.repos,
-			activeRepos: [...workflows.keys()],
+			scopes: config.code_host.scopes,
 			interval: config.defaults.polling_interval_ms,
 		},
 		"orchestrator.started",

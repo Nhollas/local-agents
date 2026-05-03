@@ -8,7 +8,13 @@ import {
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
-import { issueNumber, jiraApiToken, jiraEmail } from "../../types/brands.ts";
+import {
+	issueNumber,
+	jiraApiToken,
+	jiraEmail,
+	type RepoSlug,
+	repoSlug,
+} from "../../types/brands.ts";
 import { jiraTrackerAdapter } from "../jira.ts";
 
 const statuses = {
@@ -17,7 +23,7 @@ const statuses = {
 	awaiting_review: "In Review",
 } as const;
 
-function createTracker() {
+function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
 	return jiraTrackerAdapter(
 		createJiraClient({
 			baseUrl: JIRA_BASE_URL,
@@ -27,7 +33,7 @@ function createTracker() {
 		}),
 		{
 			project: "PROJ",
-			repo: REPO,
+			scopes,
 			baseUrl: JIRA_BASE_URL,
 			statuses,
 		},
@@ -59,7 +65,7 @@ describe("jiraTrackerAdapter", () => {
 				repo: REPO,
 				title: "Issue PROJ-42",
 				description: "Description for PROJ-42",
-				labels: ["To Do"],
+				labels: [],
 				url: `${JIRA_BASE_URL}/browse/PROJ-42`,
 				createdAt: "2025-01-01T00:00:00.000+0000",
 			});
@@ -125,7 +131,13 @@ describe("jiraTrackerAdapter", () => {
 
 	describe("fetchActiveIssues", () => {
 		it("builds safe JQL for the configured project and logical status", async () => {
-			const expectedFields = ["summary", "description", "status", "created"];
+			const expectedFields = [
+				"summary",
+				"description",
+				"status",
+				"created",
+				"labels",
+			];
 
 			server.use(
 				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
@@ -139,7 +151,9 @@ describe("jiraTrackerAdapter", () => {
 						return new HttpResponse(null, { status: 400 });
 					}
 					return HttpResponse.json({
-						issues: [createJiraIssue("PROJ-1", "To Do")],
+						issues: [
+							createJiraIssue("PROJ-1", "To Do", undefined, [`repo:${REPO}`]),
+						],
 					});
 				}),
 			);
@@ -151,42 +165,118 @@ describe("jiraTrackerAdapter", () => {
 			expect(issues.map((issue) => issue.repo)).toEqual([REPO]);
 		});
 
-		it("adds a labels clause to the JQL when labels are configured", async () => {
+		it("maps Issue.labels from fields.labels, not the status name", async () => {
 			server.use(
-				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
-					const body = (await request.json()) as { jql?: string };
-					if (
-						body.jql !==
-						'project = "PROJ" AND status = "To Do" AND labels in ("software-factory-poc", "needs-triage") ORDER BY created ASC'
-					) {
-						return new HttpResponse(null, { status: 400 });
-					}
-					return HttpResponse.json({
-						issues: [createJiraIssue("PROJ-1", "To Do")],
-					});
-				}),
+				http.post(`${JIRA_API}/search/jql`, () =>
+					HttpResponse.json({
+						issues: [
+							createJiraIssue("PROJ-2", "To Do", undefined, [
+								`repo:${REPO}`,
+								"needs-triage",
+							]),
+						],
+					}),
+				),
 			);
 
-			const tracker = jiraTrackerAdapter(
-				createJiraClient({
-					baseUrl: JIRA_BASE_URL,
-					email: jiraEmail("agent@example.test"),
-					apiToken: jiraApiToken("jira-token"),
-					maxAttempts: 1,
-				}),
-				{
-					project: "PROJ",
-					repo: REPO,
-					baseUrl: JIRA_BASE_URL,
-					statuses,
-					labels: ["software-factory-poc", "needs-triage"],
-				},
-			);
-
+			const tracker = createTracker();
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
-			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
-			expect(issues.map((issue) => issue.repo)).toEqual([REPO]);
+			expect(issues).toHaveLength(1);
+			expect(issues[0]?.labels).toEqual([`repo:${REPO}`, "needs-triage"]);
+		});
+
+		it("dispatches when an issue has a single matching repo: label", async () => {
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, () =>
+					HttpResponse.json({
+						issues: [
+							createJiraIssue("PROJ-3", "To Do", undefined, [`repo:${REPO}`]),
+						],
+					}),
+				),
+			);
+
+			const tracker = createTracker();
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(issues.map((i) => i.key)).toEqual(["PROJ-3"]);
+			expect(issues.map((i) => i.repo)).toEqual([REPO]);
+		});
+
+		it("drops issues with no repo: label", async () => {
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, () =>
+					HttpResponse.json({
+						issues: [createJiraIssue("PROJ-4", "To Do", undefined, [])],
+					}),
+				),
+			);
+
+			const tracker = createTracker();
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(issues).toEqual([]);
+		});
+
+		it("drops issues whose repo: label does not resolve against any scope", async () => {
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, () =>
+					HttpResponse.json({
+						issues: [
+							createJiraIssue("PROJ-5", "To Do", undefined, [
+								"repo:other-org/somewhere-else",
+							]),
+						],
+					}),
+				),
+			);
+
+			const tracker = createTracker();
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(issues).toEqual([]);
+		});
+
+		it("drops issues with multiple repo: labels", async () => {
+			const REPO_B = repoSlug("test-owner/repo-b");
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, () =>
+					HttpResponse.json({
+						issues: [
+							createJiraIssue("PROJ-6", "To Do", undefined, [
+								`repo:${REPO}`,
+								`repo:${REPO_B}`,
+							]),
+						],
+					}),
+				),
+			);
+
+			const tracker = createTracker([REPO, REPO_B]);
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(issues).toEqual([]);
+		});
+
+		it("resolves a repo: label that descends from a group-prefix scope to its full path", async () => {
+			const childRepo = repoSlug("test-owner/playground/child");
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, () =>
+					HttpResponse.json({
+						issues: [
+							createJiraIssue("PROJ-7", "To Do", undefined, [
+								`repo:${childRepo}`,
+							]),
+						],
+					}),
+				),
+			);
+
+			const tracker = createTracker([repoSlug("test-owner")]);
+			const { issues } = await tracker.fetchActiveIssues("pending");
+
+			expect(issues.map((i) => i.repo)).toEqual([childRepo]);
 		});
 
 		it("escapes quotes and backslashes in custom status names", async () => {
@@ -212,7 +302,7 @@ describe("jiraTrackerAdapter", () => {
 				}),
 				{
 					project: "PROJ",
-					repo: REPO,
+					scopes: [REPO],
 					baseUrl: JIRA_BASE_URL,
 					statuses: {
 						...statuses,
