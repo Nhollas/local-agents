@@ -2,6 +2,7 @@ tracker:
   kind: jira
   base_url: todo
   project: AIENG
+  trigger_label: local-agents
   statuses:
     pending: "To Do"
     running: "In Progress"

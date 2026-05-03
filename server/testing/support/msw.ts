@@ -35,8 +35,21 @@ export function githubHandlers({
 		}),
 		http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
 			const url = new URL(request.url);
-			const label = url.searchParams.get("labels");
-			return HttpResponse.json(label ? resolve(label) : []);
+			const labels = (url.searchParams.get("labels") ?? "")
+				.split(",")
+				.filter(Boolean);
+			const stateLabel = labels.find((l) => l !== "agent");
+			if (stateLabel) {
+				return HttpResponse.json(resolve(stateLabel));
+			}
+			return HttpResponse.json(
+				labels.includes("agent") ? resolve("agent") : [],
+			);
+		}),
+		http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+			const q = new URL(request.url).searchParams.get("q") ?? "";
+			if (!q.includes("label:agent")) return HttpResponse.json({ items: [] });
+			return HttpResponse.json({ items: resolve("agent") });
 		}),
 		http.delete<{ label: string }>(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,

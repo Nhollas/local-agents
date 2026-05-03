@@ -34,6 +34,7 @@ describe("loadConfig", () => {
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: github
   scopes:
@@ -50,6 +51,7 @@ ${fullDefaults}`);
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: gitlab
   base_url: https://gitlab.example.test
@@ -70,6 +72,7 @@ ${fullDefaults}`);
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: gitlab
   scopes:
@@ -85,6 +88,7 @@ tracker:
   kind: jira
   base_url: https://jira.example.test
   project: PROJ
+  trigger_label: agent
 code_host:
   kind: gitlab
   base_url: https://gitlab.example.test
@@ -101,6 +105,7 @@ tracker:
   kind: jira
   base_url: https://jira.example.test
   project: PROJ
+  trigger_label: agent
   statuses:
     pending: Backlog
     running: Doing
@@ -117,6 +122,7 @@ ${fullDefaults}`);
 			kind: "jira",
 			base_url: "https://jira.example.test",
 			project: "PROJ",
+			trigger_label: "agent",
 			statuses: {
 				pending: "Backlog",
 				running: "Doing",
@@ -131,6 +137,7 @@ tracker:
   kind: jira
   base_url: https://jira.example.test
   project: PROJ
+  trigger_label: agent
   statuses:
     pending: To Do
     running: In Progress
@@ -149,6 +156,7 @@ tracker:
   kind: jira
   base_url: https://jira.example.test
   project: PROJ
+  trigger_label: agent
   statuses:
     pending: To Do
     running: In Progress
@@ -169,6 +177,7 @@ ${fullDefaults}`);
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: github
 ${fullDefaults}`);
@@ -180,6 +189,7 @@ ${fullDefaults}`);
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: github
   scopes:
@@ -193,6 +203,7 @@ code_host:
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: github
   scopes:
@@ -208,6 +219,7 @@ ${fullDefaults}`);
 		using configFile = writeConfig(`
 tracker:
   kind: github
+  trigger_label: agent
 code_host:
   kind: github
   repos:
@@ -215,5 +227,56 @@ code_host:
 ${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
+	});
+
+	it("rejects github tracker without trigger_label", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: github
+code_host:
+  kind: github
+  scopes:
+    - owner/repo
+${fullDefaults}`);
+
+		expect(() => loadConfig(configFile.path)).toThrow();
+	});
+
+	it("rejects jira tracker without trigger_label", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: jira
+  base_url: https://jira.example.test
+  project: PROJ
+  statuses:
+    pending: To Do
+    running: In Progress
+    awaiting_review: In Review
+code_host:
+  kind: github
+  scopes:
+    - owner/repo
+${fullDefaults}`);
+
+		expect(() => loadConfig(configFile.path)).toThrow();
+	});
+
+	it("exposes trigger_label on the github tracker variant", () => {
+		using configFile = writeConfig(`
+tracker:
+  kind: github
+  trigger_label: local-agents
+code_host:
+  kind: github
+  scopes:
+    - owner/repo
+${fullDefaults}`);
+
+		const config = loadConfig(configFile.path);
+
+		expect(config.tracker).toEqual({
+			kind: "github",
+			trigger_label: "local-agents",
+		});
 	});
 });

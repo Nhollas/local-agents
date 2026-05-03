@@ -36,6 +36,7 @@ function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
 			scopes,
 			baseUrl: JIRA_BASE_URL,
 			statuses,
+			triggerLabel: "agent",
 		},
 	);
 }
@@ -130,7 +131,7 @@ describe("jiraTrackerAdapter", () => {
 	});
 
 	describe("fetchActiveIssues", () => {
-		it("builds safe JQL for the configured project and logical status", async () => {
+		it("builds JQL constrained by project, status, trigger label, and the authenticated reporter", async () => {
 			const expectedFields = [
 				"summary",
 				"description",
@@ -144,7 +145,7 @@ describe("jiraTrackerAdapter", () => {
 					const body = (await request.json()) as Record<string, unknown>;
 					if (
 						body["jql"] !==
-							'project = "PROJ" AND status = "To Do" ORDER BY created ASC' ||
+							'project = "PROJ" AND status = "To Do" AND labels = "agent" AND reporter = currentUser() ORDER BY created ASC' ||
 						body["maxResults"] !== 100 ||
 						JSON.stringify(body["fields"]) !== JSON.stringify(expectedFields)
 					) {
@@ -163,6 +164,38 @@ describe("jiraTrackerAdapter", () => {
 
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
 			expect(issues.map((issue) => issue.repo)).toEqual([REPO]);
+		});
+
+		it("interpolates a custom trigger label into the JQL labels clause", async () => {
+			let capturedJql = "";
+			server.use(
+				http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+					const body = (await request.json()) as Record<string, unknown>;
+					capturedJql = String(body["jql"]);
+					return HttpResponse.json({ issues: [] });
+				}),
+			);
+
+			const tracker = jiraTrackerAdapter(
+				createJiraClient({
+					baseUrl: JIRA_BASE_URL,
+					email: jiraEmail("agent@example.test"),
+					apiToken: jiraApiToken("jira-token"),
+					maxAttempts: 1,
+				}),
+				{
+					project: "PROJ",
+					scopes: [REPO],
+					baseUrl: JIRA_BASE_URL,
+					statuses,
+					triggerLabel: "local-agents",
+				},
+			);
+			await tracker.fetchActiveIssues("pending");
+
+			expect(capturedJql).toBe(
+				'project = "PROJ" AND status = "To Do" AND labels = "local-agents" AND reporter = currentUser() ORDER BY created ASC',
+			);
 		});
 
 		it("maps Issue.labels from fields.labels, not the status name", async () => {
@@ -285,7 +318,7 @@ describe("jiraTrackerAdapter", () => {
 					const body = (await request.json()) as { jql?: string };
 					if (
 						body.jql !==
-						'project = "PROJ" AND status = "Ready \\"Now\\" \\\\ Backlog" ORDER BY created ASC'
+						'project = "PROJ" AND status = "Ready \\"Now\\" \\\\ Backlog" AND labels = "agent" AND reporter = currentUser() ORDER BY created ASC'
 					) {
 						return new HttpResponse(null, { status: 400 });
 					}
@@ -308,6 +341,7 @@ describe("jiraTrackerAdapter", () => {
 						...statuses,
 						pending: 'Ready "Now" \\ Backlog',
 					},
+					triggerLabel: "agent",
 				},
 			);
 

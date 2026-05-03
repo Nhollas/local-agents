@@ -138,20 +138,20 @@ describe("Orchestrator reconciliation", () => {
 	});
 
 	it("fetches running issues even with no running DB records to detect orphans", async () => {
-		let fetchCallCount = 0;
+		let pendingFetches = 0;
+		let runningFetches = 0;
 
 		server.use(
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
+			http.get(`${GITHUB_API}/search/issues`, () => {
+				pendingFetches++;
+				return HttpResponse.json({ items: [] });
+			}),
 			http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
-				const url = new URL(request.url);
-				const label = url.searchParams.get("labels");
-				fetchCallCount++;
-				if (label === "agent") return HttpResponse.json([]);
-				// If this is called with agent:running and there are no running agents,
-				// that means we made an unnecessary fetch
-				if (label === "agent:running") return HttpResponse.json([]);
+				const labels = new URL(request.url).searchParams.get("labels") ?? "";
+				if (labels.includes("agent:running")) runningFetches++;
 				return HttpResponse.json([]);
 			}),
 		);
@@ -161,11 +161,10 @@ describe("Orchestrator reconciliation", () => {
 		});
 		const { orchestrator } = ctx;
 
-		// No running agents — tick should still fetch running issues to detect orphans
 		await orchestrator.tick();
 
-		// Should have fetched both pending and running issues
-		expect(fetchCallCount).toBe(2);
+		expect(pendingFetches).toBe(1);
+		expect(runningFetches).toBe(1);
 	});
 
 	it("handles fetch failure gracefully during reconciliation", async () => {
@@ -176,11 +175,12 @@ describe("Orchestrator reconciliation", () => {
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
+			http.get(`${GITHUB_API}/search/issues`, () =>
+				HttpResponse.json({ items: pendingIssues }),
+			),
 			http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
-				const url = new URL(request.url);
-				const label = url.searchParams.get("labels");
-				if (label === "agent") return HttpResponse.json(pendingIssues);
-				if (label === "agent:running") {
+				const labels = new URL(request.url).searchParams.get("labels") ?? "";
+				if (labels.includes("agent:running")) {
 					if (failRunningFetch) {
 						return new HttpResponse(null, { status: 500 });
 					}
@@ -393,27 +393,23 @@ describe("Orchestrator reconciliation", () => {
 		expect(runsAfterSecondTick).toEqual(allRuns);
 	});
 
-	it("rolls back orphan label when GitHub still says agent:running but DB has no running run", async () => {
+	it("rolls back the running state label when GitHub still says agent:running but DB has no running run, leaving the trigger label intact", async () => {
 		const recoveryDelete = http.delete(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent:running`,
 			() => new HttpResponse(null, { status: 204 }),
 			{ once: true },
 		);
-		const recoveryPost = http.post(
+		const triggerLabelMutation = http.post(
 			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
-			async ({ request }) => {
-				const body = (await request.json()) as { labels: string[] };
-				if (body.labels[0] !== "agent") {
-					return new HttpResponse(null, { status: 400 });
-				}
-				return HttpResponse.json([]);
-			},
-			{ once: true },
+			() =>
+				new HttpResponse("trigger label must not be mutated", {
+					status: 500,
+				}),
 		);
 
 		server.use(
 			recoveryDelete,
-			recoveryPost,
+			triggerLabelMutation,
 			...githubHandlers({
 				resolveIssues: (label) => {
 					if (label === "agent:running")
@@ -446,6 +442,6 @@ describe("Orchestrator reconciliation", () => {
 		await orchestrator.settled();
 
 		expect(recoveryDelete.isUsed).toBe(true);
-		expect(recoveryPost.isUsed).toBe(true);
+		expect(triggerLabelMutation.isUsed).toBe(false);
 	});
 });

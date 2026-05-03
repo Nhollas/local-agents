@@ -13,6 +13,7 @@ type JiraTrackerOptions = {
 	scopes: readonly RepoSlug[];
 	baseUrl: string;
 	statuses: JiraStatuses;
+	triggerLabel: string;
 };
 
 const REPO_LABEL_PREFIX = "repo:";
@@ -122,6 +123,8 @@ export function jiraTrackerAdapter(
 			const clauses = [
 				`project = ${quoteJqlString(options.project)}`,
 				`status = ${quoteJqlString(options.statuses[state])}`,
+				`labels = ${quoteJqlString(options.triggerLabel)}`,
+				"reporter = currentUser()",
 			];
 			const jql = `${clauses.join(" AND ")} ORDER BY created ASC`;
 			const raw = await client.searchIssues({ jql, maxResults: 100 });
