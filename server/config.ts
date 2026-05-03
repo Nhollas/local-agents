@@ -7,11 +7,13 @@ export type Config = {
 	tracker:
 		| {
 				kind: "github";
+				trigger_label: string;
 		  }
 		| {
 				kind: "jira";
 				base_url: string;
 				project: string;
+				trigger_label: string;
 				statuses: {
 					pending: string;
 					running: string;
@@ -45,6 +47,7 @@ const configSchema = z
 			z
 				.object({
 					kind: z.literal("github"),
+					trigger_label: z.string().min(1),
 				})
 				.strict(),
 			z
@@ -52,6 +55,7 @@ const configSchema = z
 					kind: z.literal("jira"),
 					base_url: z.url(),
 					project: z.string().min(1),
+					trigger_label: z.string().min(1),
 					statuses: z
 						.object({
 							pending: z.string().min(1),

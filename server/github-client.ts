@@ -59,6 +59,7 @@ export type GitHubClient = {
 			per_page: string;
 		},
 	): Promise<GitHubIssue[]>;
+	searchIssues(query: string): Promise<GitHubIssue[]>;
 	removeIssueLabel(
 		repo: RepoSlug,
 		issueNumber: IssueNumber,
@@ -125,6 +126,14 @@ export function createGitHubClient(
 			return request(`/repos/${repo}/issues?${query}`, {
 				schema: z.array(githubIssueSchema),
 			});
+		},
+
+		async searchIssues(query) {
+			const params = new URLSearchParams({ q: query });
+			const result = await request(`/search/issues?${params}`, {
+				schema: z.object({ items: z.array(githubIssueSchema) }),
+			});
+			return result.items;
 		},
 
 		removeIssueLabel(repo, issueNumber, label) {

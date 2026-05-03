@@ -188,8 +188,8 @@ describe("Orchestrator scheduling", () => {
 			}),
 		);
 		server.use(
-			http.delete(
-				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
+			http.post(
+				`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
 				() => new HttpResponse(null, { status: 500 }),
 			),
 		);

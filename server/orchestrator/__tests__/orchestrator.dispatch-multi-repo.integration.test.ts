@@ -47,17 +47,21 @@ describe("Orchestrator multi-repo scheduling", () => {
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
-			http.get(`${GITHUB_API}/repos/${REPO}/issues`, () => {
-				return new HttpResponse(null, { status: 500 });
-			}),
-			http.get(`${GITHUB_API}/repos/${REPO2}/issues`, ({ request }) => {
-				const url = new URL(request.url);
-				const label = url.searchParams.get("labels");
-				if (label === "agent") {
-					return HttpResponse.json([createGitHubIssue(10, ["agent"])]);
+			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+				const q = new URL(request.url).searchParams.get("q") ?? "";
+				if (q.includes(`repo:${REPO} `)) {
+					return new HttpResponse(null, { status: 500 });
 				}
-				return HttpResponse.json([]);
+				if (q.includes(`repo:${REPO2} `)) {
+					return HttpResponse.json({
+						items: [createGitHubIssue(10, ["agent"])],
+					});
+				}
+				return HttpResponse.json({ items: [] });
 			}),
+			http.get(`${GITHUB_API}/repos/:owner/:repo/issues`, () =>
+				HttpResponse.json([]),
+			),
 			http.delete(
 				`${GITHUB_API}/repos/${REPO2}/issues/:number/labels/:label`,
 				() => new HttpResponse(null, { status: 204 }),
@@ -99,26 +103,23 @@ describe("Orchestrator multi-repo scheduling", () => {
 			http.get(`${GITHUB_API}/user`, () =>
 				HttpResponse.json({ login: "test-user" }),
 			),
-			http.get(`${GITHUB_API}/repos/${REPO}/issues`, ({ request }) => {
-				const url = new URL(request.url);
-				const label = url.searchParams.get("labels");
-				if (label === "agent") {
-					return HttpResponse.json([
-						createGitHubIssue(1, ["agent"], "2025-01-01T00:00:00Z"),
-					]);
+			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+				const q = new URL(request.url).searchParams.get("q") ?? "";
+				if (q.includes(`repo:${REPO} `)) {
+					return HttpResponse.json({
+						items: [createGitHubIssue(1, ["agent"], "2025-01-01T00:00:00Z")],
+					});
 				}
-				return HttpResponse.json([]);
-			}),
-			http.get(`${GITHUB_API}/repos/${REPO2}/issues`, ({ request }) => {
-				const url = new URL(request.url);
-				const label = url.searchParams.get("labels");
-				if (label === "agent") {
-					return HttpResponse.json([
-						createGitHubIssue(2, ["agent"], "2025-01-02T00:00:00Z"),
-					]);
+				if (q.includes(`repo:${REPO2} `)) {
+					return HttpResponse.json({
+						items: [createGitHubIssue(2, ["agent"], "2025-01-02T00:00:00Z")],
+					});
 				}
-				return HttpResponse.json([]);
+				return HttpResponse.json({ items: [] });
 			}),
+			http.get(`${GITHUB_API}/repos/:owner/:repo/issues`, () =>
+				HttpResponse.json([]),
+			),
 			http.delete(
 				`${GITHUB_API}/repos/:owner/:repo/issues/:number/labels/:label`,
 				() => new HttpResponse(null, { status: 204 }),

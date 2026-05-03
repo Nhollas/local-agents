@@ -80,7 +80,13 @@ describe("Orchestrator Jira dispatch", () => {
 				apiToken: jiraApiToken("jira-token"),
 				maxAttempts: 1,
 			}),
-			{ project: "PROJ", scopes: [REPO], baseUrl: JIRA_BASE_URL, statuses },
+			{
+				project: "PROJ",
+				scopes: [REPO],
+				baseUrl: JIRA_BASE_URL,
+				statuses,
+				triggerLabel: "agent",
+			},
 		);
 
 		// Strict codeHost stub: returns success only when called against the

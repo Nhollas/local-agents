@@ -47,7 +47,10 @@ export async function createTestOrchestrator(
 
 	const defaultCodeHost = githubCodeHostAdapter(github);
 	const trackerRepos = options.trackerRepos ?? [REPO];
-	const defaultTracker = githubTrackerAdapter(github, { repos: trackerRepos });
+	const defaultTracker = githubTrackerAdapter(github, {
+		repos: trackerRepos,
+		triggerLabel: "agent",
+	});
 
 	const agent = options.agent ?? adaptRunAgent(options.runAgent ?? noopAgent);
 

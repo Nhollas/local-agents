@@ -169,7 +169,9 @@ Slices 4 → 5 are also sequential. Slice 4's new pending filter (`trigger_label
 
 ## Slice 4 — Trigger Label, Lifecycle Separation, and Reporter Parity
 
-**Status:** Not started
+**Status:** Ready for review
+
+**Verification:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (330 tests).
 
 **Purpose:** Establish a clean, symmetric model for issue eligibility and lifecycle state across both trackers. The trigger label is a pure marker that humans apply and remove; the orchestrator never mutates it. Lifecycle state lives in a separate mechanism per tracker (state labels on GitHub, status transitions on Jira). Bring Jira to parity with GitHub on creator/reporter filtering.
 

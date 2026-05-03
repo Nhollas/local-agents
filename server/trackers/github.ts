@@ -9,13 +9,8 @@ type IssueState = "open" | "closed" | "all";
 
 type GitHubTrackerOptions = {
 	repos: readonly RepoSlug[];
+	triggerLabel: string;
 	activeStates?: readonly IssueState[];
-};
-
-const LABELS: Record<TrackerState, string> = {
-	pending: "agent",
-	running: "agent:running",
-	awaiting_review: "agent:awaiting-review",
 };
 
 function mapGitHubIssue(repo: RepoSlug, i: GitHubIssue): Issue {
@@ -35,7 +30,11 @@ export function githubTrackerAdapter(
 	client: GitHubClient,
 	options: GitHubTrackerOptions,
 ): TrackerAdapter {
-	const { repos, activeStates = ["open"] as const } = options;
+	const { repos, triggerLabel, activeStates = ["open"] as const } = options;
+	const stateLabels: Record<Exclude<TrackerState, "pending">, string> = {
+		running: `${triggerLabel}:running`,
+		awaiting_review: `${triggerLabel}:awaiting-review`,
+	};
 
 	let usernamePromise: Promise<string> | undefined;
 	function getUsername(): Promise<string> {
@@ -43,33 +42,51 @@ export function githubTrackerAdapter(
 		return usernamePromise;
 	}
 
-	async function fetchForRepo(
+	async function fetchPending(repo: RepoSlug): Promise<Issue[]> {
+		const username = await getUsername();
+		const batches = await Promise.all(
+			activeStates.map((s) =>
+				client.searchIssues(
+					`repo:${repo} type:issue author:${username} state:${s} label:${triggerLabel} -label:${stateLabels.running} -label:${stateLabels.awaiting_review}`,
+				),
+			),
+		);
+		return dedupe(batches.flat()).map((i) => mapGitHubIssue(repo, i));
+	}
+
+	async function fetchByStateLabel(
 		repo: RepoSlug,
-		state: TrackerState,
+		stateLabel: string,
 	): Promise<Issue[]> {
 		const username = await getUsername();
-		const label = LABELS[state];
-
 		const batches = await Promise.all(
 			activeStates.map((s) =>
 				client.listIssues(repo, {
-					labels: label,
+					labels: `${triggerLabel},${stateLabel}`,
 					state: s,
 					creator: username,
 					per_page: "100",
 				}),
 			),
 		);
+		return dedupe(batches.flat()).map((i) => mapGitHubIssue(repo, i));
+	}
 
+	function dedupe(issues: GitHubIssue[]): GitHubIssue[] {
 		const seen = new Set<number>();
-		return batches
-			.flat()
-			.filter((i) => {
-				if (seen.has(i.number)) return false;
-				seen.add(i.number);
-				return true;
-			})
-			.map((i) => mapGitHubIssue(repo, i));
+		return issues.filter((i) => {
+			if (seen.has(i.number)) return false;
+			seen.add(i.number);
+			return true;
+		});
+	}
+
+	async function fetchForRepo(
+		repo: RepoSlug,
+		state: TrackerState,
+	): Promise<Issue[]> {
+		if (state === "pending") return fetchPending(repo);
+		return fetchByStateLabel(repo, stateLabels[state]);
 	}
 
 	return decorateTracker({
@@ -103,8 +120,12 @@ export function githubTrackerAdapter(
 
 		async transitionState(repo, issueNum, from, to): Promise<void> {
 			await Promise.all([
-				client.removeIssueLabel(repo, issueNum, LABELS[from]),
-				client.addIssueLabels(repo, issueNum, [LABELS[to]]),
+				from === "pending"
+					? Promise.resolve()
+					: client.removeIssueLabel(repo, issueNum, stateLabels[from]),
+				to === "pending"
+					? Promise.resolve()
+					: client.addIssueLabels(repo, issueNum, [stateLabels[to]]),
 			]);
 		},
 

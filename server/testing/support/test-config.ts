@@ -5,7 +5,7 @@ export function createTestConfig(
 	overrides: Partial<Config["defaults"]> = {},
 ): Config {
 	return {
-		tracker: { kind: "github" },
+		tracker: { kind: "github", trigger_label: "agent" },
 		code_host: {
 			kind: "github",
 			scopes: [repoSlug("test-owner/test-repo")],

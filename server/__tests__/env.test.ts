@@ -7,7 +7,7 @@ const originalEnv = process.env;
 
 function gitlabConfig(): Pick<Config, "tracker" | "code_host"> {
 	return {
-		tracker: { kind: "github" },
+		tracker: { kind: "github", trigger_label: "agent" },
 		code_host: {
 			kind: "gitlab",
 			scopes: [repoSlug("group/project")],
@@ -22,6 +22,7 @@ function jiraConfig(): Pick<Config, "tracker" | "code_host"> {
 			kind: "jira",
 			base_url: "https://jira.example.test",
 			project: "PROJ",
+			trigger_label: "agent",
 			statuses: {
 				pending: "To Do",
 				running: "In Progress",

@@ -99,6 +99,45 @@ describe("GitHub client retry", () => {
 		);
 	});
 
+	it("searchIssues GETs /search/issues with the q param and returns items[]", async () => {
+		server.use(
+			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
+				const url = new URL(request.url);
+				if (url.searchParams.get("q") !== "repo:owner/repo label:agent") {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json({
+					items: [
+						{
+							number: 7,
+							title: "Issue 7",
+							body: null,
+							labels: [{ name: "agent" }],
+							html_url: "https://github.com/owner/repo/issues/7",
+							created_at: "2025-02-01T00:00:00Z",
+						},
+					],
+				});
+			}),
+		);
+
+		const client = createGitHubClient(githubToken("test-token"), {
+			baseDelayMs: 1,
+		});
+		const issues = await client.searchIssues("repo:owner/repo label:agent");
+
+		expect(issues).toEqual([
+			{
+				number: 7,
+				title: "Issue 7",
+				body: null,
+				labels: [{ name: "agent" }],
+				html_url: "https://github.com/owner/repo/issues/7",
+				created_at: "2025-02-01T00:00:00Z",
+			},
+		]);
+	});
+
 	it("retries on network errors", async () => {
 		server.use(
 			http.get(`${GITHUB_API}/user`, function* () {
