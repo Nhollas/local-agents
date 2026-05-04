@@ -2,9 +2,7 @@ import "dotenv/config";
 import { z } from "zod";
 import type { Config } from "./config.ts";
 import {
-	type GitHubToken,
 	type GitLabToken,
-	githubToken,
 	gitlabToken,
 	type JiraApiToken,
 	type JiraEmail,
@@ -30,7 +28,6 @@ const envSchema = z.object({
 	CONFIG_PATH: z.string().min(1),
 	PORT: z.coerce.number().default(3000),
 	LOG_LEVEL: z.string().default("info"),
-	GITHUB_TOKEN: z.string().optional(),
 	GITLAB_TOKEN: z.string().optional(),
 	JIRA_EMAIL: z.string().optional(),
 	JIRA_API_TOKEN: z.string().optional(),
@@ -38,11 +35,7 @@ const envSchema = z.object({
 
 type RawEnv = z.infer<typeof envSchema>;
 
-type Env = Omit<
-	RawEnv,
-	"GITHUB_TOKEN" | "GITLAB_TOKEN" | "JIRA_EMAIL" | "JIRA_API_TOKEN"
-> & {
-	GITHUB_TOKEN?: GitHubToken;
+type Env = Omit<RawEnv, "GITLAB_TOKEN" | "JIRA_EMAIL" | "JIRA_API_TOKEN"> & {
 	GITLAB_TOKEN?: GitLabToken;
 	JIRA_EMAIL?: JiraEmail;
 	JIRA_API_TOKEN?: JiraApiToken;
@@ -58,11 +51,9 @@ function requireToken(env: RawEnv, name: keyof RawEnv) {
 }
 
 function brandEnv(env: RawEnv): Env {
-	const { GITHUB_TOKEN, GITLAB_TOKEN, JIRA_EMAIL, JIRA_API_TOKEN, ...rest } =
-		env;
+	const { GITLAB_TOKEN, JIRA_EMAIL, JIRA_API_TOKEN, ...rest } = env;
 	return {
 		...rest,
-		...(GITHUB_TOKEN != null && { GITHUB_TOKEN: githubToken(GITHUB_TOKEN) }),
 		...(GITLAB_TOKEN != null && { GITLAB_TOKEN: gitlabToken(GITLAB_TOKEN) }),
 		...(JIRA_EMAIL != null && { JIRA_EMAIL: jiraEmail(JIRA_EMAIL) }),
 		...(JIRA_API_TOKEN != null && {
@@ -73,13 +64,6 @@ function brandEnv(env: RawEnv): Env {
 
 export function loadEnv(config?: Pick<Config, "tracker" | "code_host">): Env {
 	const env = parseEnv(envSchema);
-
-	if (
-		config?.tracker.kind === "github" ||
-		config?.code_host.kind === "github"
-	) {
-		requireToken(env, "GITHUB_TOKEN");
-	}
 
 	if (config?.code_host.kind === "gitlab") {
 		requireToken(env, "GITLAB_TOKEN");

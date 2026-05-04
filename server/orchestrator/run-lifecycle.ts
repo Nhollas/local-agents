@@ -19,13 +19,13 @@ import {
 	runRepoSetup,
 } from "./workspace.ts";
 
-export type RunRequest = {
+type RunRequest = {
 	issue: Issue;
 	repo: RepoSlug;
 	workflow: RepoWorkflow;
 };
 
-export type RunLifecycle = {
+type RunLifecycle = {
 	dispatch(req: RunRequest): Promise<RunHandle>;
 };
 

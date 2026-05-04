@@ -28,30 +28,38 @@ const fullDefaults = `defaults:
   workspace_root: /tmp/workspaces
 `;
 
+const validJiraTracker = `tracker:
+  kind: jira
+  base_url: https://jira.example.test
+  project: PROJ
+  trigger_label: agent
+  statuses:
+    pending: To Do
+    running: In Progress
+    awaiting_review: In Review
+`;
+
+const validGitLabCodeHost = `code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.test
+  scopes:
+    - group/project
+`;
+
 describe("loadConfig", () => {
 	it("accepts scopes under code_host", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
-${fullDefaults}`);
+${validJiraTracker}${validGitLabCodeHost}${fullDefaults}`);
 
 		const config = loadConfig(configFile.path);
 
-		expect(config.code_host.scopes).toEqual(["owner/repo"]);
+		expect(config.code_host.scopes).toEqual(["group/project"]);
 		expect(config.defaults.workspace_root).toBe("/tmp/workspaces");
 	});
 
 	it("accepts gitlab code host with configured base URL", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
+${validJiraTracker}code_host:
   kind: gitlab
   base_url: https://gitlab.example.test
   scopes:
@@ -69,10 +77,7 @@ ${fullDefaults}`);
 
 	it("rejects gitlab code host without base_url", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
+${validJiraTracker}code_host:
   kind: gitlab
   scopes:
     - group/project
@@ -88,12 +93,7 @@ tracker:
   base_url: https://jira.example.test
   project: PROJ
   trigger_label: agent
-code_host:
-  kind: gitlab
-  base_url: https://gitlab.example.test
-  scopes:
-    - group/project
-${fullDefaults}`);
+${validGitLabCodeHost}${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
 	});
@@ -109,11 +109,7 @@ tracker:
     pending: Backlog
     running: Doing
     awaiting_review: Code Review
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
-${fullDefaults}`);
+${validGitLabCodeHost}${fullDefaults}`);
 
 		const config = loadConfig(configFile.path);
 
@@ -132,17 +128,9 @@ ${fullDefaults}`);
 
 	it("rejects jira tracker with zero code host scopes", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: jira
-  base_url: https://jira.example.test
-  project: PROJ
-  trigger_label: agent
-  statuses:
-    pending: To Do
-    running: In Progress
-    awaiting_review: In Review
-code_host:
-  kind: github
+${validJiraTracker}code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.test
   scopes: []
 ${fullDefaults}`);
 
@@ -151,34 +139,24 @@ ${fullDefaults}`);
 
 	it("accepts jira tracker with multiple code host scopes", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: jira
-  base_url: https://jira.example.test
-  project: PROJ
-  trigger_label: agent
-  statuses:
-    pending: To Do
-    running: In Progress
-    awaiting_review: In Review
-code_host:
-  kind: github
+${validJiraTracker}code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.test
   scopes:
-    - owner/repo-a
-    - owner/repo-b
+    - group/repo-a
+    - group/repo-b
 ${fullDefaults}`);
 
 		const config = loadConfig(configFile.path);
 
-		expect(config.code_host.scopes).toEqual(["owner/repo-a", "owner/repo-b"]);
+		expect(config.code_host.scopes).toEqual(["group/repo-a", "group/repo-b"]);
 	});
 
 	it("rejects config without code_host scopes", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
-  kind: github
+${validJiraTracker}code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.test
 ${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
@@ -186,29 +164,15 @@ ${fullDefaults}`);
 
 	it("rejects config without defaults block", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
-`);
+${validJiraTracker}${validGitLabCodeHost}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
 	});
 
 	it("rejects top-level repos", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
-repos:
-  - old-owner/old-repo
+${validJiraTracker}${validGitLabCodeHost}repos:
+  - old-group/old-repo
 ${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
@@ -216,26 +180,11 @@ ${fullDefaults}`);
 
 	it("rejects code_host.repos under the new schema", () => {
 		using configFile = writeConfig(`
-tracker:
-  kind: github
-  trigger_label: agent
-code_host:
-  kind: github
+${validJiraTracker}code_host:
+  kind: gitlab
+  base_url: https://gitlab.example.test
   repos:
-    - owner/repo
-${fullDefaults}`);
-
-		expect(() => loadConfig(configFile.path)).toThrow();
-	});
-
-	it("rejects github tracker without trigger_label", () => {
-		using configFile = writeConfig(`
-tracker:
-  kind: github
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
+    - group/project
 ${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
@@ -251,31 +200,36 @@ tracker:
     pending: To Do
     running: In Progress
     awaiting_review: In Review
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
-${fullDefaults}`);
+${validGitLabCodeHost}${fullDefaults}`);
 
 		expect(() => loadConfig(configFile.path)).toThrow();
 	});
 
-	it("exposes trigger_label on the github tracker variant", () => {
+	it("exposes trigger_label on the jira tracker variant", () => {
 		using configFile = writeConfig(`
 tracker:
-  kind: github
+  kind: jira
+  base_url: https://jira.example.test
+  project: PROJ
   trigger_label: local-agents
-code_host:
-  kind: github
-  scopes:
-    - owner/repo
-${fullDefaults}`);
+  statuses:
+    pending: To Do
+    running: In Progress
+    awaiting_review: In Review
+${validGitLabCodeHost}${fullDefaults}`);
 
 		const config = loadConfig(configFile.path);
 
 		expect(config.tracker).toEqual({
-			kind: "github",
+			kind: "jira",
+			base_url: "https://jira.example.test",
+			project: "PROJ",
 			trigger_label: "local-agents",
+			statuses: {
+				pending: "To Do",
+				running: "In Progress",
+				awaiting_review: "In Review",
+			},
 		});
 	});
 });

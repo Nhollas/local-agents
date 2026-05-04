@@ -1,81 +1,74 @@
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { type createGitHubIssue, GITHUB_API, REPO } from "./fixtures.ts";
+import {
+	type createJiraIssue,
+	GITLAB_API,
+	GITLAB_BASE_URL,
+	JIRA_API,
+	REPO,
+	STATUSES,
+	type StatusKey,
+} from "./fixtures.ts";
 
 export const server = setupServer();
 
-type GitHubIssue = ReturnType<typeof createGitHubIssue>;
+type JiraIssue = ReturnType<typeof createJiraIssue>;
 
-const CANONICAL_LABELS = new Set([
-	"agent",
-	"agent:running",
-	"agent:awaiting-review",
-]);
+const TRANSITIONS = [
+	{ id: "11", name: "Start", to: { name: STATUSES.running } },
+	{ id: "21", name: "Review", to: { name: STATUSES.awaiting_review } },
+	{ id: "31", name: "Reopen", to: { name: STATUSES.pending } },
+];
 
-export function githubHandlers({
+function statusFromJql(jql: string): StatusKey | null {
+	if (jql.includes(`status = "${STATUSES.running}"`)) return "running";
+	if (jql.includes(`status = "${STATUSES.awaiting_review}"`))
+		return "awaiting_review";
+	if (jql.includes(`status = "${STATUSES.pending}"`)) return "pending";
+	return null;
+}
+
+export function jiraHandlers({
 	issues = [],
 	resolveIssues,
 }: {
-	issues?: GitHubIssue[];
-	resolveIssues?: (label: string) => GitHubIssue[];
+	issues?: JiraIssue[];
+	resolveIssues?: (status: StatusKey) => JiraIssue[];
 } = {}) {
 	const resolve =
-		resolveIssues ?? ((label: string) => (label === "agent" ? issues : []));
+		resolveIssues ??
+		((status: StatusKey) => (status === "pending" ? issues : []));
 
 	return [
-		http.get(`${GITHUB_API}/user`, () =>
-			HttpResponse.json({ login: "test-user" }),
-		),
-		http.get(`${GITHUB_API}/repos/${REPO}/issues/:number`, ({ params }) => {
-			const num = Number(params["number"]);
-			const all = resolve("agent").concat(resolve("agent:running"));
-			const issue = all.find((i) => i.number === num);
-			if (!issue) return new HttpResponse(null, { status: 404 });
-			return HttpResponse.json(issue);
+		http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+			const body = (await request.json()) as { jql?: string };
+			const status = statusFromJql(body.jql ?? "");
+			if (!status) return HttpResponse.json({ issues: [] });
+			return HttpResponse.json({ issues: resolve(status) });
 		}),
-		http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
-			const q = new URL(request.url).searchParams.get("q") ?? "";
-			const positive = new Set(
-				q.split(/\s+/).filter((t) => t.startsWith("label:")),
-			);
-			if (!positive.has("label:agent")) {
-				return HttpResponse.json({ total_count: 0, items: [] });
-			}
-			let items: GitHubIssue[];
-			if (positive.has("label:agent:running")) {
-				items = resolve("agent:running");
-			} else if (positive.has("label:agent:awaiting-review")) {
-				items = resolve("agent:awaiting-review");
-			} else {
-				items = resolve("agent");
-			}
-			return HttpResponse.json({ total_count: items.length, items });
-		}),
-		http.delete<{ label: string }>(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
-			({ params }) => {
-				if (!CANONICAL_LABELS.has(decodeURIComponent(params.label))) {
-					return new HttpResponse(null, { status: 400 });
-				}
-				return new HttpResponse(null, { status: 204 });
-			},
+		http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+			HttpResponse.json({ transitions: TRANSITIONS }),
 		),
-		http.post<{ number: string }>(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
-			async ({ request }) => {
-				const body = (await request.json()) as { labels: string[] };
-				const label = body.labels[0];
-				if (!label || !CANONICAL_LABELS.has(label)) {
-					return new HttpResponse(null, { status: 400 });
-				}
-				return HttpResponse.json([]);
-			},
+		http.post(
+			`${JIRA_API}/issue/:key/transitions`,
+			() => new HttpResponse(null, { status: 204 }),
 		),
-		http.get(`${GITHUB_API}/repos/${REPO}/pulls`, () => HttpResponse.json([])),
-		http.post(`${GITHUB_API}/repos/${REPO}/pulls`, () =>
+		http.put(
+			`${JIRA_API}/issue/:key`,
+			() => new HttpResponse(null, { status: 204 }),
+		),
+	];
+}
+
+export function gitlabHandlers() {
+	return [
+		http.get(`${GITLAB_API}/projects/:project/merge_requests`, () =>
+			HttpResponse.json([]),
+		),
+		http.post(`${GITLAB_API}/projects/:project/merge_requests`, () =>
 			HttpResponse.json({
-				number: 1,
-				html_url: `https://github.com/${REPO}/pull/1`,
+				iid: 1,
+				web_url: `${GITLAB_BASE_URL}/${REPO}/-/merge_requests/1`,
 			}),
 		),
 	];
