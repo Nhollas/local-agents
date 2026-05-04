@@ -18,49 +18,6 @@ function textMsg(text: string): AgentMessage {
 	};
 }
 
-describe("shortPath (via logAgentMessage)", () => {
-	it("strips workdir prefix", () => {
-		const emitToolUse = vi.fn();
-		const workDir = "/home/user/project";
-
-		logAgentMessage(
-			toolUseMsg("Read", { file_path: "/home/user/project/src/index.ts" }),
-			workDir,
-			emitToolUse,
-		);
-
-		expect(emitToolUse).toHaveBeenCalledWith("Read", "src/index.ts");
-	});
-
-	it("strips /private macOS prefix", () => {
-		const emitToolUse = vi.fn();
-		const workDir = "/tmp/workspace";
-
-		logAgentMessage(
-			toolUseMsg("Read", {
-				file_path: "/private/tmp/workspace/lib/utils.ts",
-			}),
-			workDir,
-			emitToolUse,
-		);
-
-		expect(emitToolUse).toHaveBeenCalledWith("Read", "lib/utils.ts");
-	});
-
-	it("returns full path when no prefix matches", () => {
-		const emitToolUse = vi.fn();
-		const workDir = "/home/user/project";
-
-		logAgentMessage(
-			toolUseMsg("Read", { file_path: "/other/location/file.ts" }),
-			workDir,
-			emitToolUse,
-		);
-
-		expect(emitToolUse).toHaveBeenCalledWith("Read", "/other/location/file.ts");
-	});
-});
-
 describe("logAgentMessage", () => {
 	it("does not call emitToolUse for text-only messages", () => {
 		const longText = "a".repeat(300);

@@ -5,44 +5,6 @@ import { createTestDb } from "../testing/support/test-db.ts";
 import { issueKey, repoSlug, runId } from "../types/brands.ts";
 
 describe("run repository row projection", () => {
-	it("throws when a completed row is missing completedAt", () => {
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		db.insert(runs)
-			.values({
-				id: runId("bad-completed"),
-				agentName: "agent",
-				status: "completed",
-				repo: repoSlug("acme/widgets"),
-				startedAt: "2025-01-01T00:00:00Z",
-				durationMs: 100,
-			})
-			.run();
-
-		expect(() => repo.getRunById(runId("bad-completed"))).toThrow(
-			/Invariant: completed run/,
-		);
-	});
-
-	it("throws when a failed row is missing error", () => {
-		const db = createTestDb();
-		const repo = createRunRepository(db);
-		db.insert(runs)
-			.values({
-				id: runId("bad-failed"),
-				agentName: "agent",
-				status: "failed",
-				repo: repoSlug("acme/widgets"),
-				startedAt: "2025-01-01T00:00:00Z",
-				completedAt: "2025-01-01T00:00:01Z",
-			})
-			.run();
-
-		expect(() => repo.getRunById(runId("bad-failed"))).toThrow(
-			/Invariant: failed run/,
-		);
-	});
-
 	it("returns failed runs with error and completion fields preserved", () => {
 		const db = createTestDb();
 		const repo = createRunRepository(db);

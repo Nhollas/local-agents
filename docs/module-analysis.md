@@ -1,6 +1,6 @@
 # Module Analysis — `server/`
 
-This is a snapshot of how `server/` is structured, taken on 2026-05-03. It looks at two complementary views of the codebase:
+This is a snapshot of how `server/` is structured, taken on 2026-05-03 and refreshed on 2026-05-04 after the GitHub adapter drop. It looks at two complementary views of the codebase:
 
 1. **Static dependency graph**, which shows what each module imports (gathered via `madge`).
 2. **Change coupling**, which shows which modules tend to move together in commits (computed across the last 55 commits via `git log`).
@@ -11,7 +11,7 @@ The static view answers whether the boundaries are drawn well. The change-coupli
 
 ## TL;DR
 
-- No circular dependencies were found. The static graph is layered cleanly, with types at the bottom and `server.ts` as the composition root, and there are no cycles across the 88 files that were analysed.
+- No circular dependencies were found. The static graph is layered cleanly, with types at the bottom and `server.ts` as the composition root, and there are no cycles across the 81 files that were analysed (down from 88 after the GitHub adapter drop).
 - The codebase has the shape of a layered monorepo rather than a tangled web. `types` sits as a pure leaf (15 fan-in, 0 fan-out), and `server.ts` sits as a pure root (0 fan-in, 15 fan-out).
 - Three change-coupling pairs are worth a closer look. In each case the modules co-evolve far more often than the static graph would suggest:
   - `orchestrator ↔ workflow` (82%, 14 co-changes)
@@ -29,13 +29,13 @@ The static view answers whether the boundaries are drawn well. The change-coupli
 | `server.ts`      |     1 |      0 |      15 | Composition root that wires everything together               |
 | `orchestrator`   |     9 |      1 |      11 | Application core: ticking, dispatch, run lifecycle            |
 | `api`            |     4 |      1 |       7 | HTTP surface, SSE, problem-details                            |
-| `trackers`       |     4 |      3 |       5 | Issue-tracker adapters (GitHub, Jira) plus decorator          |
-| `code-hosts`     |     4 |      2 |       4 | Code-host adapters (GitHub, GitLab) plus decorator            |
+| `trackers`       |     3 |      3 |       4 | Issue-tracker adapter (Jira) plus decorator                   |
+| `code-hosts`     |     3 |      2 |       3 | Code-host adapter (GitLab) plus decorator                     |
 | `workflow`       |     4 |      2 |       1 | Workflow loader, validator, prompt preprocessor               |
 | `runner`         |     2 |      3 |       3 | Job queue and run execution                                   |
 | `db`             |     3 |      4 |       1 | Schema, migration, drizzle setup                              |
 | `run-repository` |     1 |      4 |       2 | Persistence access layer for runs                             |
-| `*-client`       |     3 |    2-3 |       2 | HTTP clients for GitHub, GitLab, and Jira; consumed by adapters |
+| `*-client`       |     2 |      3 |       2 | HTTP clients for GitLab and Jira; consumed by adapters        |
 | `http-client`    |     1 |      3 |       0 | Shared HTTP primitive                                         |
 | `config`         |     1 |      3 |       1 | YAML config loader and types                                  |
 | `event-bus`      |     1 |      3 |       2 | In-process event bus                                          |
@@ -86,12 +86,12 @@ The top edges by weight (where the weight is the file count of imports) are:
 | ------------------------------ | ----: |
 | `orchestrator → trackers`      |     6 |
 | `orchestrator → workflow`      |     6 |
-| `trackers → types`             |     6 |
-| `code-hosts → types`           |     3 |
+| `trackers → types`             |     4 |
 | `orchestrator → canonical-log` |     3 |
 | `orchestrator → runner`        |     3 |
-| `server → code-hosts`          |     3 |
-| `server → trackers`            |     3 |
+| `code-hosts → types`           |     2 |
+| `server → code-hosts`          |     1 |
+| `server → trackers`            |     1 |
 
 `orchestrator` is the only module with double-digit fan-out (11), which is appropriate given its role as the application core. Every other module sits in single digits.
 
@@ -99,7 +99,7 @@ The top edges by weight (where the weight is the file count of imports) are:
 
 ## Change coupling
 
-This view shows what changed together in the last 55 commits. The coupling percentage is computed as `co_changes / min(A_commits, B_commits)`.
+This view shows what changed together in the last 55 commits as of 2026-05-03. The coupling percentage is computed as `co_changes / min(A_commits, B_commits)`. The history below still includes the now-deleted github code-host, tracker, and client; the table has not been recomputed since the drop.
 
 | Pair                              | Co-changes | A churn | B churn | Coupling | Verdict                                                  |
 | --------------------------------- | ---------: | ------: | ------: | -------: | -------------------------------------------------------- |
@@ -130,6 +130,8 @@ The orchestrator imports `workflow` types in 6 files, and the two modules co-cha
 
 These are sibling adapter modules, and neither imports the other directly. They keep co-changing nonetheless, which suggests they share a domain concept that lives in both places, most likely repo identity, PR or issue cross-references, and label semantics. Each shared concept that lives in both modules is one more place where a future change has to be made twice. This pair is a candidate for hoisting into a small shared module.
 
+> Update 2026-05-04: with the GitHub adapter dropped, each side now has a single concrete implementation (`trackers/jira.ts`, `code-hosts/gitlab.ts`). The "same concept duplicated across two providers" pressure is reduced for now, but the shared domain concepts still live in both modules and will resurface the moment a second provider is reintroduced.
+
 **3. `run-repository ↔ runner` (89%, 8 co-changes)**
 
 `runner` has a single file that imports `run-repository`, and the two changed together in 8 of the 9 commits where `run-repository` changed, which is surprisingly tight. One reading is benign: `runner` legitimately tracks every persistence-shape change because it writes runs to the repository. The other reading is that some persistence logic has spread into `runner` and ought to move back into `run-repository`. A short read of the two files side by side should settle which is happening.
@@ -149,7 +151,7 @@ The three suspicious pairs above are worth investigating. None of them rises to 
 Concrete next steps if you want to act on this:
 
 1. Read the `orchestrator/*.ts` imports of `workflow/*` and check whether they target stable surface or implementation peek-throughs.
-2. Diff `code-hosts/github.ts` against `trackers/github.ts` (and the GitLab and Jira pairs) for shared concepts that ought to be hoisted into a tiny shared module.
+2. Diff `code-hosts/gitlab.ts` against `trackers/jira.ts` for shared concepts (repo identity, PR/issue cross-references, label semantics) that ought to be hoisted into a tiny shared module before a second provider is reintroduced.
 3. Open `runner/runner.ts` next to `run-repository.ts` and ask whether persistence calls have leaked into the runner.
 
 If all three come back clean, the conclusion is that nothing needs to change in the structure, and the recent pain was simply the cost of making breaking changes during the pre-launch period.
