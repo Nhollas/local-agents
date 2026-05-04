@@ -1,23 +1,5 @@
 import type { RepoWorkflow, WorkflowStep } from "./workflow.ts";
 
-const STEPS_REFERENCE_RE =
-	/\{\{\s*steps\.(?<stepName>\w+)\.output(?<rest>(?:\.\w+)*)\s*\}\}/g;
-
-const COMPOSITION_KEYWORDS = ["$ref", "anyOf", "oneOf", "allOf"] as const;
-
-type StepReference = {
-	raw: string;
-	stepName: string;
-	path: string[];
-};
-
-type ValidationContext = {
-	sourcePath: string | undefined;
-	location: string;
-	stepsByName: Map<string, WorkflowStep>;
-	allowedSteps: Set<string>;
-};
-
 export function validateOutputReferences(
 	workflow: RepoWorkflow,
 	sourcePath?: string,
@@ -50,6 +32,24 @@ export function validateOutputReferences(
 		}
 	}
 }
+
+const STEPS_REFERENCE_RE =
+	/\{\{\s*steps\.(?<stepName>\w+)\.output(?<rest>(?:\.\w+)*)\s*\}\}/g;
+
+const COMPOSITION_KEYWORDS = ["$ref", "anyOf", "oneOf", "allOf"] as const;
+
+type StepReference = {
+	raw: string;
+	stepName: string;
+	path: string[];
+};
+
+type ValidationContext = {
+	sourcePath: string | undefined;
+	location: string;
+	stepsByName: Map<string, WorkflowStep>;
+	allowedSteps: Set<string>;
+};
 
 function extractReferences(template: string): StepReference[] {
 	const references: StepReference[] = [];

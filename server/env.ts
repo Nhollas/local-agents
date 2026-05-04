@@ -10,20 +10,6 @@ import {
 	jiraEmail,
 } from "./types/brands.ts";
 
-function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
-	const result = schema.safeParse(process.env);
-
-	if (!result.success) {
-		const issues = result.error.issues
-			.map((i) => `  ${i.path.join(".")}: ${i.message}`)
-			.join("\n");
-		console.error(`Invalid environment variables:\n${issues}`);
-		process.exit(1);
-	}
-
-	return result.data;
-}
-
 const envSchema = z.object({
 	CONFIG_PATH: z.string().min(1),
 	PORT: z.coerce.number().default(3000),
@@ -40,6 +26,35 @@ type Env = Omit<RawEnv, "GITLAB_TOKEN" | "JIRA_EMAIL" | "JIRA_API_TOKEN"> & {
 	JIRA_EMAIL?: JiraEmail;
 	JIRA_API_TOKEN?: JiraApiToken;
 };
+
+export function loadEnv(config?: Pick<Config, "tracker" | "code_host">): Env {
+	const env = parseEnv(envSchema);
+
+	if (config?.code_host.kind === "gitlab") {
+		requireToken(env, "GITLAB_TOKEN");
+	}
+
+	if (config?.tracker.kind === "jira") {
+		requireToken(env, "JIRA_EMAIL");
+		requireToken(env, "JIRA_API_TOKEN");
+	}
+
+	return brandEnv(env);
+}
+
+function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
+	const result = schema.safeParse(process.env);
+
+	if (!result.success) {
+		const issues = result.error.issues
+			.map((i) => `  ${i.path.join(".")}: ${i.message}`)
+			.join("\n");
+		console.error(`Invalid environment variables:\n${issues}`);
+		process.exit(1);
+	}
+
+	return result.data;
+}
 
 function requireToken(env: RawEnv, name: keyof RawEnv) {
 	if (typeof env[name] !== "string" || env[name].length === 0) {
@@ -60,19 +75,4 @@ function brandEnv(env: RawEnv): Env {
 			JIRA_API_TOKEN: jiraApiToken(JIRA_API_TOKEN),
 		}),
 	};
-}
-
-export function loadEnv(config?: Pick<Config, "tracker" | "code_host">): Env {
-	const env = parseEnv(envSchema);
-
-	if (config?.code_host.kind === "gitlab") {
-		requireToken(env, "GITLAB_TOKEN");
-	}
-
-	if (config?.tracker.kind === "jira") {
-		requireToken(env, "JIRA_EMAIL");
-		requireToken(env, "JIRA_API_TOKEN");
-	}
-
-	return brandEnv(env);
 }

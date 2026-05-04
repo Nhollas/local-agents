@@ -37,3 +37,7 @@ Goal: make invalid states unrepresentable; let the compiler verify assumptions.
 ### Decision rule
 
 For any invariant: who enforces it? If the answer is "the developer, by remembering," move it into the type system.
+
+### Module layout
+
+Order top-to-bottom: imports → public types (including the module's main interface) → main implementation → private helpers and helper types. A reader skimming a file should see its public shape before its internals. Don't bury the interface below helper functions.

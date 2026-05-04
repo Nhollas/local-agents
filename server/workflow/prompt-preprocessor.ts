@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 
 export const SHELL_BLOCK_MARKER = "\uE000";
-const SHELL_EXPANSION_TIMEOUT_MS = 30_000;
-const SHELL_EXPANSION_MAX_BUFFER = 1024 * 1024;
 
-const unmarkedShellBlockPattern = /!`([^`]*)`/g;
-const markedShellBlockPattern = /!\uE000`([^`]*)`/g;
+type ExpandShellBlocksOptions = {
+	cwd: string;
+	timeoutMs?: number;
+};
 
 export function stripShellBlockMarkers(value: string): string {
 	return value.replaceAll(SHELL_BLOCK_MARKER, "");
@@ -18,11 +18,6 @@ export function markTrustedShellBlocks(template: string): string {
 		(_match, command: string) => `!${SHELL_BLOCK_MARKER}\`${command}\``,
 	);
 }
-
-type ExpandShellBlocksOptions = {
-	cwd: string;
-	timeoutMs?: number;
-};
 
 export async function expandMarkedShellBlocks(
 	prompt: string,
@@ -53,6 +48,12 @@ export async function expandMarkedShellBlocks(
 		return output;
 	});
 }
+
+const SHELL_EXPANSION_TIMEOUT_MS = 30_000;
+const SHELL_EXPANSION_MAX_BUFFER = 1024 * 1024;
+
+const unmarkedShellBlockPattern = /!`([^`]*)`/g;
+const markedShellBlockPattern = /!\uE000`([^`]*)`/g;
 
 async function runShellBlock(
 	command: string,
