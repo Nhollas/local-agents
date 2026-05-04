@@ -5,7 +5,6 @@ import { validateOutputReferences } from "../workflow-validator.ts";
 function workflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
 	return {
 		branch: "agent/issue-{{ issue.number }}",
-		base_branch: "main",
 		steps: [
 			{ name: "implement", prompt: "Fix the issue", resume_previous: false },
 		],

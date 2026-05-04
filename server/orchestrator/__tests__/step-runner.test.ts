@@ -89,7 +89,6 @@ describe("runWorkflowSteps", () => {
 		const agent = createAgent(() => yieldAssistant("sess"));
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			base_branch: "main",
 			steps: [{ name: "implement", prompt: "do it", resume_previous: false }],
 			change_request: baseChangeRequest,
 		};
@@ -101,6 +100,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			cwd: "/work",
 			branch: "agent/issue-1",
+			baseBranch: "main",
 			model: "test-model",
 		});
 
@@ -140,7 +140,6 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			base_branch: "main",
 			steps: [
 				{
 					name: "summarise",
@@ -159,6 +158,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			cwd: "/work",
 			branch: "agent/issue-1",
+			baseBranch: "main",
 			model: "test-model",
 		});
 
@@ -198,7 +198,6 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			base_branch: "main",
 			steps: [
 				{
 					name: "summarise",
@@ -219,6 +218,7 @@ describe("runWorkflowSteps", () => {
 				issue,
 				cwd: "/work",
 				branch: "agent/issue-1",
+				baseBranch: "main",
 				model: "test-model",
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);
@@ -255,7 +255,6 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			base_branch: "main",
 			steps: [{ name: "implement", prompt: "do it", resume_previous: false }],
 			change_request: baseChangeRequest,
 		};
@@ -267,6 +266,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			cwd: "/work",
 			branch: "agent/issue-1",
+			baseBranch: "main",
 			model: "test-model",
 		});
 
@@ -286,7 +286,6 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			base_branch: "main",
 			steps: [{ name: "after", prompt: "after", resume_previous: false }],
 			change_request: baseChangeRequest,
 		};
@@ -298,6 +297,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			cwd: "/work",
 			branch: "agent/issue-1",
+			baseBranch: "main",
 			model: "test-model",
 		});
 
@@ -309,7 +309,6 @@ describe("runWorkflowSteps", () => {
 		const agent = createAgent(() => yieldAssistant("sess"));
 		const workflow: RepoWorkflow = {
 			branch: "ignored",
-			base_branch: "main",
 			steps: [
 				{
 					name: "implement",
@@ -327,6 +326,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			branch: "feat/proposed",
 			cwd: "/work",
+			baseBranch: "main",
 			model: "test-model",
 		});
 
@@ -364,7 +364,6 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			base_branch: "main",
 			steps: [
 				{
 					name: "summarise",
@@ -388,6 +387,7 @@ describe("runWorkflowSteps", () => {
 			issue,
 			cwd: "/work",
 			branch: "agent/issue-1",
+			baseBranch: "main",
 			model: "test-model",
 		});
 

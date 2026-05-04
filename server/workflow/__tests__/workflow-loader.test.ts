@@ -6,7 +6,6 @@ import { loadWorkflow } from "../workflow-loader.ts";
 
 const validWorkflowYaml = `
 branch: "agent/issue-{{ issue.number }}"
-base_branch: "main"
 steps:
   - name: implement
     prompt: "Fix the issue"
@@ -40,7 +39,6 @@ describe("loadWorkflow", () => {
 
 		expect(workflow).toEqual({
 			branch: "agent/issue-{{ issue.number }}",
-			base_branch: "main",
 			steps: [
 				{ name: "implement", prompt: "Fix the issue", resume_previous: false },
 			],
@@ -66,7 +64,6 @@ describe("loadWorkflow", () => {
 	it("rejects an output reference that points at a step the workflow doesn't define", () => {
 		using workflowFile = writeWorkflow(`
 branch: agent
-base_branch: main
 steps:
   - name: implement
     prompt: "Use {{ steps.missing.output.title }}"
@@ -86,7 +83,6 @@ change_request:
 	it("loads cleanly when output references resolve through the schema", () => {
 		using workflowFile = writeWorkflow(`
 branch: agent
-base_branch: main
 steps:
   - name: summarise
     prompt: "Write a summary"

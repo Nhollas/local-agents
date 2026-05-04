@@ -10,7 +10,16 @@ import {
 	type StatusKey,
 } from "./fixtures.ts";
 
-export const server = setupServer();
+// Always-on handlers: every dispatch resolves the repo's default branch
+// before doing anything else. Tests that care about the value can override
+// with server.use(...).
+const defaultHandlers = [
+	http.get(`${GITLAB_API}/projects/:project`, () =>
+		HttpResponse.json({ default_branch: "main" }),
+	),
+];
+
+export const server = setupServer(...defaultHandlers);
 
 type JiraIssue = ReturnType<typeof createJiraIssue>;
 

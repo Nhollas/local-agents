@@ -44,7 +44,6 @@ export type WorkflowBranch = z.infer<typeof branchSchema>;
 const repoWorkflowSchema = z
 	.object({
 		branch: branchSchema,
-		base_branch: z.string().min(1),
 		steps: z.array(workflowStepSchema).min(1),
 		change_request: changeRequestSchema,
 	})
@@ -68,6 +67,7 @@ export function renderPrompt(
 	vars: {
 		issue: Issue;
 		branch?: string;
+		base_branch?: string;
 		outputs?: Record<string, unknown> | undefined;
 	},
 ): string {
