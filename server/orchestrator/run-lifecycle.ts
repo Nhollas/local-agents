@@ -14,6 +14,7 @@ import { runWorkflowSteps } from "./step-runner.ts";
 import {
 	ensureBranch,
 	ensureWorkspace,
+	pushBranch,
 	type RunShell,
 	removeWorkspace,
 	runRepoSetup,
@@ -120,20 +121,24 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							...(result.status === "failed" && { error: result.error }),
 						});
 
-						if (result.status === "completed" && branch) {
-							await finalizeSuccess(
+						const succeeded =
+							result.status === "completed" &&
+							branch !== undefined &&
+							(await finalizeSuccess(
 								repo,
 								issue,
 								workflow,
+								ws.path,
 								branch,
 								baseBranch,
 								ctx.outputs,
-							);
-						}
+							));
 
-						await removeWorkspace(ws.path);
-
-						if (result.status === "failed" && !ctx.signal.aborted) {
+						// Keep the workspace on any failure so the run can be inspected;
+						// only fully successful runs (agent + push + change-request) clean up.
+						if (succeeded) {
+							await removeWorkspace(ws.path);
+						} else if (!ctx.signal.aborted) {
 							await markIssueFailed(repo, issue);
 						}
 
@@ -148,10 +153,22 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		repo: RepoSlug,
 		issue: Issue,
 		workflow: RepoWorkflow,
+		wsPath: string,
 		branch: BranchName,
 		baseBranch: BranchName,
 		outputs: Record<string, unknown>,
-	): Promise<void> {
+	): Promise<boolean> {
+		// Pinned order per ADR 0001: push → change-request → tracker.
+		try {
+			await pushBranch(wsPath, branch);
+		} catch (err) {
+			canonicalLog.append(
+				"warnings",
+				`push_failed: ${canonicalLog.errorMessage(err)}`,
+			);
+			return false;
+		}
+
 		const { title, body } = renderChangeRequest({
 			template: workflow.change_request,
 			issue,
@@ -165,6 +182,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 				"warnings",
 				`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
 			);
+			return false;
 		}
 
 		await tracker
@@ -175,6 +193,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 					`state_recovery_failed: ${canonicalLog.errorMessage(err)}`,
 				),
 			);
+		return true;
 	}
 
 	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {

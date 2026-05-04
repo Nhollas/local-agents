@@ -42,6 +42,15 @@ export async function ensureBranch(
 	await exec("git", ["checkout", "-B", branch], { cwd: wsPath });
 }
 
+export async function pushBranch(
+	wsPath: string,
+	branch: string,
+): Promise<void> {
+	// Force-push because re-runs of the same issue reuse the branch name and
+	// the agent's commits are the authoritative attempt for that run.
+	await exec("git", ["push", "--force", "origin", branch], { cwd: wsPath });
+}
+
 export async function removeWorkspace(wsPath: string): Promise<void> {
 	// maxRetries tolerates a tail of git i/o (e.g. from a killed agent whose
 	// ensureBranch was still settling) racing with the rm.

@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { seedBareRepoMain } from "../../testing/support/test-workspace.ts";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import {
 	ensureWorkspace,
+	pushBranch,
 	realRunShell,
 	removeWorkspace,
 	runRepoSetup,
@@ -35,7 +37,9 @@ beforeAll(async () => {
 		tmpdir(),
 		`test-bare-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.git`,
 	);
-	await exec("git", ["init", "--bare", bareRepo]);
+	// Seed the bare with an initial main commit so ensureWorkspace clones
+	// a repo where `git checkout main` works.
+	await seedBareRepoMain(bareRepo);
 });
 
 afterAll(async () => {
@@ -66,6 +70,89 @@ describe("ensureWorkspace", () => {
 		const second = await ensureWorkspace(issue, ws.root, bareRepo);
 		expect(second.created).toBe(false);
 		expect(second.path).toBe(first.path);
+	});
+});
+
+describe("pushBranch", () => {
+	it("force-pushes the branch to origin so the remote tip matches local HEAD", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(7);
+		const { path: wsPath } = await ensureWorkspace(issue, ws.root, bareRepo);
+		await exec("git", ["config", "user.email", "test@example.test"], {
+			cwd: wsPath,
+		});
+		await exec("git", ["config", "user.name", "Test"], { cwd: wsPath });
+		await exec("git", ["checkout", "-B", "agent/issue-7"], { cwd: wsPath });
+		await exec("git", ["commit", "--allow-empty", "-m", "agent commit"], {
+			cwd: wsPath,
+		});
+
+		await pushBranch(wsPath, "agent/issue-7");
+
+		const { stdout: localSha } = await exec("git", ["rev-parse", "HEAD"], {
+			cwd: wsPath,
+		});
+		const { stdout: remoteSha } = await exec(
+			"git",
+			["rev-parse", "agent/issue-7"],
+			{ cwd: bareRepo },
+		);
+		expect(remoteSha.trim()).toBe(localSha.trim());
+	});
+
+	it("overwrites a divergent branch on the remote (re-run reuses the branch name)", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(8);
+		const { path: wsPath } = await ensureWorkspace(issue, ws.root, bareRepo);
+		await exec("git", ["config", "user.email", "test@example.test"], {
+			cwd: wsPath,
+		});
+		await exec("git", ["config", "user.name", "Test"], { cwd: wsPath });
+
+		// First attempt's branch lands on the remote.
+		await exec("git", ["checkout", "-B", "agent/issue-8"], { cwd: wsPath });
+		await exec("git", ["commit", "--allow-empty", "-m", "first attempt"], {
+			cwd: wsPath,
+		});
+		await pushBranch(wsPath, "agent/issue-8");
+		const { stdout: firstSha } = await exec("git", ["rev-parse", "HEAD"], {
+			cwd: wsPath,
+		});
+
+		// Second attempt: a fresh workspace, branch reset from main, different commit.
+		await exec("git", ["checkout", "main"], { cwd: wsPath });
+		await exec("git", ["checkout", "-B", "agent/issue-8"], { cwd: wsPath });
+		await exec("git", ["commit", "--allow-empty", "-m", "second attempt"], {
+			cwd: wsPath,
+		});
+		await pushBranch(wsPath, "agent/issue-8");
+
+		const { stdout: secondSha } = await exec("git", ["rev-parse", "HEAD"], {
+			cwd: wsPath,
+		});
+		const { stdout: remoteSha } = await exec(
+			"git",
+			["rev-parse", "agent/issue-8"],
+			{ cwd: bareRepo },
+		);
+		expect(secondSha.trim()).not.toBe(firstSha.trim());
+		expect(remoteSha.trim()).toBe(secondSha.trim());
+	});
+
+	it("rejects when the remote is unreachable", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(9);
+		const { path: wsPath } = await ensureWorkspace(issue, ws.root, bareRepo);
+		await exec(
+			"git",
+			["remote", "set-url", "origin", "/nonexistent/path.git"],
+			{
+				cwd: wsPath,
+			},
+		);
+		await exec("git", ["checkout", "-B", "agent/issue-9"], { cwd: wsPath });
+
+		await expect(pushBranch(wsPath, "agent/issue-9")).rejects.toThrow();
 	});
 });
 
