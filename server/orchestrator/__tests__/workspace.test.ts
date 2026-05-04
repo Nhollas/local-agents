@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { seedBareRepoMain } from "../../testing/support/test-workspace.ts";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import {
@@ -36,25 +37,9 @@ beforeAll(async () => {
 		tmpdir(),
 		`test-bare-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.git`,
 	);
-	await exec("git", ["init", "--bare", "--initial-branch=main", bareRepo]);
-
-	// Seed the bare with an initial main commit so subsequent clones have a
-	// usable starting point. Without this, ensureWorkspace clones an empty
-	// repo and tests can't `git checkout main`.
-	const seedDir = join(
-		tmpdir(),
-		`bare-seed-${Math.random().toString(36).slice(2, 8)}`,
-	);
-	await exec("git", ["clone", bareRepo, seedDir]);
-	await exec("git", ["config", "user.email", "test@example.test"], {
-		cwd: seedDir,
-	});
-	await exec("git", ["config", "user.name", "Test"], { cwd: seedDir });
-	await exec("git", ["commit", "--allow-empty", "-m", "seed"], {
-		cwd: seedDir,
-	});
-	await exec("git", ["push", "origin", "main"], { cwd: seedDir });
-	await rm(seedDir, { recursive: true, force: true });
+	// Seed the bare with an initial main commit so ensureWorkspace clones
+	// a repo where `git checkout main` works.
+	await seedBareRepoMain(bareRepo);
 });
 
 afterAll(async () => {

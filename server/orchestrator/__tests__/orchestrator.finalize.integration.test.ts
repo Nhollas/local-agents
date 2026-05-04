@@ -6,10 +6,17 @@ import { describe, expect, it } from "vitest";
 import {
 	createScopedJiraIssue,
 	GITLAB_API,
+	JIRA_API,
 	jiraIssueKey,
 	noopAgent,
+	STATUSES,
+	TRIGGER_LABEL,
 } from "../../testing/support/fixtures.ts";
-import { jiraHandlers, server } from "../../testing/support/msw.ts";
+import {
+	jiraHandlers,
+	server,
+	TRANSITIONS,
+} from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 
 const exec = promisify(execFile);
@@ -57,34 +64,26 @@ describe("Orchestrator success-path finalization", () => {
 		server.use(...jiraHandlers({ issues: [createScopedJiraIssue(12)] }));
 
 		let mrCreateCalled = false;
-		const transitionCalls: string[] = [];
-		const labelUpdates: { add?: string[]; remove?: string[] }[] = [];
+		const transitionedTo: string[] = [];
+		const labelUpdates: Array<Array<{ add: string } | { remove: string }>> = [];
 		server.use(
-			http.post(
-				`https://jira.example.test/rest/api/3/issue/:key/transitions`,
-				async ({ request }) => {
-					const body = (await request.json()) as {
-						transition: { id: string };
+			http.post(`${JIRA_API}/issue/:key/transitions`, async ({ request }) => {
+				const body = (await request.json()) as {
+					transition: { id: string };
+				};
+				const target = TRANSITIONS.find((t) => t.id === body.transition.id);
+				transitionedTo.push(target?.to.name ?? `unknown:${body.transition.id}`);
+				return new HttpResponse(null, { status: 204 });
+			}),
+			http.put(`${JIRA_API}/issue/:key`, async ({ request }) => {
+				const body = (await request.json()) as {
+					update?: {
+						labels?: Array<{ add: string } | { remove: string }>;
 					};
-					transitionCalls.push(body.transition.id);
-					return new HttpResponse(null, { status: 204 });
-				},
-			),
-			http.put(
-				`https://jira.example.test/rest/api/3/issue/:key`,
-				async ({ request }) => {
-					const body = (await request.json()) as {
-						update?: {
-							labels?: { add?: string; remove?: string }[];
-						};
-					};
-					const ops = body.update?.labels ?? [];
-					const add = ops.flatMap((op) => (op.add ? [op.add] : []));
-					const remove = ops.flatMap((op) => (op.remove ? [op.remove] : []));
-					labelUpdates.push({ add, remove });
-					return new HttpResponse(null, { status: 204 });
-				},
-			),
+				};
+				labelUpdates.push(body.update?.labels ?? []);
+				return new HttpResponse(null, { status: 204 });
+			}),
 			http.post(`${GITLAB_API}/projects/:project/merge_requests`, () => {
 				mrCreateCalled = true;
 				return HttpResponse.json({ iid: 1, web_url: "" });
@@ -104,13 +103,9 @@ describe("Orchestrator success-path finalization", () => {
 
 		expect(mrCreateCalled).toBe(false);
 		await expect(access(wsPath)).resolves.toBeUndefined();
-		// Only the dispatch transition (id="11") should have fired; the
-		// awaiting_review transition (id="21") must NOT.
-		expect(transitionCalls).toEqual(["11"]);
-		// markFailed adds the failed label.
-		const sawFailedLabelAdded = labelUpdates.some((u) =>
-			u.add?.includes("agent-failed"),
-		);
-		expect(sawFailedLabelAdded).toBe(true);
+		expect(transitionedTo).toEqual([STATUSES.running]);
+		expect(labelUpdates).toEqual([
+			[{ add: `${TRIGGER_LABEL}-failed` }, { remove: TRIGGER_LABEL }],
+		]);
 	});
 });

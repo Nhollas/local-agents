@@ -7,6 +7,21 @@ import { sanitizeKey } from "../../orchestrator/workspace.ts";
 
 const exec = promisify(execFile);
 
+export async function seedBareRepoMain(barePath: string): Promise<void> {
+	await exec("git", ["init", "--bare", "--initial-branch=main", barePath]);
+	const seedDir = `${barePath}.seed`;
+	await exec("git", ["clone", barePath, seedDir]);
+	await exec("git", ["config", "user.email", "test@example.test"], {
+		cwd: seedDir,
+	});
+	await exec("git", ["config", "user.name", "Test"], { cwd: seedDir });
+	await exec("git", ["commit", "--allow-empty", "-m", "seed"], {
+		cwd: seedDir,
+	});
+	await exec("git", ["push", "origin", "main"], { cwd: seedDir });
+	await rm(seedDir, { recursive: true, force: true });
+}
+
 // brokenRemote: point origin at a missing path so `git push` fails — used to
 // exercise the lifecycle's push-failure path without needing real network.
 type PreCreateOptions = {

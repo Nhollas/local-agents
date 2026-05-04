@@ -121,9 +121,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							...(result.status === "failed" && { error: result.error }),
 						});
 
-						let finalizeFailed = false;
-						if (result.status === "completed" && branch) {
-							finalizeFailed = !(await finalizeSuccess(
+						const succeeded =
+							result.status === "completed" &&
+							branch !== undefined &&
+							(await finalizeSuccess(
 								repo,
 								issue,
 								workflow,
@@ -132,18 +133,12 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								baseBranch,
 								ctx.outputs,
 							));
-						}
 
 						// Keep the workspace on any failure so the run can be inspected;
 						// only fully successful runs (agent + push + change-request) clean up.
-						if (result.status === "completed" && !finalizeFailed) {
+						if (succeeded) {
 							await removeWorkspace(ws.path);
-						}
-
-						if (
-							!ctx.signal.aborted &&
-							(result.status === "failed" || finalizeFailed)
-						) {
+						} else if (!ctx.signal.aborted) {
 							await markIssueFailed(repo, issue);
 						}
 
@@ -163,10 +158,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		baseBranch: BranchName,
 		outputs: Record<string, unknown>,
 	): Promise<boolean> {
-		// Push, change-request, and state transition are pinned in order: each
-		// only runs if the previous one succeeded, because a missing remote
-		// branch makes change-request creation impossible, and an unmade change
-		// request makes the awaiting_review state a lie.
+		// Pinned order per ADR 0001: push → change-request → tracker.
 		try {
 			await pushBranch(wsPath, branch);
 		} catch (err) {

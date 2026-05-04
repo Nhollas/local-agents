@@ -23,7 +23,7 @@ export const server = setupServer(...defaultHandlers);
 
 type JiraIssue = ReturnType<typeof createJiraIssue>;
 
-const TRANSITIONS = [
+export const TRANSITIONS = [
 	{ id: "11", name: "Start", to: { name: STATUSES.running } },
 	{ id: "21", name: "Review", to: { name: STATUSES.awaiting_review } },
 	{ id: "31", name: "Reopen", to: { name: STATUSES.pending } },
