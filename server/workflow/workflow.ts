@@ -1,6 +1,7 @@
 import { parse } from "yaml";
 import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
+import { modelIdSchema } from "../types/model-id.ts";
 import { stripShellBlockMarkers } from "./prompt-preprocessor.ts";
 
 const jsonSchemaDocument = z.record(z.string(), z.unknown());
@@ -16,6 +17,7 @@ const workflowStepSchema = z
 		prompt: z.string(),
 		resume_previous: z.boolean().optional().default(false),
 		output_schema: jsonSchemaDocument.optional(),
+		model: modelIdSchema.optional(),
 	})
 	.strict();
 

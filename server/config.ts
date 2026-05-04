@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
 import { type RepoSlug, repoSlug } from "./types/brands.ts";
+import { modelIdSchema } from "./types/model-id.ts";
 
 export type Config = {
 	tracker: {
@@ -62,7 +63,7 @@ const configSchema = z
 			.object({
 				polling_interval_ms: z.number().int().positive(),
 				max_concurrent: z.number().int().positive(),
-				model: z.string().min(1),
+				model: modelIdSchema,
 				workspace_root: z.string().min(1),
 			})
 			.strict(),

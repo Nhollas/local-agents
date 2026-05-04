@@ -396,4 +396,38 @@ describe("runWorkflowSteps", () => {
 			"Use Earlier title",
 		]);
 	});
+
+	it("uses the per-step model when set, otherwise the default model", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(() => yieldAssistant("sess"));
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{ name: "implement", prompt: "do it", resume_previous: false },
+				{
+					name: "review",
+					prompt: "review it",
+					resume_previous: false,
+					model: "claude-opus-4-7",
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		await runWorkflowSteps({
+			ctx: recorder.ctx,
+			agent,
+			workflow,
+			issue,
+			cwd: "/work",
+			branch: "agent/issue-1",
+			baseBranch: "main",
+			model: "claude-sonnet-4-6",
+		});
+
+		expect(agent.calls.map((c) => c.model)).toEqual([
+			"claude-sonnet-4-6",
+			"claude-opus-4-7",
+		]);
+	});
 });

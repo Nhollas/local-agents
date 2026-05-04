@@ -72,6 +72,7 @@ steps:
       orchestrator-owned.
 
   - name: review
+    model: claude-opus-4-7
     prompt: |
       # Task
 
