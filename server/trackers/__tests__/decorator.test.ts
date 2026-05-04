@@ -94,7 +94,7 @@ describe("decorateTracker", () => {
 			const decorated = decorateTracker(
 				createFakeTracker({
 					transitionState: async () => {
-						throw new Error("GitHub API 500");
+						throw new Error("Tracker API 500");
 					},
 				}),
 			);
@@ -106,7 +106,7 @@ describe("decorateTracker", () => {
 					"pending",
 					"running",
 				),
-			).rejects.toThrow("GitHub API 500");
+			).rejects.toThrow("Tracker API 500");
 		});
 	});
 
@@ -131,14 +131,14 @@ describe("decorateTracker", () => {
 			const decorated = decorateTracker(
 				createFakeTracker({
 					markFailed: async () => {
-						throw new Error("GitHub API 500");
+						throw new Error("Tracker API 500");
 					},
 				}),
 			);
 
 			await expect(
 				decorated.markFailed(repoSlug("owner/repo"), issueNumber(1)),
-			).rejects.toThrow("GitHub API 500");
+			).rejects.toThrow("Tracker API 500");
 		});
 	});
 

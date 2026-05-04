@@ -19,9 +19,6 @@ export const branchName = (value: string): BranchName => value as BranchName;
 export type RunId = Brand<string, "RunId">;
 export const runId = (value: string): RunId => value as RunId;
 
-export type GitHubToken = Brand<string, "GitHubToken">;
-export const githubToken = (value: string): GitHubToken => value as GitHubToken;
-
 export type GitLabToken = Brand<string, "GitLabToken">;
 export const gitlabToken = (value: string): GitLabToken => value as GitLabToken;
 

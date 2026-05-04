@@ -4,32 +4,22 @@ import { z } from "zod";
 import { type RepoSlug, repoSlug } from "./types/brands.ts";
 
 export type Config = {
-	tracker:
-		| {
-				kind: "github";
-				trigger_label: string;
-		  }
-		| {
-				kind: "jira";
-				base_url: string;
-				project: string;
-				trigger_label: string;
-				statuses: {
-					pending: string;
-					running: string;
-					awaiting_review: string;
-				};
-		  };
-	code_host:
-		| {
-				kind: "github";
-				scopes: RepoSlug[];
-		  }
-		| {
-				kind: "gitlab";
-				scopes: RepoSlug[];
-				base_url: string;
-		  };
+	tracker: {
+		kind: "jira";
+		base_url: string;
+		project: string;
+		trigger_label: string;
+		statuses: {
+			pending: string;
+			running: string;
+			awaiting_review: string;
+		};
+	};
+	code_host: {
+		kind: "gitlab";
+		scopes: RepoSlug[];
+		base_url: string;
+	};
 	defaults: {
 		polling_interval_ms: number;
 		max_concurrent: number;
@@ -43,12 +33,6 @@ const repoSlugSchema = z.string().min(1).transform(repoSlug);
 const configSchema = z
 	.object({
 		tracker: z.discriminatedUnion("kind", [
-			z
-				.object({
-					kind: z.literal("github"),
-					trigger_label: z.string().min(1),
-				})
-				.strict(),
 			z
 				.object({
 					kind: z.literal("jira"),
@@ -66,12 +50,6 @@ const configSchema = z
 				.strict(),
 		]),
 		code_host: z.discriminatedUnion("kind", [
-			z
-				.object({
-					kind: z.literal("github"),
-					scopes: z.array(repoSlugSchema).min(1),
-				})
-				.strict(),
 			z
 				.object({
 					kind: z.literal("gitlab"),

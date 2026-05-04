@@ -30,33 +30,29 @@ export function adaptRunAgent(runAgent: LegacyRunAgent): AgentInvoker {
 	};
 }
 
-export const GITHUB_API = "https://api.github.com";
 export const GITLAB_BASE_URL = "https://gitlab.example.test";
 export const GITLAB_API = `${GITLAB_BASE_URL}/api/v4`;
 export const JIRA_BASE_URL = "https://jira.example.test";
 export const JIRA_API = `${JIRA_BASE_URL}/rest/api/3`;
+export const JIRA_PROJECT = "TEST";
+export const TRIGGER_LABEL = "agent";
 export const REPO = repoSlug("test-owner/test-repo");
 
-export function createGitHubIssue(
-	number: number,
-	labels: string[],
-	createdAt = "2025-01-01T00:00:00Z",
-	repo = REPO,
-) {
-	return {
-		number,
-		title: `Issue ${number}`,
-		body: `Description for issue ${number}`,
-		labels: labels.map((name) => ({ name })),
-		html_url: `https://github.com/${repo}/issues/${number}`,
-		created_at: createdAt,
-		repository_url: `${GITHUB_API}/repos/${repo}`,
-	};
+export const STATUSES = {
+	pending: "To Do",
+	running: "In Progress",
+	awaiting_review: "In Review",
+} as const;
+
+export type StatusKey = keyof typeof STATUSES;
+
+export function jiraIssueKey(num: number): string {
+	return `${JIRA_PROJECT}-${num}`;
 }
 
 export function createJiraIssue(
 	key: string,
-	status = "To Do",
+	status: string = STATUSES.pending,
 	created = "2025-01-01T00:00:00.000+0000",
 	labels: string[] = [],
 ) {
@@ -79,6 +75,17 @@ export function createJiraIssue(
 			status: { name: status },
 		},
 	};
+}
+
+export function createScopedJiraIssue(
+	num: number,
+	status: string = STATUSES.pending,
+	createdAt = "2025-01-01T00:00:00.000+0000",
+	repo = REPO,
+) {
+	return createJiraIssue(jiraIssueKey(num), status, createdAt, [
+		`repo:${repo}`,
+	]);
 }
 
 export async function* noopAgent() {}

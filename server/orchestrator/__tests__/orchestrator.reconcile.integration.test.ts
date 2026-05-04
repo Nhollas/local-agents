@@ -2,26 +2,30 @@ import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { runs } from "../../db/schema.ts";
 import {
-	createGitHubIssue,
-	GITHUB_API,
+	createScopedJiraIssue,
+	GITLAB_API,
+	GITLAB_BASE_URL,
 	hangingAgent,
+	JIRA_API,
+	jiraIssueKey,
 	noopAgent,
 	REPO,
+	STATUSES,
 } from "../../testing/support/fixtures.ts";
-import { githubHandlers, server } from "../../testing/support/msw.ts";
+import { jiraHandlers, server } from "../../testing/support/msw.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 import { issueKey, repoSlug, runId as rid } from "../../types/brands.ts";
 
 describe("Orchestrator reconciliation", () => {
-	it("kills agent when issue no longer has the running label", async () => {
-		let pendingIssues = [createGitHubIssue(1, ["agent"])];
-		let runningIssues: ReturnType<typeof createGitHubIssue>[] = [];
+	it("kills agent when issue is no longer in the running status", async () => {
+		let pendingIssues = [createScopedJiraIssue(1)];
+		let runningIssues: ReturnType<typeof createScopedJiraIssue>[] = [];
 
 		server.use(
-			...githubHandlers({
-				resolveIssues: (label) => {
-					if (label === "agent") return pendingIssues;
-					if (label === "agent:running") return runningIssues;
+			...jiraHandlers({
+				resolveIssues: (status) => {
+					if (status === "pending") return pendingIssues;
+					if (status === "running") return runningIssues;
 					return [];
 				},
 			}),
@@ -33,7 +37,7 @@ describe("Orchestrator reconciliation", () => {
 			runAgent: hangingAgent,
 		});
 		const { orchestrator, db, runner, workspace } = ctx;
-		await workspace.preCreateWorkspace(`${REPO}#1`);
+		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
 		// First tick: dispatches the agent
 		await orchestrator.tick();
@@ -46,15 +50,15 @@ describe("Orchestrator reconciliation", () => {
 				status: "running",
 				error: null,
 				repo: REPO,
-				issueKey: `${REPO}#1`,
-				issueTitle: "Issue 1",
+				issueKey: jiraIssueKey(1),
+				issueTitle: `Issue ${jiraIssueKey(1)}`,
 				startedAt: expect.any(String),
 				completedAt: null,
 				durationMs: null,
 			},
 		]);
 
-		// Second tick: label was removed → reconcile kills it
+		// Second tick: status no longer running → reconcile kills it
 		pendingIssues = [];
 		runningIssues = [];
 
@@ -70,8 +74,8 @@ describe("Orchestrator reconciliation", () => {
 				status: "failed",
 				error: "Run killed by user",
 				repo: REPO,
-				issueKey: `${REPO}#1`,
-				issueTitle: "Issue 1",
+				issueKey: jiraIssueKey(1),
+				issueTitle: `Issue ${jiraIssueKey(1)}`,
 				startedAt: runsBefore[0]?.startedAt,
 				completedAt: expect.any(String),
 				durationMs: expect.any(Number),
@@ -79,15 +83,15 @@ describe("Orchestrator reconciliation", () => {
 		]);
 	});
 
-	it("keeps agent running when label is still present", async () => {
-		let pendingIssues = [createGitHubIssue(2, ["agent"])];
+	it("keeps agent running when status is still running", async () => {
+		let pendingIssues = [createScopedJiraIssue(2)];
 
 		server.use(
-			...githubHandlers({
-				resolveIssues: (label) => {
-					if (label === "agent") return pendingIssues;
-					if (label === "agent:running")
-						return [createGitHubIssue(2, ["agent:running"])];
+			...jiraHandlers({
+				resolveIssues: (status) => {
+					if (status === "pending") return pendingIssues;
+					if (status === "running")
+						return [createScopedJiraIssue(2, STATUSES.running)];
 					return [];
 				},
 			}),
@@ -99,12 +103,12 @@ describe("Orchestrator reconciliation", () => {
 			runAgent: hangingAgent,
 		});
 		const { orchestrator, db, workspace } = ctx;
-		await workspace.preCreateWorkspace(`${REPO}#2`);
+		await workspace.preCreateWorkspace(jiraIssueKey(2));
 
 		// Dispatch
 		await orchestrator.tick();
 
-		// Second tick: label still present → no kill
+		// Second tick: status still running → no kill
 		pendingIssues = [];
 		await orchestrator.tick();
 
@@ -116,8 +120,8 @@ describe("Orchestrator reconciliation", () => {
 				status: "running",
 				error: null,
 				repo: REPO,
-				issueKey: `${REPO}#2`,
-				issueTitle: "Issue 2",
+				issueKey: jiraIssueKey(2),
+				issueTitle: `Issue ${jiraIssueKey(2)}`,
 				startedAt: expect.any(String),
 				completedAt: null,
 				durationMs: null,
@@ -130,18 +134,15 @@ describe("Orchestrator reconciliation", () => {
 		let runningFetches = 0;
 
 		server.use(
-			http.get(`${GITHUB_API}/user`, () =>
-				HttpResponse.json({ login: "test-user" }),
-			),
-			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
-				const q = new URL(request.url).searchParams.get("q") ?? "";
-				const positive = q.split(/\s+/).filter((t) => t.startsWith("label:"));
-				if (positive.includes("label:agent:running")) {
+			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+				const body = (await request.json()) as { jql?: string };
+				const jql = body.jql ?? "";
+				if (jql.includes(`status = "${STATUSES.running}"`)) {
 					runningFetches++;
-				} else {
+				} else if (jql.includes(`status = "${STATUSES.pending}"`)) {
 					pendingFetches++;
 				}
-				return HttpResponse.json({ total_count: 0, items: [] });
+				return HttpResponse.json({ issues: [] });
 			}),
 		);
 
@@ -157,36 +158,36 @@ describe("Orchestrator reconciliation", () => {
 	});
 
 	it("handles fetch failure gracefully during reconciliation", async () => {
-		let pendingIssues = [createGitHubIssue(1, ["agent"])];
+		let pendingIssues = [createScopedJiraIssue(1)];
 		let failRunningFetch = false;
 
 		server.use(
-			http.get(`${GITHUB_API}/user`, () =>
-				HttpResponse.json({ login: "test-user" }),
-			),
-			http.get(`${GITHUB_API}/search/issues`, ({ request }) => {
-				const q = new URL(request.url).searchParams.get("q") ?? "";
-				const positive = q.split(/\s+/).filter((t) => t.startsWith("label:"));
-				if (positive.includes("label:agent:running")) {
+			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+				const body = (await request.json()) as { jql?: string };
+				const jql = body.jql ?? "";
+				if (jql.includes(`status = "${STATUSES.running}"`)) {
 					if (failRunningFetch) {
 						return new HttpResponse(null, { status: 500 });
 					}
 					return HttpResponse.json({
-						total_count: 1,
-						items: [createGitHubIssue(1, ["agent", "agent:running"])],
+						issues: [createScopedJiraIssue(1, STATUSES.running)],
 					});
 				}
-				return HttpResponse.json({
-					total_count: pendingIssues.length,
-					items: pendingIssues,
-				});
+				if (jql.includes(`status = "${STATUSES.pending}"`)) {
+					return HttpResponse.json({ issues: pendingIssues });
+				}
+				return HttpResponse.json({ issues: [] });
 			}),
-			http.delete(
-				`${GITHUB_API}/repos/${REPO}/issues/:number/labels/:label`,
-				() => new HttpResponse(null, { status: 204 }),
+			http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+				HttpResponse.json({
+					transitions: [
+						{ id: "11", name: "Start", to: { name: STATUSES.running } },
+					],
+				}),
 			),
-			http.post(`${GITHUB_API}/repos/${REPO}/issues/:number/labels`, () =>
-				HttpResponse.json([]),
+			http.post(
+				`${JIRA_API}/issue/:key/transitions`,
+				() => new HttpResponse(null, { status: 204 }),
 			),
 		);
 
@@ -196,7 +197,7 @@ describe("Orchestrator reconciliation", () => {
 			runAgent: hangingAgent,
 		});
 		const { orchestrator, db, workspace } = ctx;
-		await workspace.preCreateWorkspace(`${REPO}#1`);
+		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
 		// First tick: dispatches the agent
 		await orchestrator.tick();
@@ -208,15 +209,15 @@ describe("Orchestrator reconciliation", () => {
 				status: "running",
 				error: null,
 				repo: REPO,
-				issueKey: `${REPO}#1`,
-				issueTitle: "Issue 1",
+				issueKey: jiraIssueKey(1),
+				issueTitle: `Issue ${jiraIssueKey(1)}`,
 				startedAt: expect.any(String),
 				completedAt: null,
 				durationMs: null,
 			},
 		]);
 
-		// Second tick: running-label fetch fails — agent should NOT be killed
+		// Second tick: running fetch fails — agent should NOT be killed
 		pendingIssues = [];
 		failRunningFetch = true;
 
@@ -227,72 +228,76 @@ describe("Orchestrator reconciliation", () => {
 	});
 
 	it("does not orphan-reconcile a run with pending post-run work", async () => {
-		let pendingIssues = [createGitHubIssue(1, ["agent"])];
-		let runningIssues: ReturnType<typeof createGitHubIssue>[] = [];
-		let releasePrCreate = () => {};
-		const prCreateBarrier = new Promise<void>(
-			(resolve) => (releasePrCreate = resolve),
+		let pendingIssues = [createScopedJiraIssue(1)];
+		let runningIssues: ReturnType<typeof createScopedJiraIssue>[] = [];
+		let releaseMrCreate = () => {};
+		const mrCreateBarrier = new Promise<void>(
+			(resolve) => (releaseMrCreate = resolve),
 		);
 
-		// Strict one-shot handlers in dispatch order:
-		// 1. DELETE labels/agent       (initial swap pending → running)
-		// 2. POST labels [agent:running]
-		// 3. DELETE labels/agent:running (post-success swap → awaiting-review)
-		// 4. POST labels [agent:awaiting-review]
-		// We assert finalSwap*.isUsed to confirm the ONLY swap that ran was the
-		// post-success one — no orphan-reconcile kill happened mid-flight.
-		const initialDelete = http.delete(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent`,
-			() => new HttpResponse(null, { status: 204 }),
-			{ once: true },
-		);
-		const initialPost = http.post(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+		// Strict one-shot transition handlers in dispatch order:
+		// 1. POST transition id="11"  (pending → running on dispatch)
+		// 2. POST transition id="21"  (running → awaiting_review on success)
+		// We assert reviewTransition.isUsed to confirm the post-success transition
+		// did NOT fire mid-flight (no orphan-reconcile kill happened).
+		const startTransition = http.post(
+			`${JIRA_API}/issue/:key/transitions`,
 			async ({ request }) => {
-				const body = (await request.json()) as { labels: string[] };
-				if (body.labels[0] !== "agent:running") {
+				const body = (await request.json()) as { transition: { id: string } };
+				if (body.transition.id !== "11") {
 					return new HttpResponse(null, { status: 400 });
 				}
-				return HttpResponse.json([]);
+				return new HttpResponse(null, { status: 204 });
 			},
 			{ once: true },
 		);
-		const finalDelete = http.delete(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent:running`,
-			() => new HttpResponse(null, { status: 204 }),
-			{ once: true },
-		);
-		const finalPost = http.post(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
+		const reviewTransition = http.post(
+			`${JIRA_API}/issue/:key/transitions`,
 			async ({ request }) => {
-				const body = (await request.json()) as { labels: string[] };
-				if (body.labels[0] !== "agent:awaiting-review") {
+				const body = (await request.json()) as { transition: { id: string } };
+				if (body.transition.id !== "21") {
 					return new HttpResponse(null, { status: 400 });
 				}
-				return HttpResponse.json([]);
+				return new HttpResponse(null, { status: 204 });
 			},
 			{ once: true },
 		);
 
 		server.use(
-			initialDelete,
-			initialPost,
-			finalDelete,
-			finalPost,
-			// Custom PR handler must come first to override the default in githubHandlers
-			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, async () => {
-				await prCreateBarrier;
-				return HttpResponse.json({
-					number: 1,
-					html_url: `https://github.com/${REPO}/pull/1`,
-				});
+			http.post(`${JIRA_API}/search/jql`, async ({ request }) => {
+				const body = (await request.json()) as { jql?: string };
+				const jql = body.jql ?? "";
+				if (jql.includes(`status = "${STATUSES.running}"`)) {
+					return HttpResponse.json({ issues: runningIssues });
+				}
+				if (jql.includes(`status = "${STATUSES.pending}"`)) {
+					return HttpResponse.json({ issues: pendingIssues });
+				}
+				return HttpResponse.json({ issues: [] });
 			}),
-			...githubHandlers({
-				resolveIssues: (label) => {
-					if (label === "agent") return pendingIssues;
-					if (label === "agent:running") return runningIssues;
-					return [];
-				},
+			http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+				HttpResponse.json({
+					transitions: [
+						{ id: "11", name: "Start", to: { name: STATUSES.running } },
+						{
+							id: "21",
+							name: "Review",
+							to: { name: STATUSES.awaiting_review },
+						},
+					],
+				}),
+			),
+			startTransition,
+			reviewTransition,
+			http.get(`${GITLAB_API}/projects/:project/merge_requests`, () =>
+				HttpResponse.json([]),
+			),
+			http.post(`${GITLAB_API}/projects/:project/merge_requests`, async () => {
+				await mrCreateBarrier;
+				return HttpResponse.json({
+					iid: 1,
+					web_url: `${GITLAB_BASE_URL}/${REPO}/-/merge_requests/1`,
+				});
 			}),
 		);
 
@@ -302,34 +307,33 @@ describe("Orchestrator reconciliation", () => {
 			runAgent: noopAgent,
 		});
 		const { orchestrator, workspace } = ctx;
-		await workspace.preCreateWorkspace(`${REPO}#1`);
+		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
-		// Tick 1: dispatches the agent. Handler completes instantly (noopAgent),
-		// but onSettled blocks on PR creation (barrier).
+		// Tick 1: dispatches the agent. noopAgent finishes immediately, but
+		// onSettled blocks on the MR creation barrier.
 		await orchestrator.tick();
 
-		// Simulate GitHub still showing agent:running (label swap hasn't happened yet)
+		// Simulate Jira still showing the issue in running (transition hasn't completed).
 		pendingIssues = [];
-		runningIssues = [createGitHubIssue(1, ["agent:running"])];
+		runningIssues = [createScopedJiraIssue(1, STATUSES.running)];
 
 		// Tick 2: should NOT orphan-reconcile because the issue is settling.
-		// The post-success swap handlers must remain unused after this tick.
+		// reviewTransition must remain unused after this tick.
 		await orchestrator.tick();
 
-		expect(finalDelete.isUsed).toBe(false);
-		expect(finalPost.isUsed).toBe(false);
+		expect(reviewTransition.isUsed).toBe(false);
 
 		// Release the barrier and let onSettled finish
-		releasePrCreate();
+		releaseMrCreate();
 		await orchestrator.settled();
 
-		expect(finalDelete.isUsed).toBe(true);
-		expect(finalPost.isUsed).toBe(true);
+		expect(startTransition.isUsed).toBe(true);
+		expect(reviewTransition.isUsed).toBe(true);
 	});
 
 	it("marks stale DB runs as failed when no process exists to kill", async () => {
 		server.use(
-			...githubHandlers({
+			...jiraHandlers({
 				resolveIssues: () => [],
 			}),
 		);
@@ -346,7 +350,7 @@ describe("Orchestrator reconciliation", () => {
 				agentName: "issue-5",
 				status: "running",
 				repo: repoSlug(REPO),
-				issueKey: issueKey(`${REPO}#5`),
+				issueKey: issueKey(jiraIssueKey(5)),
 				issueTitle: "Stale issue",
 				startedAt: "2025-01-01T00:00:00Z",
 			})
@@ -362,7 +366,7 @@ describe("Orchestrator reconciliation", () => {
 				status: "failed",
 				error: "Stale run from previous session",
 				repo: REPO,
-				issueKey: `${REPO}#5`,
+				issueKey: jiraIssueKey(5),
 				issueTitle: "Stale issue",
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
@@ -375,56 +379,5 @@ describe("Orchestrator reconciliation", () => {
 
 		const runsAfterSecondTick = db.select().from(runs).all();
 		expect(runsAfterSecondTick).toEqual(allRuns);
-	});
-
-	it("rolls back the running state label when GitHub still says agent:running but DB has no running run, leaving the trigger label intact", async () => {
-		const recoveryDelete = http.delete(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels/agent:running`,
-			() => new HttpResponse(null, { status: 204 }),
-			{ once: true },
-		);
-		const triggerLabelMutation = http.post(
-			`${GITHUB_API}/repos/${REPO}/issues/:number/labels`,
-			() =>
-				new HttpResponse("trigger label must not be mutated", {
-					status: 500,
-				}),
-		);
-
-		server.use(
-			recoveryDelete,
-			triggerLabelMutation,
-			...githubHandlers({
-				resolveIssues: (label) => {
-					if (label === "agent:running")
-						return [createGitHubIssue(1, ["agent:running"])];
-					return [];
-				},
-			}),
-		);
-
-		await using ctx = await createTestOrchestrator({ runAgent: noopAgent });
-		const { orchestrator, db, runner } = ctx;
-
-		db.insert(runs)
-			.values({
-				id: rid("completed-orphan"),
-				agentName: "issue-1",
-				status: "completed",
-				repo: repoSlug(REPO),
-				issueKey: issueKey(`${REPO}#1`),
-				issueTitle: "Issue 1",
-				startedAt: new Date().toISOString(),
-				completedAt: new Date().toISOString(),
-				durationMs: 1,
-			})
-			.run();
-
-		await orchestrator.tick();
-		await runner.queue.waitForIdle();
-		await orchestrator.settled();
-
-		expect(recoveryDelete.isUsed).toBe(true);
-		expect(triggerLabelMutation.isUsed).toBe(false);
 	});
 });

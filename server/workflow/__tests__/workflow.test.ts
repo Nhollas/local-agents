@@ -10,7 +10,7 @@ const baseIssue: Issue = {
 	title: "Fix the thing",
 	description: "Detailed description",
 	labels: ["bug", "urgent"],
-	url: "https://github.com/owner/repo/issues/1",
+	url: "https://gitlab.example.test/owner/repo/-/issues/1",
 	createdAt: "2026-01-01T00:00:00Z",
 };
 

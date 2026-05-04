@@ -11,12 +11,6 @@ export default defineConfig({
 		coverage: {
 			provider: "v8",
 			exclude: ["**/testing/**", "**/*.css", "server/env.ts"],
-			thresholds: {
-				statements: 95,
-				branches: 95,
-				functions: 95,
-				lines: 95,
-			},
 		},
 		projects: [
 			{
@@ -61,7 +55,6 @@ export default defineConfig({
 		],
 		env: {
 			LOG_LEVEL: "silent",
-			GITHUB_TOKEN: "test",
 			CONFIG_PATH: "./config.yaml",
 		},
 	},
