@@ -93,7 +93,7 @@ export function jiraTrackerAdapter(
 				const mapped = resolveScopedIssue(r);
 				if (mapped) issues.push(mapped);
 			}
-			return { issues, scopesReached: new Set<RepoSlug>(options.scopes) };
+			return { issues };
 		},
 
 		async markFailed(_repo, issueNum): Promise<void> {

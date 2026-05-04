@@ -185,14 +185,14 @@ describe("Orchestrator scheduling", () => {
 
 		orchestrator.start();
 		await vi.advanceTimersByTimeAsync(0);
-		expect(tickCount).toBe(2); // pending + running fetch
+		expect(tickCount).toBe(2); // startup recover (running) + first tick (pending)
 
 		await vi.advanceTimersByTimeAsync(1000);
-		expect(tickCount).toBe(4);
+		expect(tickCount).toBe(3); // + one more tick (pending)
 
 		orchestrator.stop();
 		await vi.advanceTimersByTimeAsync(5000);
-		expect(tickCount).toBe(4);
+		expect(tickCount).toBe(3);
 
 		vi.useRealTimers();
 	});
@@ -226,7 +226,7 @@ describe("Orchestrator scheduling", () => {
 		await vi.advanceTimersByTimeAsync(0);
 		await vi.advanceTimersByTimeAsync(1000);
 
-		expect(tickCount).toBeGreaterThanOrEqual(4);
+		expect(tickCount).toBeGreaterThanOrEqual(3);
 		expect(db.select().from(runs).all()).toHaveLength(0);
 
 		orchestrator.stop();
