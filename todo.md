@@ -1,5 +1,2 @@
-- Want to really optimise the Gitlab & Jira experience but remain Issue Tracker & Code Host agnostic
 - Want to see if we can make application setup easier not require PATs?
-- REPO selection in config is a little config, having to supply absolute paths?
-- Current 1 RPEO only for JIRA is not good at all and needs re-design.
 - How the orchestrator can push branches & code to the cost host auth I don't think is well thought out.
