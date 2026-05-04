@@ -2,15 +2,6 @@ import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
 import type { JiraApiToken, JiraEmail } from "./types/brands.ts";
 
-const ISSUE_FIELDS = [
-	"summary",
-	"description",
-	"status",
-	"created",
-	"labels",
-] as const;
-const DEFAULT_SEARCH_MAX_RESULTS = 100;
-
 const jiraIssueSchema = z.object({
 	key: z.string(),
 	fields: z.object({
@@ -65,18 +56,6 @@ type JiraClientOptions = HttpClientOptions & {
 	email: JiraEmail;
 	apiToken: JiraApiToken;
 };
-
-function trimTrailingSlash(value: string): string {
-	return value.replace(/\/+$/, "");
-}
-
-function encodeIssueKey(key: string): string {
-	return encodeURIComponent(key);
-}
-
-function basicAuth(email: JiraEmail, apiToken: JiraApiToken): string {
-	return Buffer.from(`${email}:${apiToken}`, "utf8").toString("base64");
-}
 
 export function createJiraClient(options: JiraClientOptions): JiraClient {
 	const baseUrl = trimTrailingSlash(options.baseUrl);
@@ -146,4 +125,25 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 			});
 		},
 	};
+}
+
+const ISSUE_FIELDS = [
+	"summary",
+	"description",
+	"status",
+	"created",
+	"labels",
+] as const;
+const DEFAULT_SEARCH_MAX_RESULTS = 100;
+
+function trimTrailingSlash(value: string): string {
+	return value.replace(/\/+$/, "");
+}
+
+function encodeIssueKey(key: string): string {
+	return encodeURIComponent(key);
+}
+
+function basicAuth(email: JiraEmail, apiToken: JiraApiToken): string {
+	return Buffer.from(`${email}:${apiToken}`, "utf8").toString("base64");
 }

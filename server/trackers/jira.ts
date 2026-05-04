@@ -16,47 +16,6 @@ type JiraTrackerOptions = {
 	triggerLabel: string;
 };
 
-const REPO_LABEL_PREFIX = "repo:";
-
-type DropReason =
-	| "no_repo_label"
-	| "multiple_repo_labels"
-	| "unresolved_repo_label";
-
-function jiraIssueKey(project: string, num: number): string {
-	return `${project}-${num}`;
-}
-
-function trimTrailingSlash(value: string): string {
-	return value.replace(/\/+$/, "");
-}
-
-function quoteJqlString(value: string): string {
-	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function extractText(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (Array.isArray(value))
-		return value.map(extractText).filter(Boolean).join("\n");
-	if (value !== null && typeof value === "object") {
-		if ("text" in value && typeof value.text === "string") return value.text;
-		if ("content" in value && Array.isArray(value.content))
-			return extractText(value.content);
-	}
-	return "";
-}
-
-function parseJiraKey(project: string, key: string): number | null {
-	const match = /^([A-Z][A-Z0-9_]*)-(\d+)$/.exec(key);
-	const matchedProject = match?.[1];
-	const matchedNumber = match?.[2];
-	if (!matchedProject || !matchedNumber || matchedProject !== project) {
-		return null;
-	}
-	return Number.parseInt(matchedNumber, 10);
-}
-
 export function jiraTrackerAdapter(
 	client: JiraClient,
 	options: JiraTrackerOptions,
@@ -174,4 +133,45 @@ export function jiraTrackerAdapter(
 			});
 		},
 	});
+}
+
+const REPO_LABEL_PREFIX = "repo:";
+
+type DropReason =
+	| "no_repo_label"
+	| "multiple_repo_labels"
+	| "unresolved_repo_label";
+
+function jiraIssueKey(project: string, num: number): string {
+	return `${project}-${num}`;
+}
+
+function trimTrailingSlash(value: string): string {
+	return value.replace(/\/+$/, "");
+}
+
+function quoteJqlString(value: string): string {
+	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function extractText(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (Array.isArray(value))
+		return value.map(extractText).filter(Boolean).join("\n");
+	if (value !== null && typeof value === "object") {
+		if ("text" in value && typeof value.text === "string") return value.text;
+		if ("content" in value && Array.isArray(value.content))
+			return extractText(value.content);
+	}
+	return "";
+}
+
+function parseJiraKey(project: string, key: string): number | null {
+	const match = /^([A-Z][A-Z0-9_]*)-(\d+)$/.exec(key);
+	const matchedProject = match?.[1];
+	const matchedNumber = match?.[2];
+	if (!matchedProject || !matchedNumber || matchedProject !== project) {
+		return null;
+	}
+	return Number.parseInt(matchedNumber, 10);
 }

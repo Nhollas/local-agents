@@ -2,8 +2,6 @@ import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
 import type { BranchName, GitLabToken, RepoSlug } from "./types/brands.ts";
 
-const DEFAULT_BASE_URL = "https://gitlab.com";
-
 const gitlabFileSchema = z.object({
 	content: z.string(),
 });
@@ -41,18 +39,6 @@ export type GitLabClient = {
 type GitLabClientOptions = HttpClientOptions & {
 	baseUrl?: string;
 };
-
-function trimTrailingSlash(value: string): string {
-	return value.replace(/\/+$/, "");
-}
-
-function encodeProjectPath(projectPath: RepoSlug): string {
-	return encodeURIComponent(projectPath);
-}
-
-function encodeFilePath(filePath: string): string {
-	return encodeURIComponent(filePath);
-}
 
 export function createGitLabClient(
 	token: GitLabToken,
@@ -96,4 +82,18 @@ export function createGitLabClient(
 			);
 		},
 	};
+}
+
+const DEFAULT_BASE_URL = "https://gitlab.com";
+
+function trimTrailingSlash(value: string): string {
+	return value.replace(/\/+$/, "");
+}
+
+function encodeProjectPath(projectPath: RepoSlug): string {
+	return encodeURIComponent(projectPath);
+}
+
+function encodeFilePath(filePath: string): string {
+	return encodeURIComponent(filePath);
 }

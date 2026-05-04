@@ -1,9 +1,5 @@
 import type { z } from "zod";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_ATTEMPTS = 3;
-const DEFAULT_BASE_DELAY_MS = 1_000;
-
 export type HttpClientOptions = {
 	maxAttempts?: number;
 	baseDelayMs?: number;
@@ -26,26 +22,6 @@ type VoidRequestOptions = {
 	method?: string;
 	body?: Record<string, unknown>;
 };
-
-function isRetryableStatus(status: number): boolean {
-	return status === 429 || status >= 500;
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function retryDelay(
-	response: Response,
-	attempt: number,
-	baseDelayMs: number,
-): number {
-	if (response.status === 429) {
-		const retryAfter = response.headers.get("Retry-After");
-		if (retryAfter) return Number.parseInt(retryAfter, 10) * 1000;
-	}
-	return baseDelayMs * 2 ** (attempt - 1);
-}
 
 export function createJsonRequester(options: JsonRequesterOptions) {
 	const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
@@ -121,4 +97,28 @@ export function createJsonRequester(options: JsonRequesterOptions) {
 	}
 
 	return request;
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_BASE_DELAY_MS = 1_000;
+
+function isRetryableStatus(status: number): boolean {
+	return status === 429 || status >= 500;
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelay(
+	response: Response,
+	attempt: number,
+	baseDelayMs: number,
+): number {
+	if (response.status === 429) {
+		const retryAfter = response.headers.get("Retry-After");
+		if (retryAfter) return Number.parseInt(retryAfter, 10) * 1000;
+	}
+	return baseDelayMs * 2 ** (attempt - 1);
 }
