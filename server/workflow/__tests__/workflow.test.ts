@@ -320,6 +320,20 @@ ${validChangeRequest}`;
 		]);
 	});
 
+	it("accepts a step with a model override", () => {
+		const yaml = `
+branch: my-branch
+steps:
+  - name: review
+    prompt: Review it
+    model: claude-opus-4-7
+${validChangeRequest}`;
+
+		const result = parseRepoWorkflow(yaml);
+
+		expect(result.steps[0]?.model).toBe("claude-opus-4-7");
+	});
+
 	it("throws on invalid YAML", () => {
 		const yaml = ":\n  :\n    - ][";
 

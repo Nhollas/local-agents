@@ -50,7 +50,7 @@ export async function runWorkflowSteps({
 			branch,
 			baseBranch,
 			cwd,
-			model,
+			model: step.model ?? model,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
 		});
 
