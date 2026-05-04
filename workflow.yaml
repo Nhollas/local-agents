@@ -27,8 +27,6 @@ branch:
         pattern: "^(feat|fix|chore|docs|refactor|test)/[A-Z]+-[0-9]+-[a-z0-9-]+$"
     required: [name]
 
-base_branch: main
-
 steps:
   - name: implement
     prompt: |
@@ -41,9 +39,9 @@ steps:
       </issue-description>
 
       Only work on this one issue. The orchestrator has cloned the repo fresh
-      and created branch `{{ branch }}` from `main` for you. Make commits as
-      you go — the orchestrator pushes the branch and opens the change request
-      after the final step completes.
+      and created branch `{{ branch }}` from `{{ base_branch }}` for you. Make
+      commits as you go — the orchestrator pushes the branch and opens the
+      change request after the final step completes.
 
       # Project Context
 
@@ -87,13 +85,13 @@ steps:
       Diff against the base branch:
 
       <diff>
-      !`git diff main...HEAD`
+      !`git diff origin/{{ base_branch }}...HEAD`
       </diff>
 
       Commits on this branch:
 
       <commits>
-      !`git log main..HEAD --oneline`
+      !`git log origin/{{ base_branch }}..HEAD --oneline`
       </commits>
 
       # Review Focus
@@ -119,11 +117,11 @@ steps:
       {{ issue.key }}.
 
       <diff>
-      !`git diff main...HEAD`
+      !`git diff origin/{{ base_branch }}...HEAD`
       </diff>
 
       <commits>
-      !`git log main..HEAD --oneline`
+      !`git log origin/{{ base_branch }}..HEAD --oneline`
       </commits>
 
       Produce a one-line title and a short markdown body explaining what

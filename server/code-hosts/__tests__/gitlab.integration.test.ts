@@ -103,6 +103,27 @@ describe("fetchFile", () => {
 	});
 });
 
+describe("defaultBranch", () => {
+	it("returns the project's default_branch from the GitLab project endpoint", async () => {
+		const expectedPath = "/api/v4/projects/group%2Fsubgroup%2Fproject";
+
+		server.use(
+			http.get(`${GITLAB_API}/projects/:project`, ({ request }) => {
+				const url = new URL(request.url);
+				if (
+					url.pathname !== expectedPath ||
+					request.headers.get("PRIVATE-TOKEN") !== "test-token"
+				) {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json({ default_branch: "develop" });
+			}),
+		);
+
+		await expect(adapter.defaultBranch(REPO)).resolves.toBe("develop");
+	});
+});
+
 describe("createChangeRequest", () => {
 	it("creates a new MR when none exists", async () => {
 		const expectedBody = {

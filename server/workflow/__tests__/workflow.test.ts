@@ -66,7 +66,6 @@ describe("parseRepoWorkflow", () => {
 	it("accepts a single-step workflow", () => {
 		const yaml = `
 branch: "agent/issue-{{ issue.number }}"
-base_branch: main
 steps:
   - name: implement
     prompt: Fix this issue
@@ -76,7 +75,6 @@ ${validChangeRequest}`;
 
 		expect(result).toEqual({
 			branch: "agent/issue-{{ issue.number }}",
-			base_branch: "main",
 			steps: [
 				{ name: "implement", prompt: "Fix this issue", resume_previous: false },
 			],
@@ -90,7 +88,6 @@ ${validChangeRequest}`;
 	it("accepts a multi-step workflow with resume_previous", () => {
 		const yaml = `
 branch: "agent/issue-{{ issue.number }}"
-base_branch: main
 steps:
   - name: plan
     prompt: Write a plan
@@ -114,7 +111,6 @@ ${validChangeRequest}`;
 	it("rejects workflows missing change_request", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -126,7 +122,6 @@ steps:
 	it("rejects change_request missing title", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -140,7 +135,6 @@ change_request:
 	it("rejects change_request missing body", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -154,7 +148,6 @@ change_request:
 	it("rejects change_request with unknown keys", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -168,25 +161,19 @@ change_request:
 	});
 
 	it("rejects workflows missing branch", () => {
-		const yaml = "base_branch: main\nsteps:\n  - name: x\n    prompt: Fix it\n";
-
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
-	});
-
-	it("rejects workflows missing base_branch", () => {
-		const yaml = "branch: agent/x\nsteps:\n  - name: x\n    prompt: Fix it\n";
+		const yaml = "steps:\n  - name: x\n    prompt: Fix it\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
 	it("rejects workflows missing steps", () => {
-		const yaml = "branch: my-branch\nbase_branch: main\n";
+		const yaml = "branch: my-branch\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
 	it("rejects workflows with an empty steps array", () => {
-		const yaml = "branch: my-branch\nbase_branch: main\nsteps: []\n";
+		const yaml = "branch: my-branch\nsteps: []\n";
 
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
@@ -194,7 +181,6 @@ change_request:
 	it("rejects the legacy top-level prompt form", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 prompt: Fix this issue
 `;
 
@@ -204,7 +190,6 @@ prompt: Fix this issue
 	it("rejects the legacy phases key", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 phases:
   - name: plan
     prompt: Write a plan
@@ -216,7 +201,6 @@ phases:
 	it("rejects the legacy hooks block", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 hooks:
   before_run: echo hi
 steps:
@@ -230,7 +214,6 @@ steps:
 	it("rejects unknown step keys", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -251,7 +234,6 @@ branch:
         type: string
         pattern: "^feat/"
     required: [name]
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -274,7 +256,6 @@ ${validChangeRequest}`;
 branch:
   schema:
     type: object
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -287,7 +268,6 @@ ${validChangeRequest}`;
 		const yaml = `
 branch:
   prompt: "Propose a name"
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -302,7 +282,6 @@ branch:
   prompt: "Propose a name"
   schema: { type: object }
   bogus: true
-base_branch: main
 steps:
   - name: implement
     prompt: Fix it
@@ -314,7 +293,6 @@ ${validChangeRequest}`;
 	it("accepts a step with an output_schema (raw JSON Schema)", () => {
 		const yaml = `
 branch: my-branch
-base_branch: main
 steps:
   - name: summarise
     prompt: Summarise the issue

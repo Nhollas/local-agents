@@ -11,7 +11,12 @@ const gitlabMergeRequestSchema = z.object({
 	web_url: z.string(),
 });
 
+const gitlabProjectSchema = z.object({
+	default_branch: z.string().min(1),
+});
+
 export type GitLabClient = {
+	getProject(projectPath: RepoSlug): Promise<{ default_branch: string }>;
 	getFileContent(
 		projectPath: RepoSlug,
 		filePath: string,
@@ -55,6 +60,12 @@ export function createGitLabClient(
 	});
 
 	return {
+		getProject(projectPath) {
+			return request(`/projects/${encodeProjectPath(projectPath)}`, {
+				schema: gitlabProjectSchema,
+			});
+		},
+
 		getFileContent(projectPath, filePath, ref = "HEAD") {
 			const query = new URLSearchParams({ ref });
 			return request(

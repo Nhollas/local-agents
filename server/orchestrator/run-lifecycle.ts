@@ -57,6 +57,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		const { issue, repo, workflow } = req;
 
 		const cloneUrl = codeHost.cloneUrl(repo);
+		const baseBranch = await codeHost.defaultBranch(repo);
 		const ws = await ensureWorkspace(issue, workspaceRoot, cloneUrl);
 
 		return runner.enqueue({
@@ -97,6 +98,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								workflow,
 								issue,
 								branch,
+								baseBranch,
 								cwd: ws.path,
 								model,
 							});
@@ -119,7 +121,14 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						});
 
 						if (result.status === "completed" && branch) {
-							await finalizeSuccess(repo, issue, workflow, branch, ctx.outputs);
+							await finalizeSuccess(
+								repo,
+								issue,
+								workflow,
+								branch,
+								baseBranch,
+								ctx.outputs,
+							);
 						}
 
 						await removeWorkspace(ws.path);
@@ -140,6 +149,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		issue: Issue,
 		workflow: RepoWorkflow,
 		branch: BranchName,
+		baseBranch: BranchName,
 		outputs: Record<string, unknown>,
 	): Promise<void> {
 		const { title, body } = renderChangeRequest({
@@ -149,13 +159,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			outputs,
 		});
 		try {
-			await codeHost.createChangeRequest(
-				repo,
-				branch,
-				branchName(workflow.base_branch),
-				title,
-				body,
-			);
+			await codeHost.createChangeRequest(repo, branch, baseBranch, title, body);
 		} catch (err) {
 			canonicalLog.append(
 				"warnings",

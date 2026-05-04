@@ -99,7 +99,6 @@ export function createTestWorkflow(
 ): RepoWorkflow {
 	return {
 		branch: "agent/issue-{{ issue.number }}",
-		base_branch: "main",
 		steps: [
 			{
 				name: "prompt",

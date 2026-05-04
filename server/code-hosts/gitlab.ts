@@ -1,5 +1,5 @@
 import type { GitLabClient } from "../gitlab-client.ts";
-import type { GitLabToken } from "../types/brands.ts";
+import { branchName, type GitLabToken } from "../types/brands.ts";
 import { decorateCodeHost } from "./decorator.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
@@ -33,6 +33,11 @@ export function gitlabCodeHostAdapter(
 				/^(https?:\/\/)/,
 				`$1oauth2:${encodeURIComponent(cloneToken)}@`,
 			);
+		},
+
+		async defaultBranch(repo) {
+			const project = await client.getProject(repo);
+			return branchName(project.default_branch);
 		},
 
 		async createChangeRequest(
