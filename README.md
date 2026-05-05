@@ -2,13 +2,9 @@
 
 AI agents that run on your machine, triggered by issue trackers, powered by your Claude subscription.
 
-A polling orchestrator watches multiple repos for labelled issues, merges them into an oldest-first queue, creates isolated workspaces, and runs Claude agents to do the work.
+A polling orchestrator watches a configured repo for Jira issues in a configured status, creates an isolated workspace per issue, and runs a Claude agent to do the work. Currently the orchestrator supports Jira as the tracker and GitLab as the code host.
 
-See [docs/architecture.md](docs/architecture.md) for the current architecture.
-The shell expansion and integration design is tracked in
-[docs/design-shell-expansion-and-integrations.md](docs/design-shell-expansion-and-integrations.md)
-and the accompanying
-[decisions log](docs/design-shell-expansion-and-integrations-decisions.md).
+See [docs/architecture.md](docs/architecture.md) for how it works and the full `config.yaml` and `workflow.yaml` schemas.
 
 ## Setup
 
@@ -17,100 +13,11 @@ pnpm install
 cp .env.example .env
 ```
 
-### Authentication
+Fill in `JIRA_EMAIL`, `JIRA_API_TOKEN`, and `GITLAB_TOKEN`.
 
 The Agent SDK uses your existing Claude Code login automatically. Make sure you're logged into Claude Code with an active subscription.
 
-### Configuration
-
-Edit `config.yaml` to choose one tracker, one code host, and the target repos
-the orchestrator may clone and open change requests against.
-
-For GitHub issues with GitHub-hosted code:
-
-```yaml
-tracker:
-  kind: github
-
-code_host:
-  kind: github
-  repos:
-    - your-org/your-repo
-
-defaults:
-  polling_interval_ms: 30000
-  max_concurrent: 2
-  max_retries: 3
-  model: claude-sonnet-4-6
-  workspace_root: /tmp/local-agent-workspaces
-```
-
-All `defaults` fields are required — there is no fallback if you omit one.
-
-For Jira tracking, configure native Jira statuses. Jira issues do not identify a
-code repo, so Jira mode currently requires exactly one `code_host.repos` entry.
-`code_host.base_url`, `tracker.statuses`, and the workflow `branch` /
-`base_branch` fields are all required — set them explicitly so misconfiguration
-fails loudly:
-
-```yaml
-tracker:
-  kind: jira
-  base_url: https://yourco.atlassian.net
-  project: PROJ
-  statuses:
-    pending: "To Do"
-    running: "In Progress"
-    awaiting_review: "In Review"
-
-code_host:
-  kind: gitlab
-  base_url: https://gitlab.example.com
-  repos:
-    - your-group/your-project
-```
-
-Create `workflow.yaml` in the local-agents working directory to define hooks and
-the prompt used for every configured repo. `branch` and `base_branch` are
-required:
-
-```yaml
-branch: "agent/issue-{{ issue.number }}"
-base_branch: main
-
-hooks:
-  after_create: |
-    git checkout -b agent/issue-{{ issue.number }}
-  before_run: |
-    git fetch origin main && git rebase origin/main
-  after_run: |
-    git push -u origin agent/issue-{{ issue.number }}
-
-prompt: |
-  You are working on: {{ issue.key }} - {{ issue.title }}
-  {{ issue.description }}
-```
-
-The workflow can also define staged prompts with `phases` instead of `prompt`:
-
-```yaml
-phases:
-  - name: plan
-    prompt: |
-      Analyze {{ issue.key }} and write PLAN.md.
-
-  - name: implement
-    resume_previous: true
-    prompt: |
-      Implement PLAN.md.
-      !`test -f PLAN.md`
-```
-
-Shell blocks written directly in `workflow.yaml` with `` !`command` `` run in
-the cloned workspace before the agent prompt is sent. Their stdout replaces the
-block. Shell expansion is strict: non-zero exit, timeout, signal termination,
-spawn failure, or output overflow fails the run. Issue titles and descriptions
-are treated as untrusted content and cannot inject executable shell blocks.
+Edit `config.yaml` to point at your Jira project, your GitLab instance, and the target repo the orchestrator may clone and open merge requests against. Create `workflow.yaml` in the local-agents working directory to define the prompt, hooks, and branch naming. See [docs/architecture.md](docs/architecture.md) for the full schemas and examples.
 
 ## Running
 
@@ -120,49 +27,27 @@ pnpm dev
 
 This starts:
 
-- **Orchestrator** on `http://localhost:3000` — polls for issues, runs agents, serves API
+- **Orchestrator** on `http://localhost:3000` — polls Jira, runs agents, serves API
 - **Dashboard** on `http://localhost:5173` — live monitoring via SSE
 
-### Adding a New GitHub Repo
+## Creating Work
 
-1. Add the repo to the `code_host.repos` list in `config.yaml`
-2. Create the required state labels on the repo:
-   ```bash
-   gh label create agent --repo your-org/your-repo
-   gh label create agent:running --repo your-org/your-repo
-   gh label create agent:awaiting-review --repo your-org/your-repo
-   ```
-3. Restart the orchestrator - it loads `./workflow.yaml` on startup
+Move (or create) a Jira issue into the configured `pending` status. The orchestrator picks it up on the next tick (default: 30 seconds), clones the repo, runs the agent, and pushes a branch with a merge request. Transition the issue out of `pending` (or close it) to stop the agent.
 
-### Creating GitHub Work
+The fastest way to create or transition issues:
 
-1. Open an issue with the configured label:
+- **Jira web UI** — universal, no setup.
+- **Atlassian MCP** — if you're driving from Claude Code, install the Atlassian MCP server and ask Claude to create or transition issues directly.
+- **`jira` CLI** — Atlassian's official CLI if you'd rather stay in the terminal.
 
-   ```bash
-   gh issue create --repo your-org/your-repo --title "Add feature X" --label agent
-   ```
-
-2. The orchestrator picks it up on the next tick (default: 30 seconds), clones the repo, runs the agent, and pushes a branch.
-
-3. Close the issue to stop the agent.
-
-For Jira, create or move an issue into the configured `pending` status. Jira
-issue keys use native Jira format, for example `PROJ-42`.
-
-## Migration Notes
-
-- Move old top-level `repos` entries under `code_host.repos`; top-level `repos`
-  is rejected by the config parser.
-- Move per-repo `.agents/workflow.yaml` content into the local
-  `./workflow.yaml`; target repos are no longer queried for workflow files.
-- Restart the orchestrator after changing `config.yaml` or `workflow.yaml`.
+Jira issue keys use native Jira format, for example `PROJ-42`.
 
 ## Dashboard
 
 The dashboard shows all agent runs in real-time:
 
 - Live connection status via SSE
-- Runs grouped by agent with repo-qualified issue key and title
+- Runs grouped by agent with issue key and title
 - Drill into run details to see tool use activity
 - Kill running agents
 - Dark/light theme
@@ -172,6 +57,5 @@ The dashboard shows all agent runs in real-time:
 - Node.js >= 22.6.0
 - pnpm
 - Claude Code (logged in with active subscription)
-- `GITHUB_TOKEN` when either the tracker or code host is GitHub
-- `GITLAB_TOKEN` when the code host is GitLab
-- `JIRA_EMAIL` and `JIRA_API_TOKEN` when the tracker is Jira
+- `JIRA_EMAIL` and `JIRA_API_TOKEN`
+- `GITLAB_TOKEN`
