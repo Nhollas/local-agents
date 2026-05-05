@@ -1,5 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
+import * as canonicalLog from "../../canonical-log.ts";
 import { type AgentMessage, logAgentMessage } from "../agent-logging.ts";
+
+function capturingLogger(): {
+	logger: { info(obj: Record<string, unknown>, msg: string): void };
+	bag: () => Record<string, unknown>;
+} {
+	let captured: Record<string, unknown> = {};
+	return {
+		logger: {
+			info(obj: Record<string, unknown>) {
+				captured = obj;
+			},
+		},
+		bag: () => captured,
+	};
+}
 
 function toolUseMsg(
 	name: string,
@@ -51,6 +67,26 @@ describe("logAgentMessage", () => {
 		);
 
 		expect(emitToolUse).toHaveBeenCalledWith("WebSearch", "");
+	});
+
+	it("aggregates a tool_use_by_name counter on the canonical bag", async () => {
+		const { logger, bag } = capturingLogger();
+
+		await canonicalLog.run(
+			{ scope: "run" },
+			async () => {
+				logAgentMessage(toolUseMsg("Read", { file_path: "a.ts" }), "/work");
+				logAgentMessage(toolUseMsg("Read", { file_path: "b.ts" }), "/work");
+				logAgentMessage(toolUseMsg("Edit", { file_path: "c.ts" }), "/work");
+			},
+			logger,
+		);
+
+		expect(bag()).toEqual(
+			expect.objectContaining({
+				tool_use_by_name: { Read: 2, Edit: 1 },
+			}),
+		);
 	});
 
 	it("reads file_path, pattern, or command from tool input", () => {

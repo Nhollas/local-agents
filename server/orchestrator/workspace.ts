@@ -67,13 +67,14 @@ const SETUP_SCRIPT_PATH = ".agent/setup.sh";
 export async function runRepoSetup(
 	wsPath: string,
 	runShell: RunShell,
-): Promise<void> {
+): Promise<boolean> {
 	const scriptPath = join(wsPath, SETUP_SCRIPT_PATH);
 	try {
 		await access(scriptPath);
 	} catch {
-		return;
+		return false;
 	}
 
 	await runShell(`bash ${SETUP_SCRIPT_PATH}`, wsPath);
+	return true;
 }

@@ -1,5 +1,4 @@
 import * as canonicalLog from "../canonical-log.ts";
-import type { StepEvent } from "../event-bus.ts";
 import type { RunContext } from "../runner/runner.ts";
 import type { Issue } from "../trackers/types.ts";
 import {
@@ -10,6 +9,7 @@ import type { RepoWorkflow, WorkflowStep } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { logAgentMessage } from "./agent-logging.ts";
+import { recordAgentResult } from "./agent-metrics.ts";
 
 type RunWorkflowStepsParams = {
 	ctx: RunContext;
@@ -34,6 +34,7 @@ export async function runWorkflowSteps({
 }: RunWorkflowStepsParams): Promise<void> {
 	const { steps } = workflow;
 	let previousSessionId: string | undefined;
+	canonicalLog.set({ steps_total: steps.length, steps_completed: 0 });
 
 	for (const [index, step] of steps.entries()) {
 		const stepResumeSessionId = step.resume_previous
@@ -87,7 +88,7 @@ async function runWorkflowStep({
 }: RunWorkflowStepParams): Promise<string | undefined> {
 	const startedAt = Date.now();
 	let currentSessionId = resumeSessionId;
-	emitStepMarker(ctx, {
+	ctx.emitStepEvent({
 		type: "step.started",
 		data: { name: step.name, index: stepIndex, total: totalSteps },
 	});
@@ -120,13 +121,11 @@ async function runWorkflowStep({
 			}
 			if (msg.type === "result") {
 				currentSessionId = msg.session_id;
+				recordAgentResult(msg);
 				if (msg.subtype === "success") {
 					if (outputFormat) {
 						ctx.setStepOutput(step.name, msg.structured_output);
-						canonicalLog.append("step_outputs", {
-							name: step.name,
-							output: msg.structured_output,
-						});
+						canonicalLog.append("step_outputs_collected", step.name);
 					}
 					continue;
 				}
@@ -134,29 +133,23 @@ async function runWorkflowStep({
 			}
 		}
 
-		emitStepMarker(ctx, {
+		const durationMs = Date.now() - startedAt;
+		canonicalLog.increment("steps_completed");
+		canonicalLog.incrementMap("step_durations_ms", step.name, durationMs);
+		ctx.emitStepEvent({
 			type: "step.completed",
-			data: {
-				name: step.name,
-				index: stepIndex,
-				durationMs: Date.now() - startedAt,
-			},
+			data: { name: step.name, index: stepIndex, durationMs },
 		});
 		return currentSessionId;
 	} catch (err) {
-		emitStepMarker(ctx, {
+		const error = canonicalLog.errorMessage(err);
+		canonicalLog.set({
+			failed_step: { name: step.name, index: stepIndex, error },
+		});
+		ctx.emitStepEvent({
 			type: "step.failed",
-			data: {
-				name: step.name,
-				index: stepIndex,
-				error: canonicalLog.errorMessage(err),
-			},
+			data: { name: step.name, index: stepIndex, error },
 		});
 		throw err;
 	}
-}
-
-function emitStepMarker(ctx: RunContext, event: StepEvent): void {
-	ctx.emitStepEvent(event);
-	canonicalLog.append("step_events", event);
 }

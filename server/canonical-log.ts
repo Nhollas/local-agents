@@ -42,6 +42,50 @@ export function increment(key: string, delta = 1): void {
 }
 
 /**
+ * Increment a numeric counter inside a map-typed bag entry. Creates the map
+ * and the sub-key as needed. Used for things like `{ Read: 12, Edit: 3 }`.
+ */
+export function incrementMap(key: string, subKey: string, delta = 1): void {
+	const bag = getBag();
+	if (!bag) return;
+	const map = getOrCreateMap<number>(bag, key);
+	map[subKey] = (typeof map[subKey] === "number" ? map[subKey] : 0) + delta;
+}
+
+/**
+ * Add numeric values into nested numeric fields of a map-typed bag entry.
+ * Used for things like `{ "claude-sonnet-4-6": { input_tokens: 100, ... } }`.
+ */
+export function addToMapEntry(
+	key: string,
+	subKey: string,
+	fields: Record<string, number>,
+): void {
+	const bag = getBag();
+	if (!bag) return;
+	const map = getOrCreateMap<Record<string, number>>(bag, key);
+	map[subKey] ??= {};
+	const entry = map[subKey];
+	for (const [k, v] of Object.entries(fields)) {
+		entry[k] = (typeof entry[k] === "number" ? entry[k] : 0) + v;
+	}
+}
+
+function getOrCreateMap<V>(bag: LogFields, key: string): Record<string, V> {
+	const existing = bag[key];
+	if (
+		existing !== null &&
+		typeof existing === "object" &&
+		!Array.isArray(existing)
+	) {
+		return existing as Record<string, V>;
+	}
+	const fresh: Record<string, V> = {};
+	bag[key] = fresh;
+	return fresh;
+}
+
+/**
  * Run a function inside a canonical log scope.
  * When the function completes (or throws), the accumulated bag is flushed
  * as a single structured log line.
