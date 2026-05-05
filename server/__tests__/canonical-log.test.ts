@@ -135,6 +135,45 @@ describe("canonicalLog", () => {
 		});
 	});
 
+	describe("incrementMap", () => {
+		it("counts up nested keys across multiple calls", async () => {
+			const { logger, bag } = capturingLogger();
+
+			await canonicalLog.run(
+				{ scope: "test" },
+				async () => {
+					canonicalLog.incrementMap("tool_use_by_name", "Read");
+					canonicalLog.incrementMap("tool_use_by_name", "Read");
+					canonicalLog.incrementMap("tool_use_by_name", "Edit");
+				},
+				logger,
+			);
+
+			expect(bag()).toEqual(
+				expect.objectContaining({
+					tool_use_by_name: { Read: 2, Edit: 1 },
+				}),
+			);
+		});
+
+		it("accepts a custom delta", async () => {
+			const { logger, bag } = capturingLogger();
+
+			await canonicalLog.run(
+				{ scope: "test" },
+				async () => {
+					canonicalLog.incrementMap("bytes_by_kind", "json", 512);
+					canonicalLog.incrementMap("bytes_by_kind", "json", 256);
+				},
+				logger,
+			);
+
+			expect(bag()).toEqual(
+				expect.objectContaining({ bytes_by_kind: { json: 768 } }),
+			);
+		});
+	});
+
 	describe("scenarios", () => {
 		it("http request that hits an error", async () => {
 			const { logger, bag } = capturingLogger();

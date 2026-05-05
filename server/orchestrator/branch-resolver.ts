@@ -3,6 +3,7 @@ import type { WorkflowBranch } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { logAgentMessage } from "./agent-logging.ts";
+import { recordAgentResult } from "./agent-metrics.ts";
 
 type ResolveBranchParams = {
 	workflowBranch: WorkflowBranch;
@@ -43,6 +44,7 @@ export async function resolveBranch({
 			continue;
 		}
 		if (msg.type !== "result") continue;
+		recordAgentResult(msg);
 		if (msg.subtype === "success") {
 			const value = msg.structured_output as { name?: unknown };
 			if (typeof value?.name !== "string" || value.name.length === 0) {

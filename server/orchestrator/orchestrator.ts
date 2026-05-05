@@ -1,3 +1,4 @@
+import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
 import { logger } from "../logger.ts";
@@ -36,6 +37,11 @@ type Orchestrator = {
 type TickState = {
 	runningIssueKeys: Set<IssueKey>;
 	pending: Issue[];
+};
+
+type DispatchTally = {
+	dispatched: number;
+	skippedAtCapacity: number;
 };
 
 export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
@@ -82,8 +88,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		try {
 			const result = await tracker.fetchActiveIssues("pending");
 			pending = [...result.issues];
-		} catch (err) {
-			logger.warn({ err }, "orchestrator.fetch_pending_failed");
+		} catch {
 			pending = [];
 		}
 		pending.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -92,42 +97,66 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	}
 
 	async function recover() {
-		const completedAt = new Date(clock.now()).toISOString();
-		for (const run of runRepo.getRunningSnapshot()) {
-			runRepo.failRun(run.id, {
-				error: "Stale run from previous session",
-				completedAt,
-			});
-		}
+		await canonicalLog.run(
+			{ scope: "recovery" },
+			async () => {
+				const completedAt = new Date(clock.now()).toISOString();
+				let staleRunsFailed = 0;
+				for (const run of runRepo.getRunningSnapshot()) {
+					runRepo.failRun(run.id, {
+						error: "Stale run from previous session",
+						completedAt,
+					});
+					staleRunsFailed += 1;
+				}
+				canonicalLog.set({
+					stale_runs_failed: staleRunsFailed,
+					tracker_orphans_recovered: 0,
+				});
 
-		// Tracker issues stuck "running" mean the previous process died mid-flight;
-		// push them back to "pending" so the next tick re-dispatches.
-		let runningIssues: readonly Issue[];
-		try {
-			const result = await tracker.fetchActiveIssues("running");
-			runningIssues = result.issues;
-		} catch (err) {
-			logger.warn({ err }, "orchestrator.recovery_fetch_failed");
-			return;
-		}
+				// Tracker issues stuck "running" mean the previous process died mid-flight;
+				// push them back to "pending" so the next tick re-dispatches.
+				let runningIssues: readonly Issue[];
+				try {
+					const result = await tracker.fetchActiveIssues("running");
+					runningIssues = result.issues;
+				} catch {
+					return;
+				}
 
-		for (const issue of runningIssues) {
-			logger.info({ key: issue.key }, "orchestrator.recovery_orphan");
-			await tracker
-				.transitionState(issue.repo, issue.number, "running", "pending")
-				.catch((err) =>
-					logger.warn(
-						{ key: issue.key, err },
-						"orchestrator.recovery_transition_failed",
+				const results = await Promise.allSettled(
+					runningIssues.map((issue) =>
+						tracker.transitionState(
+							issue.repo,
+							issue.number,
+							"running",
+							"pending",
+						),
 					),
 				);
-		}
+				canonicalLog.set({
+					tracker_orphans_recovered: results.filter(
+						(r) => r.status === "fulfilled",
+					).length,
+				});
+			},
+			logger,
+		);
 	}
 
-	async function dispatchPendingIssues(state: TickState) {
+	async function dispatchPendingIssues(
+		state: TickState,
+	): Promise<DispatchTally> {
+		const tally: DispatchTally = {
+			dispatched: 0,
+			skippedAtCapacity: 0,
+		};
 		for (const issue of state.pending) {
 			if (state.runningIssueKeys.has(issue.key)) continue;
-			if (state.runningIssueKeys.size >= defaults.max_concurrent) break;
+			if (state.runningIssueKeys.size >= defaults.max_concurrent) {
+				tally.skippedAtCapacity += 1;
+				continue;
+			}
 
 			const { repo } = issue;
 			await tracker.transitionState(repo, issue.number, "pending", "running");
@@ -136,21 +165,21 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				const handle = await lifecycle.dispatch({ issue, repo, workflow });
 				trackPostRun(handle.done);
 			} catch (err) {
-				logger.warn({ issue: issue.key, err }, "orchestrator.dispatch_failed");
+				canonicalLog.append("warnings", {
+					kind: "dispatch_failed",
+					issue_key: issue.key,
+					error: canonicalLog.errorMessage(err),
+				});
 				await tracker
 					.transitionState(repo, issue.number, "running", "pending")
-					.catch((rollbackErr) =>
-						logger.warn(
-							{ issue: issue.key, err: rollbackErr },
-							"orchestrator.rollback_failed",
-						),
-					);
+					.catch(() => {});
 				continue;
 			}
 
 			state.runningIssueKeys.add(issue.key);
-			logger.info({ issue: issue.key }, "orchestrator.dispatched");
+			tally.dispatched += 1;
 		}
+		return tally;
 	}
 
 	async function tick() {
@@ -158,8 +187,22 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		ticking = true;
 
 		try {
-			const state = await fetchTickState();
-			await dispatchPendingIssues(state);
+			await canonicalLog.run(
+				{ scope: "tick" },
+				async () => {
+					const state = await fetchTickState();
+					canonicalLog.set({
+						pending_count: state.pending.length,
+						running_count: state.runningIssueKeys.size,
+					});
+					const tally = await dispatchPendingIssues(state);
+					canonicalLog.set({
+						dispatched_count: tally.dispatched,
+						skipped_at_capacity: tally.skippedAtCapacity,
+					});
+				},
+				logger,
+			);
 		} finally {
 			ticking = false;
 		}

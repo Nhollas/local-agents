@@ -42,6 +42,18 @@ type RunLifecycleDeps = {
 	model: string;
 };
 
+type FailurePhase =
+	| "branch_resolver"
+	| "setup"
+	| "step"
+	| "push"
+	| "change_request"
+	| "tracker_transition";
+
+function recordFailure(phase: FailurePhase, error: string): void {
+	canonicalLog.set({ failure_phase: phase, failure_error: error });
+}
+
 export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	const {
 		runner,
@@ -73,13 +85,16 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						run_id: ctx.runId,
 						agent: `issue-${issue.number}`,
 						issue_key: issue.key,
+						workspace_reused: !ws.created,
 					},
 					async () => {
 						const startTime = clock.now();
 						let result: RunResult;
 						let branch: BranchName | undefined;
+						let phase: FailurePhase = "branch_resolver";
 
 						try {
+							const branchResolverStart = clock.now();
 							const resolvedBranch = await resolveBranch({
 								workflowBranch: workflow.branch,
 								issue,
@@ -88,11 +103,18 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								model,
 								signal: ctx.signal,
 							});
+							canonicalLog.set({
+								branch_resolver_ms: clock.now() - branchResolverStart,
+							});
 							branch = branchName(resolvedBranch);
+							canonicalLog.set({ branch });
 
+							phase = "setup";
 							await ensureBranch(ws.path, branch);
-							await runRepoSetup(ws.path, runShell);
+							const repoSetupRan = await runRepoSetup(ws.path, runShell);
+							canonicalLog.set({ repo_setup_ran: repoSetupRan });
 
+							phase = "step";
 							await runWorkflowSteps({
 								ctx,
 								agent,
@@ -109,17 +131,16 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								durationMs: clock.now() - startTime,
 							};
 						} catch (err) {
+							const error = canonicalLog.errorMessage(err);
+							recordFailure(phase, error);
 							result = {
 								status: "failed",
-								error: canonicalLog.errorMessage(err),
+								error,
 								durationMs: clock.now() - startTime,
 							};
 						}
 
-						canonicalLog.set({
-							status: result.status,
-							...(result.status === "failed" && { error: result.error }),
-						});
+						canonicalLog.set({ status: result.status });
 
 						const succeeded =
 							result.status === "completed" &&
@@ -162,10 +183,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		try {
 			await pushBranch(wsPath, branch);
 		} catch (err) {
-			canonicalLog.append(
-				"warnings",
-				`push_failed: ${canonicalLog.errorMessage(err)}`,
-			);
+			recordFailure("push", canonicalLog.errorMessage(err));
 			return false;
 		}
 
@@ -178,33 +196,26 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		try {
 			await codeHost.createChangeRequest(repo, branch, baseBranch, title, body);
 		} catch (err) {
-			canonicalLog.append(
-				"warnings",
-				`on_complete_failed: ${canonicalLog.errorMessage(err)}`,
-			);
+			recordFailure("change_request", canonicalLog.errorMessage(err));
 			return false;
 		}
 
-		await tracker
-			.transitionState(repo, issue.number, "running", "awaiting_review")
-			.catch((err) =>
-				canonicalLog.append(
-					"warnings",
-					`state_recovery_failed: ${canonicalLog.errorMessage(err)}`,
-				),
+		try {
+			await tracker.transitionState(
+				repo,
+				issue.number,
+				"running",
+				"awaiting_review",
 			);
+		} catch (err) {
+			recordFailure("tracker_transition", canonicalLog.errorMessage(err));
+			return false;
+		}
 		return true;
 	}
 
 	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {
-		await tracker
-			.markFailed(repo, issue.number)
-			.catch((err) =>
-				canonicalLog.append(
-					"warnings",
-					`mark_failed_failed: ${canonicalLog.errorMessage(err)}`,
-				),
-			);
+		await tracker.markFailed(repo, issue.number).catch(() => {});
 	}
 
 	return { dispatch };

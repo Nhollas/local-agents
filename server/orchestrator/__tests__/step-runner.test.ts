@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as canonicalLog from "../../canonical-log.ts";
 import type { StepEvent } from "../../event-bus.ts";
 import type { RunContext } from "../../runner/runner.ts";
 import type { Issue } from "../../trackers/types.ts";
@@ -10,6 +11,58 @@ import type {
 	AgentMessage,
 } from "../agent-invoker.ts";
 import { runWorkflowSteps } from "../step-runner.ts";
+
+type StepCostFields = {
+	model: string;
+	costUsd: number;
+	inputTokens: number;
+	outputTokens: number;
+};
+
+function resultMessage(uuid: string, fields: StepCostFields): AgentMessage {
+	return {
+		type: "result",
+		subtype: "success",
+		duration_ms: 1,
+		duration_api_ms: 1,
+		is_error: false,
+		num_turns: 1,
+		result: "ok",
+		stop_reason: "end_turn",
+		total_cost_usd: fields.costUsd,
+		usage: {} as never,
+		modelUsage: {
+			[fields.model]: {
+				inputTokens: fields.inputTokens,
+				outputTokens: fields.outputTokens,
+				cacheReadInputTokens: 0,
+				cacheCreationInputTokens: 0,
+				webSearchRequests: 0,
+				costUSD: fields.costUsd,
+				contextWindow: 200_000,
+				maxOutputTokens: 8_000,
+			},
+		},
+		permission_denials: [],
+		uuid,
+		session_id: "sess",
+	} as AgentMessage;
+}
+
+function captureBag(): {
+	logger: { info(obj: Record<string, unknown>, msg: string): void };
+	bag: () => Record<string, unknown>;
+} {
+	let captured: Record<string, unknown> = {};
+	return {
+		logger: {
+			info(obj: Record<string, unknown>) {
+				captured = obj;
+			},
+		},
+		bag: () => captured,
+	};
+}
 
 const issue: Issue = {
 	key: issueKey("owner/repo#1"),
@@ -395,6 +448,278 @@ describe("runWorkflowSteps", () => {
 			"Summarise",
 			"Use Earlier title",
 		]);
+	});
+
+	it("flushes step counters and durations into the canonical log", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(() => yieldAssistant("sess"));
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{ name: "implement", prompt: "do it", resume_previous: false },
+				{ name: "summarise", prompt: "summarise", resume_previous: false },
+			],
+			change_request: baseChangeRequest,
+		};
+
+		const { logger, bag } = captureBag();
+		await canonicalLog.run(
+			{ scope: "run" },
+			() =>
+				runWorkflowSteps({
+					ctx: recorder.ctx,
+					agent,
+					workflow,
+					issue,
+					cwd: "/work",
+					branch: "agent/issue-1",
+					baseBranch: "main",
+					model: "test-model",
+				}),
+			logger,
+		);
+
+		const result = bag();
+		expect(result["steps_total"]).toBe(2);
+		expect(result["steps_completed"]).toBe(2);
+		const durations = result["step_durations_ms"] as Record<string, number>;
+		expect(Object.keys(durations).sort()).toEqual(["implement", "summarise"]);
+		expect(durations["implement"]).toEqual(expect.any(Number));
+		expect(durations["summarise"]).toEqual(expect.any(Number));
+	});
+
+	it("collects step output names without persisting payloads to the bag", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(async function* () {
+			yield* yieldAssistant("sess");
+			yield {
+				type: "result",
+				subtype: "success",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: false,
+				num_turns: 1,
+				result: "ok",
+				stop_reason: "end_turn",
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				structured_output: { title: "Hello" },
+				uuid: "00000000-0000-0000-0000-000000000081",
+				session_id: "sess",
+			} as AgentMessage;
+		});
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{
+					name: "summarise",
+					prompt: "summarise",
+					resume_previous: false,
+					output_schema: outputSchema,
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		const { logger, bag } = captureBag();
+		await canonicalLog.run(
+			{ scope: "run" },
+			() =>
+				runWorkflowSteps({
+					ctx: recorder.ctx,
+					agent,
+					workflow,
+					issue,
+					cwd: "/work",
+					branch: "agent/issue-1",
+					baseBranch: "main",
+					model: "test-model",
+				}),
+			logger,
+		);
+
+		expect(bag()["step_outputs_collected"]).toEqual(["summarise"]);
+		expect(bag()).not.toHaveProperty("step_outputs");
+		expect(bag()).not.toHaveProperty("step_events");
+	});
+
+	it("sets failed_step on the canonical bag when a step throws", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(async function* () {
+			yield {
+				type: "result",
+				subtype: "error_max_turns",
+				duration_ms: 1,
+				duration_api_ms: 1,
+				is_error: true,
+				num_turns: 1,
+				stop_reason: null,
+				total_cost_usd: 0,
+				usage: {} as never,
+				modelUsage: {},
+				permission_denials: [],
+				errors: [],
+				uuid: "00000000-0000-0000-0000-000000000090",
+				session_id: "sess",
+			} as AgentMessage;
+		});
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{ name: "implement", prompt: "do it", resume_previous: false },
+				{ name: "after", prompt: "after", resume_previous: false },
+			],
+			change_request: baseChangeRequest,
+		};
+
+		const { logger, bag } = captureBag();
+		await expect(
+			canonicalLog.run(
+				{ scope: "run" },
+				() =>
+					runWorkflowSteps({
+						ctx: recorder.ctx,
+						agent,
+						workflow,
+						issue,
+						cwd: "/work",
+						branch: "agent/issue-1",
+						baseBranch: "main",
+						model: "test-model",
+					}),
+				logger,
+			),
+		).rejects.toThrow(/error_max_turns/);
+
+		expect(bag()["failed_step"]).toEqual({
+			name: "implement",
+			index: 0,
+			error: "error_max_turns",
+		});
+		expect(bag()["steps_total"]).toBe(2);
+		expect(bag()["steps_completed"]).toBe(0);
+	});
+
+	it("aggregates cost and token usage into the canonical log", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(async function* (opts) {
+			yield* yieldAssistant("sess");
+			if (opts.model === "claude-sonnet-4-6") {
+				yield resultMessage("00000000-0000-0000-0000-000000000060", {
+					model: "claude-sonnet-4-6",
+					costUsd: 0.05,
+					inputTokens: 1000,
+					outputTokens: 200,
+				});
+			} else {
+				yield resultMessage("00000000-0000-0000-0000-000000000061", {
+					model: "claude-haiku-4-5",
+					costUsd: 0.01,
+					inputTokens: 500,
+					outputTokens: 100,
+				});
+			}
+		});
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{ name: "implement", prompt: "do it", resume_previous: false },
+				{
+					name: "summarise",
+					prompt: "summarise",
+					resume_previous: false,
+					model: "claude-haiku-4-5",
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		const { logger, bag } = captureBag();
+		await canonicalLog.run(
+			{ scope: "run" },
+			() =>
+				runWorkflowSteps({
+					ctx: recorder.ctx,
+					agent,
+					workflow,
+					issue,
+					cwd: "/work",
+					branch: "agent/issue-1",
+					baseBranch: "main",
+					model: "claude-sonnet-4-6",
+				}),
+			logger,
+		);
+
+		const result = bag();
+		expect(result["total_cost_usd"]).toBeCloseTo(0.06, 6);
+		expect(result["total_input_tokens"]).toBe(1500);
+		expect(result["total_output_tokens"]).toBe(300);
+		expect(result["models_used"]).toEqual({
+			"claude-sonnet-4-6": {
+				input_tokens: 1000,
+				output_tokens: 200,
+				cost_usd: 0.05,
+			},
+			"claude-haiku-4-5": {
+				input_tokens: 500,
+				output_tokens: 100,
+				cost_usd: 0.01,
+			},
+		});
+	});
+
+	it("flushes accumulated cost even when a step fails", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(async function* () {
+			yield* yieldAssistant("sess");
+			yield {
+				...resultMessage("00000000-0000-0000-0000-000000000070", {
+					model: "claude-sonnet-4-6",
+					costUsd: 0.04,
+					inputTokens: 800,
+					outputTokens: 150,
+				}),
+				subtype: "error_max_turns",
+				is_error: true,
+				stop_reason: null,
+				errors: [],
+			} as AgentMessage;
+		});
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [{ name: "implement", prompt: "do it", resume_previous: false }],
+			change_request: baseChangeRequest,
+		};
+
+		const { logger, bag } = captureBag();
+		await expect(
+			canonicalLog.run(
+				{ scope: "run" },
+				() =>
+					runWorkflowSteps({
+						ctx: recorder.ctx,
+						agent,
+						workflow,
+						issue,
+						cwd: "/work",
+						branch: "agent/issue-1",
+						baseBranch: "main",
+						model: "claude-sonnet-4-6",
+					}),
+				logger,
+			),
+		).rejects.toThrow(/error_max_turns/);
+
+		expect(bag()).toEqual(
+			expect.objectContaining({
+				total_cost_usd: 0.04,
+				total_input_tokens: 800,
+				total_output_tokens: 150,
+			}),
+		);
 	});
 
 	it("uses the per-step model when set, otherwise the default model", async () => {
