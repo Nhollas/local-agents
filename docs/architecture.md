@@ -3,7 +3,7 @@
 A polling orchestrator watches multiple repos for labelled issues, merges them into an oldest-first queue, creates isolated workspaces, and runs Claude agents powered by your existing Claude Code subscription.
 
 ```
-Issue Tracker (GitHub Issues or Jira)
+Issue Tracker (Jira)
         │
         ▼
 Polling Orchestrator (tick every N seconds)
@@ -27,44 +27,14 @@ The issue tracker is the orchestration layer. Polling means the orchestrator is 
 
 ### 1. Central Config
 
-A `config.yaml` defines one tracker, one code host, the code-host repo list,
-and operational settings. Every field below is required — the parser does not
-fall back to defaults, so misconfiguration fails loudly at startup:
-
-```yaml
-tracker:
-  kind: github
-
-code_host:
-  kind: github
-  repos:
-    - org/repo-a
-    - org/repo-b
-
-defaults:
-  polling_interval_ms: 30000
-  max_concurrent: 2
-  max_retries: 3
-  model: claude-sonnet-4-6
-  workspace_root: /tmp/local-agent-workspaces
-```
-
-GitLab code hosting uses the same `code_host.repos` list. `base_url` is
-required so self-hosted instances do not silently target `gitlab.com`. It is
-commonly paired with Jira tracking in the current implementation:
-
-```yaml
-code_host:
-  kind: gitlab
-  base_url: https://gitlab.example.com
-  repos:
-    - group/project
-```
-
-Jira tracking maps logical orchestrator states to Jira status names. The
-`statuses` block is required — set it to whatever your Jira project uses.
-Because Jira issues do not identify a code repo, Jira mode requires exactly
-one configured code-host repo:
+A `config.yaml` defines one tracker (Jira), one code host (GitLab), the
+code-host repo list, and operational settings. Every field below is required
+— the parser does not fall back to defaults, so misconfiguration fails loudly
+at startup. Jira tracking maps logical orchestrator states to Jira status
+names; set the `statuses` block to whatever your Jira project uses. Because
+Jira issues do not identify a code repo, Jira mode requires exactly one
+configured code-host repo. `code_host.base_url` is required so self-hosted
+GitLab instances do not silently target `gitlab.com`.
 
 ```yaml
 tracker:
@@ -81,6 +51,13 @@ code_host:
   base_url: https://gitlab.example.com
   repos:
     - group/project
+
+defaults:
+  polling_interval_ms: 30000
+  max_concurrent: 2
+  max_retries: 3
+  model: claude-sonnet-4-6
+  workspace_root: /tmp/local-agent-workspaces
 ```
 
 ### 2. Global Workflow
@@ -147,17 +124,16 @@ Each tick:
 The orchestrator tracks work through logical states and lets each tracker
 adapter map those states to platform-specific labels or statuses:
 
-| Logical state | GitHub label | Default Jira status |
-|---|---|---|
-| `pending` | `agent` | `To Do` |
-| `running` | `agent:running` | `In Progress` |
-| `awaiting_review` | `agent:awaiting-review` | `In Review` |
+| Logical state | Default Jira status |
+|---|---|
+| `pending` | `To Do` |
+| `running` | `In Progress` |
+| `awaiting_review` | `In Review` |
 
 This keeps the issue tracker as the single source of truth for what's happening
-without making the orchestrator know GitHub label strings or Jira status names.
+without making the orchestrator know Jira status strings.
 
-GitHub issue keys use `owner/repo#42`. Jira issue keys use native Jira format,
-for example `PROJ-42`.
+Jira issue keys use native Jira format, for example `PROJ-42`.
 
 ### 5. Workflow Loading
 
@@ -193,18 +169,9 @@ The system uses two adapter interfaces to stay decoupled from any specific platf
 - **TrackerAdapter** — fetches active issues from a tracker and manages label state
 - **CodeHostAdapter** — fetches files from repos, generates clone URLs, and creates pull requests or merge requests
 
-GitHub is implemented as both a tracker and code host. Jira is implemented as a
-tracker. GitLab is implemented as a code host. Adding full support for another
-platform means implementing the relevant adapter interface.
-
-## Migration Notes
-
-- `repos` now lives under `code_host.repos`; top-level `repos` is not accepted.
-- The workflow now lives at local `./workflow.yaml`; target repo
-  `.agents/workflow.yaml` files are not fetched.
-- Workflow changes are picked up on orchestrator restart, not by polling or hot
-  reload.
-- Jira mode supports one code-host repo per orchestrator instance.
+Jira is implemented as a tracker. GitLab is implemented as a code host.
+Adding support for another platform means implementing the relevant adapter
+interface.
 
 ## Design Principles
 
