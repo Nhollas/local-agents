@@ -74,11 +74,7 @@ export async function createTestOrchestrator(
 		baseUrl: GITLAB_BASE_URL,
 		maxAttempts: 1,
 	});
-	const defaultCodeHost = gitlabCodeHostAdapter(
-		gitlab,
-		GITLAB_BASE_URL,
-		gitlabCloneToken,
-	);
+	const defaultCodeHost = gitlabCodeHostAdapter(gitlab, gitlabCloneToken);
 
 	const agent = options.agent ?? adaptRunAgent(options.runAgent ?? noopAgent);
 
