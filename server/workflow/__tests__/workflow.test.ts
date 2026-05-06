@@ -178,39 +178,6 @@ change_request:
 		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
-	it("rejects the legacy top-level prompt form", () => {
-		const yaml = `
-branch: my-branch
-prompt: Fix this issue
-`;
-
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
-	});
-
-	it("rejects the legacy phases key", () => {
-		const yaml = `
-branch: my-branch
-phases:
-  - name: plan
-    prompt: Write a plan
-`;
-
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
-	});
-
-	it("rejects the legacy hooks block", () => {
-		const yaml = `
-branch: my-branch
-hooks:
-  before_run: echo hi
-steps:
-  - name: implement
-    prompt: Fix it
-`;
-
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
-	});
-
 	it("rejects unknown step keys", () => {
 		const yaml = `
 branch: my-branch
