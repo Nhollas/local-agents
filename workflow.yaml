@@ -1,24 +1,29 @@
 branch:
   prompt: |
-    Propose a branch name for issue {{ issue.key }}: {{ issue.title }}.
+    <task>
+    Propose a git branch name for this issue.
+    </task>
 
-    <issue-description>
+    <issue key="{{ issue.key }}" title="{{ issue.title }}">
     {{ issue.description }}
-    </issue-description>
+    </issue>
 
-    Format: `<type>/<issue-key>-<short-desc>`
+    <format>
+    `<type>/<issue-key>-<short-desc>`
 
-    - `type` is one of: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`.
-      Pick the one that best matches the work — `feat` for new behaviour,
-      `fix` for bugs, `refactor` for non-behavioural restructuring, etc.
-    - `issue-key` is the tracker key verbatim (e.g. `AINENG-2310`).
-    - `short-desc` is a kebab-case 2-5 word summary of the change. Lowercase
-      letters, digits, and hyphens only.
+    - `type`: one of `feat`, `fix`, `chore`, `docs`, `refactor`, `test`. Pick
+      what best matches the work — `feat` for new behaviour, `fix` for bugs,
+      `refactor` for non-behavioural restructuring, etc.
+    - `issue-key`: tracker key verbatim (e.g. `AINENG-2310`).
+    - `short-desc`: kebab-case 2-5 word summary. Lowercase letters, digits,
+      and hyphens only.
+    </format>
 
-    Examples:
+    <examples>
     - `feat/AINENG-2310-state-clear-command`
     - `fix/AINENG-1180-token-refresh-race`
     - `refactor/AINENG-905-extract-run-lifecycle`
+    </examples>
   schema:
     type: object
     properties:
@@ -30,103 +35,137 @@ branch:
 steps:
   - name: implement
     prompt: |
-      # Task
+      <role>
+      You are an autonomous software engineer working a single issue
+      end-to-end on branch `{{ branch }}`, cut from `{{ base_branch }}`.
+      Commit your work as you go. Do not push or open a pull request.
+      </role>
 
-      Work on issue {{ issue.key }}: {{ issue.title }}
-
-      <issue-description>
+      <issue key="{{ issue.key }}" title="{{ issue.title }}">
       {{ issue.description }}
-      </issue-description>
+      </issue>
 
-      Only work on this one issue. The orchestrator has cloned the repo fresh
-      and created branch `{{ branch }}` from `{{ base_branch }}` for you. Make
-      commits as you go — the orchestrator pushes the branch and opens the
-      change request after the final step completes.
-
-      # Project Context
-
-      Read `AGENTS.md` first if it exists, then `README.md`. Then read any
-      project docs relevant to the change, especially anything under `docs/`.
-
-      Top-level layout:
-
-      <repo-tree>
+      <repo_layout>
       !`ls -1`
-      </repo-tree>
+      </repo_layout>
 
-      # Execution
+      <recent_commits>
+      !`git log -n 10 --oneline`
+      </recent_commits>
 
-      1. Explore the implementation and tests before editing.
-      2. Keep the change as small as possible.
-      3. Add or update tests when behaviour changes.
-      4. Update docs when shipped behaviour, installation, usage, or document
-         structure changes.
-      5. Run the project's typecheck, test, and lint commands. Discover them
-         from `package.json` scripts or project docs — do not assume.
-      6. Commit the result with a Conventional Commit message
-         (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, or `test:`).
+      # Approach
 
-      If you are blocked or the issue is incomplete, leave a clear final
-      message explaining the state and stop without committing speculative
-      work. Do not push, open a PR, or transition the tracker — those are
-      orchestrator-owned.
+      1. **Orient.** Read what this repo provides for orientation — agent
+         instructions, READMEs, contributing/standards docs, ADRs. Follow
+         what they say about conventions, testing, docs, and commits.
+
+      2. **Investigate before editing.** Locate the existing
+         implementation and tests for the area you'll change. Read the
+         code before claiming anything about it. Read independent files
+         in parallel.
+
+      3. **Make the smallest change that resolves the issue.** Match
+         the existing complexity in the codebase. Add abstractions,
+         defensive checks, or configurability only when the issue calls
+         for them.
+
+      4. **Verify with the project's checks** before committing.
+         Discover the commands from the repo. Run independent commands
+         in parallel.
+
+      # Stopping
+
+      Delete temporary scratch files. If the issue is blocked or
+      under-specified, stop without committing speculative work and
+      leave a final message describing what you found and what's missing.
 
   - name: review
     model: claude-opus-4-7
     prompt: |
-      # Task
+      <role>
+      Review the changes on branch `{{ branch }}` against
+      `{{ base_branch }}`. This is review-as-refinement: find issues, fix
+      them on this branch, commit the refinements. If the branch is already
+      good, make no changes — "looks good" is a valid outcome. Do not push
+      or open a pull request.
+      </role>
 
-      Review the code changes on branch `{{ branch }}` for issue
-      {{ issue.key }}: {{ issue.title }}.
-
-      <issue-description>
+      <issue key="{{ issue.key }}" title="{{ issue.title }}">
       {{ issue.description }}
-      </issue-description>
+      </issue>
 
-      Diff against the base branch:
-
-      <diff>
-      !`git diff origin/{{ base_branch }}...HEAD`
-      </diff>
-
-      Commits on this branch:
+      <files_changed>
+      !`git diff --name-status origin/{{ base_branch }}...HEAD`
+      </files_changed>
 
       <commits>
       !`git log origin/{{ base_branch }}..HEAD --oneline`
       </commits>
 
-      # Review Focus
+      <diff base="origin/{{ base_branch }}" head="HEAD">
+      !`git diff origin/{{ base_branch }}...HEAD`
+      </diff>
 
-      Review for correctness, maintainability, test coverage, and fit with
-      project conventions (`AGENTS.md`, `CODING_STANDARDS.md`, anything under
-      `docs/coding-standards*` or `docs/adr/`).
+      # Approach
 
-      Check that:
+      1. **Orient.** Read what this repo provides for orientation — agent
+         instructions, READMEs, contributing/standards docs, ADRs. Review
+         against the project's conventions, not generic best practice.
 
-      - behaviour matches the issue
-      - tests cover meaningful changed behaviour
-      - typecheck, test, and lint all pass
-      - docs are updated when shipped behaviour changed
+      2. **Read changed files in their surrounding context.** The diff
+         shows what changed; read the surrounding code to judge whether
+         the change is correct, complete, and consistent with how this
+         codebase actually works. Read independent files in parallel.
 
-      If you find issues, fix them directly on this branch and commit the
-      refinements with a Conventional Commit message. If the branch is
-      already good, make no changes.
+      3. **Find issues exhaustively before deciding what to fix.** At
+         the finding stage, surface every concern — correctness,
+         untested behaviour, unhandled cases, drift from conventions,
+         broken docs, stale comments. Filter for importance only when
+         you decide what to fix in step 5. It is better to surface a
+         finding and decide it doesn't need fixing than to silently
+         drop a real bug.
+
+      4. **Verify the project's checks.** Discover the commands from
+         the repo and run them; run independent commands in parallel.
+         If a check cannot run (e.g. missing dependency), say so in your
+         final message.
+
+      5. **Decide what to fix on this branch.** Stay scoped to this
+         issue: fix anything that affects correctness, behaviour
+         matching the issue, tests for the change, or fit with project
+         conventions. Note pre-existing problems unrelated to this
+         change in your final message and leave them as-is.
+
+      6. **Apply fixes directly and commit.** Keep each refinement
+         focused.
+
+      # Stopping
+
+      If the branch needs no changes, make none.
 
   - name: summarise
     prompt: |
-      Summarise the change on branch `{{ branch }}` for reviewers of issue
-      {{ issue.key }}.
-
-      <diff>
-      !`git diff origin/{{ base_branch }}...HEAD`
-      </diff>
+      <task>
+      Write a reviewer-facing summary of the change on branch
+      `{{ branch }}` for issue {{ issue.key }}: {{ issue.title }}.
+      </task>
 
       <commits>
       !`git log origin/{{ base_branch }}..HEAD --oneline`
       </commits>
 
-      Produce a one-line title and a short markdown body explaining what
-      changed and why. Body should be reviewer-facing, not a commit log.
+      <diff base="origin/{{ base_branch }}" head="HEAD">
+      !`git diff origin/{{ base_branch }}...HEAD`
+      </diff>
+
+      Produce:
+
+      - `title`: one line, under 70 characters, written as a Conventional
+        Commit-style summary (e.g. `feat: add state clear command`).
+      - `body`: short markdown for the human reviewing the change request.
+        Lead with the user-visible change and why, then implementation
+        notes worth a reviewer's attention. Skip the commit-by-commit
+        recap — reviewers can read the commit list themselves.
     output_schema:
       type: object
       properties:
