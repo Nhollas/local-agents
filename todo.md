@@ -1,2 +1,0 @@
-- Want to see if we can make application setup easier not require PATs?
-- How the orchestrator can push branches & code to the cost host auth I don't think is well thought out.
