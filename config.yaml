@@ -9,8 +9,7 @@ tracker:
     awaiting_review: "In Review"
 
 code_host:
-  kind: gitlab
-  base_url: https://gitlab.com
+  kind: github
   scopes:
     - Nhollas
 
