@@ -3,17 +3,10 @@ import { branchName, type GitLabToken } from "../types/brands.ts";
 import { decorateCodeHost } from "./decorator.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
-function trimTrailingSlash(value: string): string {
-	return value.replace(/\/+$/, "");
-}
-
 export function gitlabCodeHostAdapter(
 	client: GitLabClient,
-	baseUrl = "https://gitlab.com",
 	cloneToken?: GitLabToken,
 ): CodeHostAdapter {
-	const cloneBaseUrl = trimTrailingSlash(baseUrl);
-
 	return decorateCodeHost({
 		async fetchFile(repo, path, ref): Promise<string | null> {
 			try {
@@ -25,7 +18,7 @@ export function gitlabCodeHostAdapter(
 		},
 
 		cloneUrl(repo): string {
-			const url = `${cloneBaseUrl}/${repo}.git`;
+			const url = `${client.baseUrl}/${repo}.git`;
 			if (!cloneToken) return url;
 			// Embed the token as HTTP basic auth so `git clone` (and later
 			// push/fetch from the same remote) authenticate to GitLab.

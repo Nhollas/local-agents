@@ -9,7 +9,6 @@ import { gitlabCodeHostAdapter } from "../gitlab.ts";
 const REPO = repoSlug("group/subgroup/project");
 const adapter = gitlabCodeHostAdapter(
 	createGitLabClient(gitlabToken("test-token"), { baseUrl: GITLAB_BASE_URL }),
-	GITLAB_BASE_URL,
 );
 
 describe("cloneUrl", () => {
@@ -24,7 +23,6 @@ describe("cloneUrl", () => {
 			createGitLabClient(gitlabToken("test-token"), {
 				baseUrl: GITLAB_BASE_URL,
 			}),
-			GITLAB_BASE_URL,
 			gitlabToken("token-with/special:chars"),
 		);
 

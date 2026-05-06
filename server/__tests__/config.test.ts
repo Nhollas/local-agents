@@ -86,6 +86,34 @@ ${fullDefaults}`);
 		expect(() => loadConfig(configFile.path)).toThrow();
 	});
 
+	it("accepts github code host without a base_url", () => {
+		using configFile = writeConfig(`
+${validJiraTracker}code_host:
+  kind: github
+  scopes:
+    - acme/widgets
+${fullDefaults}`);
+
+		const config = loadConfig(configFile.path);
+
+		expect(config.code_host).toEqual({
+			kind: "github",
+			scopes: ["acme/widgets"],
+		});
+	});
+
+	it("rejects github code host with a base_url (github.com only)", () => {
+		using configFile = writeConfig(`
+${validJiraTracker}code_host:
+  kind: github
+  base_url: https://github.example.test
+  scopes:
+    - acme/widgets
+${fullDefaults}`);
+
+		expect(() => loadConfig(configFile.path)).toThrow();
+	});
+
 	it("rejects jira tracker without statuses", () => {
 		using configFile = writeConfig(`
 tracker:

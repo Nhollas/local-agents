@@ -16,11 +16,16 @@ export type Config = {
 			awaiting_review: string;
 		};
 	};
-	code_host: {
-		kind: "gitlab";
-		scopes: RepoSlug[];
-		base_url: string;
-	};
+	code_host:
+		| {
+				kind: "gitlab";
+				scopes: RepoSlug[];
+				base_url: string;
+		  }
+		| {
+				kind: "github";
+				scopes: RepoSlug[];
+		  };
 	defaults: {
 		polling_interval_ms: number;
 		max_concurrent: number;
@@ -56,6 +61,12 @@ const configSchema = z
 					kind: z.literal("gitlab"),
 					scopes: z.array(repoSlugSchema).min(1),
 					base_url: z.url(),
+				})
+				.strict(),
+			z
+				.object({
+					kind: z.literal("github"),
+					scopes: z.array(repoSlugSchema).min(1),
 				})
 				.strict(),
 		]),

@@ -16,6 +16,7 @@ const gitlabProjectSchema = z.object({
 });
 
 export type GitLabClient = {
+	baseUrl: string;
 	getProject(projectPath: RepoSlug): Promise<{ default_branch: string }>;
 	getFileContent(
 		projectPath: RepoSlug,
@@ -60,6 +61,7 @@ export function createGitLabClient(
 	});
 
 	return {
+		baseUrl,
 		getProject(projectPath) {
 			return request(`/projects/${encodeProjectPath(projectPath)}`, {
 				schema: gitlabProjectSchema,

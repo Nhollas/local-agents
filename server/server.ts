@@ -1,11 +1,10 @@
 import { serve } from "@hono/node-server";
 import { createApi, type HealthCheck } from "./api/api.ts";
-import { gitlabCodeHostAdapter } from "./code-hosts/gitlab.ts";
+import { createCodeHost } from "./code-hosts/create-code-host.ts";
 import { loadConfig } from "./config.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
 import { loadEnv } from "./env.ts";
-import { createGitLabClient } from "./gitlab-client.ts";
 import { createJiraClient } from "./jira-client.ts";
 import { logger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
@@ -20,9 +19,6 @@ const env = loadEnv(config);
 
 if (!env.JIRA_EMAIL || !env.JIRA_API_TOKEN) {
 	throw new Error("JIRA_EMAIL and JIRA_API_TOKEN are required for Jira");
-}
-if (!env.GITLAB_TOKEN) {
-	throw new Error("GITLAB_TOKEN is required for GitLab code host");
 }
 
 const db = getDb();
@@ -41,14 +37,10 @@ const tracker = jiraTrackerAdapter(jira, {
 	triggerLabel: config.tracker.trigger_label,
 });
 
-const gitlab = createGitLabClient(env.GITLAB_TOKEN, {
-	baseUrl: config.code_host.base_url,
+const codeHost = createCodeHost(config.code_host, {
+	gitlab: env.GITLAB_TOKEN,
+	github: env.GITHUB_TOKEN,
 });
-const codeHost = gitlabCodeHostAdapter(
-	gitlab,
-	config.code_host.base_url,
-	env.GITLAB_TOKEN,
-);
 
 const repo = createRunRepository(db);
 

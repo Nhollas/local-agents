@@ -1,0 +1,161 @@
+import { HttpResponse, http } from "msw";
+import { describe, expect, it } from "vitest";
+import { createGitHubClient } from "../../github-client.ts";
+import { GITHUB_API, REPO } from "../../testing/support/fixtures.ts";
+import { server } from "../../testing/support/msw.ts";
+import { branchName, githubToken } from "../../types/brands.ts";
+import { githubCodeHostAdapter } from "../github.ts";
+
+const adapter = githubCodeHostAdapter(
+	createGitHubClient(githubToken("test-token")),
+);
+
+describe("cloneUrl", () => {
+	it("targets github.com", () => {
+		expect(adapter.cloneUrl(REPO)).toBe(
+			"https://github.com/test-owner/test-repo.git",
+		);
+	});
+
+	it("embeds the configured token as x-access-token basic auth when provided", () => {
+		const tokenAdapter = githubCodeHostAdapter(
+			createGitHubClient(githubToken("test-token")),
+			githubToken("token-with/special:chars"),
+		);
+
+		expect(tokenAdapter.cloneUrl(REPO)).toBe(
+			"https://x-access-token:token-with%2Fspecial%3Achars@github.com/test-owner/test-repo.git",
+		);
+	});
+});
+
+describe("fetchFile", () => {
+	it("fetches base64-decoded file content from the GitHub contents API at the requested ref", async () => {
+		const expectedPath = `/repos/${REPO}/contents/docs/guide.md`;
+
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, ({ request }) => {
+				const url = new URL(request.url);
+				if (
+					url.pathname !== expectedPath ||
+					url.searchParams.get("ref") !== "feature/github" ||
+					request.headers.get("Authorization") !== "Bearer test-token"
+				) {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json({
+					content: Buffer.from("hello from github").toString("base64"),
+				});
+			}),
+		);
+
+		const content = await adapter.fetchFile(
+			REPO,
+			"docs/guide.md",
+			"feature/github",
+		);
+
+		expect(content).toBe("hello from github");
+	});
+
+	it("returns null when the file does not exist", async () => {
+		server.use(
+			http.get(
+				`${GITHUB_API}/repos/${REPO}/contents/:path+`,
+				() => new HttpResponse(null, { status: 404 }),
+			),
+		);
+
+		const content = await adapter.fetchFile(REPO, "missing.md");
+		expect(content).toBeNull();
+	});
+});
+
+describe("defaultBranch", () => {
+	it("returns the repo's default_branch from the GitHub repo endpoint", async () => {
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}`, () =>
+				HttpResponse.json({ default_branch: "develop" }),
+			),
+		);
+
+		await expect(adapter.defaultBranch(REPO)).resolves.toBe("develop");
+	});
+});
+
+describe("createChangeRequest", () => {
+	it("creates a new PR when none exists", async () => {
+		const expectedBody = {
+			title: "Fix issue 1",
+			body: "Closes TEST-1",
+			head: "agent/issue-1",
+			base: "main",
+		};
+
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}/pulls`, ({ request }) => {
+				const params = new URL(request.url).searchParams;
+				if (
+					params.get("head") !== "test-owner:agent/issue-1" ||
+					params.get("base") !== "main" ||
+					params.get("state") !== "open"
+				) {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json([]);
+			}),
+			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, async ({ request }) => {
+				const body = await request.json();
+				if (JSON.stringify(body) !== JSON.stringify(expectedBody)) {
+					return new HttpResponse(null, { status: 400 });
+				}
+				return HttpResponse.json({
+					number: 5,
+					html_url: `https://github.com/${REPO}/pull/5`,
+				});
+			}),
+		);
+
+		const result = await adapter.createChangeRequest(
+			REPO,
+			branchName("agent/issue-1"),
+			branchName("main"),
+			"Fix issue 1",
+			"Closes TEST-1",
+		);
+
+		expect(result).toEqual({
+			number: 5,
+			url: `https://github.com/${REPO}/pull/5`,
+		});
+	});
+
+	it("returns an existing PR for the source branch", async () => {
+		server.use(
+			http.get(`${GITHUB_API}/repos/${REPO}/pulls`, () =>
+				HttpResponse.json([
+					{
+						number: 3,
+						html_url: `https://github.com/${REPO}/pull/3`,
+					},
+				]),
+			),
+			http.post(`${GITHUB_API}/repos/${REPO}/pulls`, () =>
+				HttpResponse.json(null, { status: 400 }),
+			),
+		);
+
+		const result = await adapter.createChangeRequest(
+			REPO,
+			branchName("agent/issue-1"),
+			branchName("main"),
+			"Fix issue 1",
+			"Closes TEST-1",
+		);
+
+		expect(result).toEqual({
+			number: 3,
+			url: `https://github.com/${REPO}/pull/3`,
+		});
+	});
+});
