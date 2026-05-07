@@ -45,8 +45,6 @@ export const STATUSES = {
 	awaiting_review: "In Review",
 } as const;
 
-export type StatusKey = keyof typeof STATUSES;
-
 export function jiraIssueKey(num: number): string {
 	return `${JIRA_PROJECT}-${num}`;
 }
@@ -76,17 +74,6 @@ export function createJiraIssue(
 			status: { name: status },
 		},
 	};
-}
-
-export function createScopedJiraIssue(
-	num: number,
-	status: string = STATUSES.pending,
-	createdAt = "2025-01-01T00:00:00.000+0000",
-	repo = REPO,
-) {
-	return createJiraIssue(jiraIssueKey(num), status, createdAt, [
-		`repo:${repo}`,
-	]);
 }
 
 export async function* noopAgent() {}
