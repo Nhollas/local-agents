@@ -34,7 +34,7 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.2.92",
-		"@hono/node-server": "^1.19.13",
+		"@hono/node-server": "^2.0.1",
 		"@hono/zod-validator": "^0.7.6",
 		"@tanstack/react-query": "^5.96.2",
 		"better-sqlite3": "^12.8.0",
