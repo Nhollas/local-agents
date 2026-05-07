@@ -134,14 +134,15 @@ export function createTrackerStub(
 
 		parseIssueKey(key) {
 			const match = new RegExp(`^${project}-(\\d+)$`).exec(key);
-			if (!match) {
+			const captured = match?.[1];
+			if (!captured) {
 				return err({
 					kind: "invalid_format",
 					input: key,
 					message: `Invalid tracker issue key: ${key}`,
 				});
 			}
-			return ok({ number: toIssueNumber(Number.parseInt(match[1]!, 10)) });
+			return ok({ number: toIssueNumber(Number.parseInt(captured, 10)) });
 		},
 	};
 }
