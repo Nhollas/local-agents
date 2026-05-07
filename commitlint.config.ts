@@ -2,6 +2,10 @@ export default {
 	extends: ["@commitlint/config-conventional"],
 	rules: {
 		"scope-empty": [0], // scope is optional
-		"scope-enum": [2, "always", ["server", "dashboard", "docs"]],
+		"scope-enum": [
+			2,
+			"always",
+			["server", "dashboard", "docs", "deps", "deps-dev"],
+		],
 	},
 };
