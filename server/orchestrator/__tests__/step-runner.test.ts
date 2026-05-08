@@ -129,11 +129,10 @@ async function* yieldAssistant(sessionId: string): AsyncIterable<AgentMessage> {
 	yield {
 		type: "assistant",
 		session_id: sessionId,
-		// biome-ignore lint/suspicious/noExplicitAny: decouple from SDK shape
-		message: { content: [] } as any,
+		message: { content: [] },
 		parent_tool_use_id: null,
 		uuid: "00000000-0000-0000-0000-000000000010",
-	} as AgentMessage;
+	} as unknown as AgentMessage;
 }
 
 describe("runWorkflowSteps", () => {
@@ -168,11 +167,10 @@ describe("runWorkflowSteps", () => {
 			yield {
 				type: "assistant",
 				session_id: "sess",
-				// biome-ignore lint/suspicious/noExplicitAny: decouple from SDK shape
-				message: { content: [] } as any,
+				message: { content: [] },
 				parent_tool_use_id: null,
 				uuid: "00000000-0000-0000-0000-000000000010",
-			} as AgentMessage;
+			} as unknown as AgentMessage;
 			yield {
 				type: "result",
 				subtype: "success",
@@ -392,11 +390,10 @@ describe("runWorkflowSteps", () => {
 			yield {
 				type: "assistant",
 				session_id: "sess",
-				// biome-ignore lint/suspicious/noExplicitAny: decouple from SDK shape
-				message: { content: [] } as any,
+				message: { content: [] },
 				parent_tool_use_id: null,
 				uuid: "00000000-0000-0000-0000-000000000050",
-			} as AgentMessage;
+			} as unknown as AgentMessage;
 			yield {
 				type: "result",
 				subtype: "success",
