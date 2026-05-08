@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+	buildAssistantMessage,
+	buildErrorResult,
+	buildSuccessResult,
+} from "../../testing/support/agent-messages.ts";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import type {
@@ -58,23 +63,11 @@ describe("resolveBranch", () => {
 
 	it("invokes the agent with outputFormat for the dynamic form", async () => {
 		const agent = createAgent(async function* () {
-			yield {
-				type: "result",
-				subtype: "success",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: false,
-				num_turns: 1,
-				result: "ok",
-				stop_reason: "end_turn",
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				structured_output: { name: "feat/owner-repo-1-fix-it" },
+			yield buildSuccessResult({
 				uuid: "00000000-0000-0000-0000-000000000010",
-				session_id: "sess-branch",
-			} as AgentMessage;
+				sessionId: "sess-branch",
+				structuredOutput: { name: "feat/owner-repo-1-fix-it" },
+			});
 		});
 
 		const result = await resolveBranch({
@@ -104,23 +97,11 @@ describe("resolveBranch", () => {
 
 	it("throws when the success result has no `name` field", async () => {
 		const agent = createAgent(async function* () {
-			yield {
-				type: "result",
-				subtype: "success",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: false,
-				num_turns: 1,
-				result: "ok",
-				stop_reason: "end_turn",
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				structured_output: { other: "value" },
+			yield buildSuccessResult({
 				uuid: "00000000-0000-0000-0000-000000000030",
-				session_id: "sess-branch",
-			} as AgentMessage;
+				sessionId: "sess-branch",
+				structuredOutput: { other: "value" },
+			});
 		});
 
 		await expect(
@@ -137,13 +118,9 @@ describe("resolveBranch", () => {
 
 	it("throws when the agent stream ends without a result message", async () => {
 		const agent = createAgent(async function* () {
-			yield {
-				type: "assistant",
-				session_id: "sess",
-				message: { content: [] },
-				parent_tool_use_id: null,
+			yield buildAssistantMessage({
 				uuid: "00000000-0000-0000-0000-000000000040",
-			} as unknown as AgentMessage;
+			});
 		});
 
 		await expect(
@@ -160,22 +137,11 @@ describe("resolveBranch", () => {
 
 	it("aborts when the SDK returns error_max_structured_output_retries", async () => {
 		const agent = createAgent(async function* () {
-			yield {
-				type: "result",
-				subtype: "error_max_structured_output_retries",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: true,
-				num_turns: 1,
-				stop_reason: null,
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				errors: [],
+			yield buildErrorResult({
 				uuid: "00000000-0000-0000-0000-000000000020",
-				session_id: "sess-branch",
-			} as AgentMessage;
+				sessionId: "sess-branch",
+				subtype: "error_max_structured_output_retries",
+			});
 		});
 
 		await expect(

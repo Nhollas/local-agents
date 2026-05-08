@@ -57,7 +57,7 @@ export const problemDetailsHandler: ErrorHandler<AppEnv> = (err, c) => {
 	}
 
 	canonicalLog.set({
-		error: canonicalLog.errorMessage(err),
+		error: err instanceof Error ? err.message : String(err),
 	});
 	return buildProblemResponse(c, 500, "Internal Server Error");
 };

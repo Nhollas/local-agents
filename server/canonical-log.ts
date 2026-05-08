@@ -2,11 +2,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 type LogFields = Record<string, unknown>;
 
-/** Extract a message string from an unknown thrown value. */
-export function errorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
-
 const storage = new AsyncLocalStorage<LogFields>();
 
 /** Get the current bag, or null if not inside a canonical log scope. */
@@ -79,6 +74,11 @@ function getOrCreateMap<V>(bag: LogFields, key: string): Record<string, V> {
 		!Array.isArray(existing)
 	) {
 		return existing as Record<string, V>;
+	}
+	if (existing !== undefined) {
+		console.warn(
+			`canonical-log: overwriting non-map value at key "${key}" (was ${Array.isArray(existing) ? "an array" : typeof existing}); instrumentation bug?`,
+		);
 	}
 	const fresh: Record<string, V> = {};
 	bag[key] = fresh;

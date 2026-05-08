@@ -34,7 +34,7 @@ export const GITLAB_BASE_URL = "https://gitlab.example.test";
 export const GITLAB_API = `${GITLAB_BASE_URL}/api/v4`;
 export const GITHUB_API = "https://api.github.com";
 export const JIRA_BASE_URL = "https://jira.example.test";
-export const JIRA_API = `${JIRA_BASE_URL}/rest/api/3`;
+export const JIRA_API = `${JIRA_BASE_URL}/rest/api/2`;
 export const JIRA_PROJECT = "TEST";
 export const TRIGGER_LABEL = "agent";
 export const REPO = repoSlug("test-owner/test-repo");
@@ -59,16 +59,7 @@ export function createJiraIssue(
 		key,
 		fields: {
 			summary: `Issue ${key}`,
-			description: {
-				type: "doc",
-				version: 1,
-				content: [
-					{
-						type: "paragraph",
-						content: [{ type: "text", text: `Description for ${key}` }],
-					},
-				],
-			},
+			description: `Description for ${key}`,
 			created,
 			labels,
 			status: { name: status },
