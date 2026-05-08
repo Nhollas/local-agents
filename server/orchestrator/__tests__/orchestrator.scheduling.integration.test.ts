@@ -5,6 +5,7 @@ import {
 	jiraIssueKey,
 	REPO,
 } from "../../testing/support/fixtures.ts";
+import { seedRun } from "../../testing/support/test-db.ts";
 import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 
 describe("Orchestrator scheduling", () => {
@@ -18,8 +19,21 @@ describe("Orchestrator scheduling", () => {
 
 		await orchestrator.tick();
 
-		const [run] = db.select().from(runs).all();
-		expect(run).toMatchObject({ status: "running", issueKey: jiraIssueKey(1) });
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				repo: REPO,
+				issueKey: jiraIssueKey(1),
+				issueTitle: `Issue ${jiraIssueKey(1)}`,
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+			},
+		]);
 		expect(tracker.transitions).toEqual([
 			{ repo: REPO, number: 1, from: "pending", to: "running" },
 		]);
@@ -44,8 +58,20 @@ describe("Orchestrator scheduling", () => {
 		await orchestrator.tick();
 
 		const allRuns = db.select().from(runs).all();
-		expect(allRuns).toHaveLength(1);
-		expect(allRuns[0]).toMatchObject({ issueKey: jiraIssueKey(1) });
+		expect(allRuns).toEqual([
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				repo: REPO,
+				issueKey: jiraIssueKey(1),
+				issueTitle: `Issue ${jiraIssueKey(1)}`,
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+			},
+		]);
 	});
 
 	it("dispatches oldest issues first", async () => {
@@ -140,6 +166,66 @@ describe("Orchestrator scheduling", () => {
 		expect(tracker.fetchCalls).toEqual(["running", "pending", "pending"]);
 
 		vi.useRealTimers();
+	});
+
+	it("start() runs recovery before the first tick dispatches pending issues", async () => {
+		// Real timers because dispatch awaits real fs I/O in ensureWorkspace; fake
+		// timers don't drain the libuv thread pool. Polling interval is set very
+		// long so the first-tick assertion observes only the startup sequence.
+		await using ctx = await createTestOrchestrator({
+			configOverrides: { polling_interval_ms: 60_000 },
+			runAgent: hangingAgent,
+		});
+		const { orchestrator, db, workspace, tracker } = ctx;
+
+		seedRun(db, {
+			id: "stale-run",
+			agentName: "issue-99",
+			status: "running",
+			issueKey: jiraIssueKey(99),
+			issueTitle: "Stale issue",
+			startedAt: "2025-01-01T00:00:00Z",
+		});
+		tracker.addIssue("pending", { number: 1, repo: REPO });
+		await workspace.preCreateWorkspace(jiraIssueKey(1));
+
+		orchestrator.start();
+		await vi.waitFor(() => {
+			expect(db.select().from(runs).all()).toHaveLength(2);
+		});
+
+		// Recovery happened first: stale run failed and tracker fetched "running".
+		// Then first tick dispatched the pending issue.
+		expect(tracker.fetchCalls).toEqual(["running", "pending"]);
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toEqual([
+			{
+				id: "stale-run",
+				agentName: "issue-99",
+				status: "failed",
+				error: "Stale run from previous session",
+				repo: REPO,
+				issueKey: jiraIssueKey(99),
+				issueTitle: "Stale issue",
+				startedAt: "2025-01-01T00:00:00Z",
+				completedAt: expect.any(String),
+				durationMs: null,
+			},
+			{
+				id: expect.any(String),
+				agentName: "issue-1",
+				status: "running",
+				error: null,
+				repo: REPO,
+				issueKey: jiraIssueKey(1),
+				issueTitle: `Issue ${jiraIssueKey(1)}`,
+				startedAt: expect.any(String),
+				completedAt: null,
+				durationMs: null,
+			},
+		]);
+
+		orchestrator.stop();
 	});
 
 	it("keeps polling when a tick throws on a transition failure", async () => {

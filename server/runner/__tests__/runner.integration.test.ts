@@ -44,8 +44,8 @@ describe("Runner integration", () => {
 
 		const { runId } = runner.enqueue({
 			name: "test-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#1"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Test issue",
 			handler: () =>
 				new Promise((r) => {
@@ -60,8 +60,8 @@ describe("Runner integration", () => {
 			agentName: "test-job",
 			status: "running",
 			error: null,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#1"),
+			repo: "acme/widgets",
+			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Test issue",
 			startedAt: expect.any(String),
 			completedAt: null,
@@ -79,8 +79,8 @@ describe("Runner integration", () => {
 		// Fill the single slot with a blocking job
 		runner.enqueue({
 			name: "blocker",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#1"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Blocker",
 			handler: () =>
 				new Promise((r) => {
@@ -91,8 +91,8 @@ describe("Runner integration", () => {
 		// Second job sits in the pending queue — not yet executing
 		const { runId } = runner.enqueue({
 			name: "queued-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#2"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Queued issue",
 			handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 		});
@@ -106,8 +106,8 @@ describe("Runner integration", () => {
 			agentName: "queued-job",
 			status: "running",
 			error: null,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#2"),
+			repo: "acme/widgets",
+			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Queued issue",
 			startedAt: expect.any(String),
 			completedAt: null,
@@ -123,8 +123,8 @@ describe("Runner integration", () => {
 
 		const { runId, done } = runner.enqueue({
 			name: "fast-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#2"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Fast issue",
 			handler: completedHandler,
 		});
@@ -141,8 +141,8 @@ describe("Runner integration", () => {
 			agentName: "fast-job",
 			status: "completed",
 			error: null,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#2"),
+			repo: "acme/widgets",
+			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Fast issue",
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
@@ -155,8 +155,8 @@ describe("Runner integration", () => {
 
 		const { done } = runner.enqueue({
 			name: "crash-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#99"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#99"),
 			issueTitle: "Crash issue",
 			handler: failedHandler("catastrophic failure"),
 		});
@@ -175,8 +175,8 @@ describe("Runner integration", () => {
 
 		const { runId } = runner.enqueue({
 			name: "lifecycle-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#4"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#4"),
 			issueTitle: "Lifecycle issue",
 			handler: completedHandler,
 		});
@@ -189,7 +189,7 @@ describe("Runner integration", () => {
 				id: expect.any(String),
 				runId,
 				type: "run:started",
-				data: { issueKey: ik("owner/repo#4"), issueTitle: "Lifecycle issue" },
+				data: { issueKey: ik("acme/widgets#4"), issueTitle: "Lifecycle issue" },
 				createdAt: expect.any(String),
 			},
 			{
@@ -207,8 +207,8 @@ describe("Runner integration", () => {
 
 		const { runId } = runner.enqueue({
 			name: "fail-event-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#5"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#5"),
 			issueTitle: "Fail event issue",
 			handler: failedHandler("boom"),
 		});
@@ -221,7 +221,10 @@ describe("Runner integration", () => {
 				id: expect.any(String),
 				runId,
 				type: "run:started",
-				data: { issueKey: ik("owner/repo#5"), issueTitle: "Fail event issue" },
+				data: {
+					issueKey: ik("acme/widgets#5"),
+					issueTitle: "Fail event issue",
+				},
 				createdAt: expect.any(String),
 			},
 			{
@@ -239,8 +242,8 @@ describe("Runner integration", () => {
 
 		const { runId } = runner.enqueue({
 			name: "tool-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#6"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#6"),
 			issueTitle: "Tool issue",
 			handler: async (ctx) => {
 				ctx.emitToolUse("Read", "/src/index.ts");
@@ -257,7 +260,7 @@ describe("Runner integration", () => {
 				id: expect.any(String),
 				runId,
 				type: "run:started",
-				data: { issueKey: ik("owner/repo#6"), issueTitle: "Tool issue" },
+				data: { issueKey: ik("acme/widgets#6"), issueTitle: "Tool issue" },
 				createdAt: expect.any(String),
 			},
 			{
@@ -289,8 +292,8 @@ describe("Runner integration", () => {
 
 		const { runId, done } = runner.enqueue({
 			name: "killable-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#7"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#7"),
 			issueTitle: "Killable issue",
 			handler: () => new Promise(() => {}), // never resolves naturally
 		});
@@ -311,8 +314,8 @@ describe("Runner integration", () => {
 			agentName: "killable-job",
 			status: "failed",
 			error: ABORT_ERROR,
-			repo: "owner/repo",
-			issueKey: ik("owner/repo#7"),
+			repo: "acme/widgets",
+			issueKey: ik("acme/widgets#7"),
 			issueTitle: "Killable issue",
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
@@ -331,8 +334,8 @@ describe("Runner integration", () => {
 
 		const { runId, done } = runner.enqueue({
 			name: "default-concurrency-job",
-			repo: rs("owner/repo"),
-			issueKey: ik("owner/repo#10"),
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#10"),
 			issueTitle: "Default concurrency",
 			handler: completedHandler,
 		});

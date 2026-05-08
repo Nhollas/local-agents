@@ -16,12 +16,11 @@ export function createTestDb(): Db {
 
 type LooseRunInsert = Omit<
 	Partial<typeof runs.$inferInsert>,
-	"id" | "repo" | "issueKey" | "parentRunId"
+	"id" | "repo" | "issueKey"
 > & {
 	id: string;
 	repo?: string;
 	issueKey?: string | null;
-	parentRunId?: string | null;
 };
 
 const variantDefaultsByStatus = {
@@ -31,7 +30,7 @@ const variantDefaultsByStatus = {
 } as const;
 
 export function seedRun(db: Db, overrides: LooseRunInsert) {
-	const { id, repo, issueKey: keyStr, parentRunId, ...rest } = overrides;
+	const { id, repo, issueKey: keyStr, ...rest } = overrides;
 	const status = rest.status ?? "completed";
 	const now = new Date().toISOString();
 	const completedAt = status === "running" ? null : now;
@@ -47,7 +46,6 @@ export function seedRun(db: Db, overrides: LooseRunInsert) {
 			id: runId(id),
 			repo: repoSlug(repo ?? "test-owner/test-repo"),
 			...(keyStr != null && { issueKey: issueKey(keyStr) }),
-			...(parentRunId != null && { parentRunId: runId(parentRunId) }),
 		})
 		.run();
 }
