@@ -36,94 +36,6 @@ function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
 }
 
 describe("jiraTrackerAdapter", () => {
-	describe("fetchIssue", () => {
-		it("maps Jira issues to tracker issues", async () => {
-			const expectedAuth = `Basic ${Buffer.from("agent@example.test:jira-token").toString("base64")}`;
-
-			server.use(
-				http.get(`${JIRA_API}/issue/:key`, ({ request, params }) => {
-					if (
-						params["key"] !== "PROJ-42" ||
-						request.headers.get("Authorization") !== expectedAuth
-					) {
-						return new HttpResponse(null, { status: 400 });
-					}
-					return HttpResponse.json(createJiraIssue("PROJ-42", "To Do"));
-				}),
-			);
-
-			const tracker = createTracker();
-
-			await expect(tracker.fetchIssue(REPO, issueNumber(42))).resolves.toEqual({
-				key: "PROJ-42",
-				number: 42,
-				repo: REPO,
-				title: "Issue PROJ-42",
-				description: "Description for PROJ-42",
-				labels: [],
-				url: `${JIRA_BASE_URL}/browse/PROJ-42`,
-				createdAt: "2025-01-01T00:00:00.000+0000",
-			});
-		});
-
-		it("maps null descriptions to empty strings", async () => {
-			server.use(
-				http.get(`${JIRA_API}/issue/:key`, () =>
-					HttpResponse.json({
-						...createJiraIssue("PROJ-7", "To Do"),
-						fields: {
-							...createJiraIssue("PROJ-7", "To Do").fields,
-							description: null,
-						},
-					}),
-				),
-			);
-
-			const tracker = createTracker();
-			const issue = await tracker.fetchIssue(REPO, issueNumber(7));
-
-			expect(issue.description).toBe("");
-		});
-
-		it("maps plain string descriptions", async () => {
-			server.use(
-				http.get(`${JIRA_API}/issue/:key`, () =>
-					HttpResponse.json({
-						...createJiraIssue("PROJ-8", "To Do"),
-						fields: {
-							...createJiraIssue("PROJ-8", "To Do").fields,
-							description: "Plain description",
-						},
-					}),
-				),
-			);
-
-			const tracker = createTracker();
-			const issue = await tracker.fetchIssue(REPO, issueNumber(8));
-
-			expect(issue.description).toBe("Plain description");
-		});
-
-		it("maps unsupported object descriptions to empty strings", async () => {
-			server.use(
-				http.get(`${JIRA_API}/issue/:key`, () =>
-					HttpResponse.json({
-						...createJiraIssue("PROJ-9", "To Do"),
-						fields: {
-							...createJiraIssue("PROJ-9", "To Do").fields,
-							description: { type: "unknown" },
-						},
-					}),
-				),
-			);
-
-			const tracker = createTracker();
-			const issue = await tracker.fetchIssue(REPO, issueNumber(9));
-
-			expect(issue.description).toBe("");
-		});
-	});
-
 	describe("fetchActiveIssues", () => {
 		it("builds JQL constrained by project, status, trigger label, and the authenticated reporter", async () => {
 			const expectedFields = [
@@ -481,40 +393,6 @@ describe("jiraTrackerAdapter", () => {
 					},
 				},
 			]);
-		});
-	});
-
-	describe("parseIssueKey", () => {
-		it("parses native Jira issue keys to an issue number", () => {
-			const tracker = createTracker();
-
-			expect(tracker.parseIssueKey("PROJ-42")).toEqual({
-				ok: true,
-				value: {
-					number: 42,
-				},
-			});
-		});
-
-		it("returns Err for malformed Jira issue keys", () => {
-			const tracker = createTracker();
-
-			expect(tracker.parseIssueKey("PROJ#42")).toEqual({
-				ok: false,
-				error: {
-					kind: "invalid_format",
-					input: "PROJ#42",
-					message: "Invalid Jira issue key: PROJ#42",
-				},
-			});
-			expect(tracker.parseIssueKey("OTHER-42")).toEqual({
-				ok: false,
-				error: {
-					kind: "invalid_format",
-					input: "OTHER-42",
-					message: "Invalid Jira issue key: OTHER-42",
-				},
-			});
 		});
 	});
 });

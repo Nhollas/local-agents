@@ -4,11 +4,12 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { runs } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
+import type { Logger } from "../logger.ts";
 import type { Run, RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
 import { runId as brandRunId } from "../types/brands.ts";
 import { assertNever } from "../types/exhaustive.ts";
-import { canonicalLogMiddleware } from "./canonical-log-middleware.ts";
+import { createCanonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
 	problemDetailsHandler,
@@ -53,10 +54,12 @@ export function createApi({
 	runner,
 	repo,
 	checkHealth,
+	logger,
 }: {
 	runner: Runner;
 	repo: RunRepository;
 	checkHealth: HealthCheck;
+	logger: Logger;
 }) {
 	const app = new Hono<AppEnv>();
 	app.onError(problemDetailsHandler);
@@ -87,7 +90,7 @@ export function createApi({
 		});
 	});
 
-	app.use(canonicalLogMiddleware);
+	app.use(createCanonicalLogMiddleware(logger));
 
 	app.get(
 		"/runs",

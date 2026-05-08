@@ -1,21 +1,11 @@
 import type { GitLabClient } from "../gitlab-client.ts";
-import { decorateCodeHost } from "./decorator.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
 export function gitlabCodeHostAdapter(
 	client: GitLabClient,
 	cloneToken?: string,
 ): CodeHostAdapter {
-	return decorateCodeHost({
-		async fetchFile(repo, path, ref): Promise<string | null> {
-			try {
-				const content = await client.getFileContent(repo, path, ref);
-				return Buffer.from(content.content, "base64").toString("utf-8");
-			} catch {
-				return null;
-			}
-		},
-
+	return {
 		cloneUrl(repo): string {
 			const url = `${client.baseUrl}/${repo}.git`;
 			if (!cloneToken) return url;
@@ -57,5 +47,5 @@ export function gitlabCodeHostAdapter(
 			});
 			return { number: mr.iid, url: mr.web_url };
 		},
-	});
+	};
 }

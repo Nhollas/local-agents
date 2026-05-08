@@ -2,8 +2,6 @@ import * as canonicalLog from "../canonical-log.ts";
 import type { JiraClient, JiraIssue } from "../jira-client.ts";
 import { resolveRepo } from "../scope-resolver.ts";
 import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
-import { err, ok } from "../types/result.ts";
-import { decorateTracker } from "./decorator.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
 
 type JiraStatuses = Record<TrackerState, string>;
@@ -71,14 +69,7 @@ export function jiraTrackerAdapter(
 		return buildIssue(issue, resolved);
 	}
 
-	return decorateTracker({
-		async fetchIssue(repo, issueNum): Promise<Issue> {
-			const issue = await client.getIssue(
-				jiraIssueKey(options.project, issueNum),
-			);
-			return buildIssue(issue, repo);
-		},
-
+	return {
 		async fetchActiveIssues(state) {
 			const clauses = [
 				`project = ${quoteJqlString(options.project)}`,
@@ -118,21 +109,7 @@ export function jiraTrackerAdapter(
 			}
 			await client.transitionIssue(key, transition.id);
 		},
-
-		parseIssueKey(key) {
-			const num = parseJiraKey(options.project, key);
-			if (num == null) {
-				return err({
-					kind: "invalid_format",
-					input: key,
-					message: `Invalid Jira issue key: ${key}`,
-				});
-			}
-			return ok({
-				number: issueNumber(num),
-			});
-		},
-	});
+	};
 }
 
 const REPO_LABEL_PREFIX = "repo:";

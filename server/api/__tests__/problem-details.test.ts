@@ -2,7 +2,8 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { canonicalLogMiddleware } from "../canonical-log-middleware.ts";
+import { testLogger } from "../../testing/support/test-logger.ts";
+import { createCanonicalLogMiddleware } from "../canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
 	problemDetailsHandler,
@@ -12,7 +13,7 @@ import type { AppEnv } from "../types.ts";
 
 function createApp() {
 	const app = new Hono<AppEnv>();
-	app.use(canonicalLogMiddleware);
+	app.use(createCanonicalLogMiddleware(testLogger));
 	app.onError(problemDetailsHandler);
 
 	app.get("/ok", (c) => c.json({ ok: true }));

@@ -4,13 +4,11 @@ import type {
 	TrackerState,
 } from "../../trackers/types.ts";
 import {
-	type IssueKey,
 	type IssueNumber,
 	type RepoSlug,
 	issueKey as toIssueKey,
 	issueNumber as toIssueNumber,
 } from "../../types/brands.ts";
-import { err, ok } from "../../types/result.ts";
 import { JIRA_PROJECT } from "./fixtures.ts";
 
 type AddIssueInput = {
@@ -52,7 +50,6 @@ export function createTrackerStub(
 		running: [],
 		awaiting_review: [],
 	};
-	const seeded = new Map<IssueKey, Issue>();
 	const transitions: TransitionRecord[] = [];
 	const markedFailed: FailedRecord[] = [];
 	const fetchCalls: TrackerState[] = [];
@@ -77,7 +74,6 @@ export function createTrackerStub(
 		addIssue(state, input) {
 			const issue = buildIssue(input);
 			active[state].push(issue);
-			seeded.set(issue.key, issue);
 			return issue;
 		},
 
@@ -97,12 +93,6 @@ export function createTrackerStub(
 
 		failNextTransition(error = new Error("tracker transition failed")) {
 			nextTransitionError = error;
-		},
-
-		async fetchIssue(repo, number) {
-			const existing = seeded.get(toIssueKey(`${project}-${number}`));
-			if (existing) return existing;
-			return buildIssue({ number, repo });
 		},
 
 		async fetchActiveIssues(state) {
@@ -130,19 +120,6 @@ export function createTrackerStub(
 
 		async markFailed(repo, number) {
 			markedFailed.push({ repo, number });
-		},
-
-		parseIssueKey(key) {
-			const match = new RegExp(`^${project}-(\\d+)$`).exec(key);
-			const captured = match?.[1];
-			if (!captured) {
-				return err({
-					kind: "invalid_format",
-					input: key,
-					message: `Invalid tracker issue key: ${key}`,
-				});
-			}
-			return ok({ number: toIssueNumber(Number.parseInt(captured, 10)) });
 		},
 	};
 }

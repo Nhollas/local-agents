@@ -26,48 +26,6 @@ describe("cloneUrl", () => {
 	});
 });
 
-describe("fetchFile", () => {
-	it("fetches base64-decoded file content from the GitHub contents API at the requested ref", async () => {
-		const expectedPath = `/repos/${REPO}/contents/docs/guide.md`;
-
-		server.use(
-			http.get(`${GITHUB_API}/repos/${REPO}/contents/:path+`, ({ request }) => {
-				const url = new URL(request.url);
-				if (
-					url.pathname !== expectedPath ||
-					url.searchParams.get("ref") !== "feature/github" ||
-					request.headers.get("Authorization") !== "Bearer test-token"
-				) {
-					return new HttpResponse(null, { status: 400 });
-				}
-				return HttpResponse.json({
-					content: Buffer.from("hello from github").toString("base64"),
-				});
-			}),
-		);
-
-		const content = await adapter.fetchFile(
-			REPO,
-			"docs/guide.md",
-			"feature/github",
-		);
-
-		expect(content).toBe("hello from github");
-	});
-
-	it("returns null when the file does not exist", async () => {
-		server.use(
-			http.get(
-				`${GITHUB_API}/repos/${REPO}/contents/:path+`,
-				() => new HttpResponse(null, { status: 404 }),
-			),
-		);
-
-		const content = await adapter.fetchFile(REPO, "missing.md");
-		expect(content).toBeNull();
-	});
-});
-
 describe("defaultBranch", () => {
 	it("returns the repo's default_branch from the GitHub repo endpoint", async () => {
 		server.use(

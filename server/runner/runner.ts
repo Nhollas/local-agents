@@ -15,8 +15,6 @@ export type RunContext = {
 	runId: RunId;
 	emitToolUse: (tool: string, target: string) => void;
 	emitStepEvent: (event: StepEvent) => void;
-	setStepOutput: (stepName: string, value: unknown) => void;
-	outputs: Record<string, unknown>;
 	signal: AbortSignal;
 };
 
@@ -127,13 +125,6 @@ export function createRunner(config: RunnerConfig): Runner {
 		queue.enqueue(async () => {
 			const executionStart = Date.now();
 
-			const outputs: Record<string, unknown> = {};
-
-			const setStepOutput = (stepName: string, value: unknown) => {
-				outputs[stepName] = value;
-				repo.writeStepOutput(id, stepName, value);
-			};
-
 			const emitToolUse = (tool: string, target: string) => {
 				emitEvent(id, job.name, {
 					type: "run:tool_use",
@@ -160,8 +151,6 @@ export function createRunner(config: RunnerConfig): Runner {
 					runId: id,
 					emitToolUse,
 					emitStepEvent,
-					setStepOutput,
-					outputs,
 					signal: controller.signal,
 				}),
 				abortPromise,

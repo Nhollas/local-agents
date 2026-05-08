@@ -1,18 +1,16 @@
-import pino from "pino";
-import { z } from "zod";
+import pino, { type Logger } from "pino";
+import type { LogLevel } from "./env.ts";
 
-import { loadEnv } from "./env.ts";
+export type { Logger };
 
-const env = loadEnv();
-
-const level = z
-	.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-	.default("info")
-	.parse(env.LOG_LEVEL);
-
-export const logger = pino({
-	level,
-	transport: {
-		target: "pino-pretty",
-	},
-});
+export function createLogger(level: LogLevel): Logger {
+	// Skip the pino-pretty transport at silent level; it spawns a worker
+	// thread that would do nothing but cost startup time per logger.
+	if (level === "silent") return pino({ level });
+	return pino({
+		level,
+		transport: {
+			target: "pino-pretty",
+		},
+	});
+}
