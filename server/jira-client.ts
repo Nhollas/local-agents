@@ -5,7 +5,7 @@ const jiraIssueSchema = z.object({
 	key: z.string(),
 	fields: z.object({
 		summary: z.string(),
-		description: z.unknown().nullable().optional(),
+		description: z.string().nullable().optional(),
 		created: z.string(),
 		labels: z.array(z.string()),
 		status: z.object({
@@ -60,7 +60,7 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 	const baseUrl = trimTrailingSlash(options.baseUrl);
 	const request = createJsonRequester({
 		...options,
-		baseUrl: `${baseUrl}/rest/api/3`,
+		baseUrl: `${baseUrl}/rest/api/2`,
 		serviceName: "Jira",
 		headers: {
 			Authorization: `Basic ${basicAuth(options.email, options.apiToken)}`,

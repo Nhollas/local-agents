@@ -1,5 +1,6 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { JiraClient, JiraIssue } from "../jira-client.ts";
+
 import { resolveRepo } from "../scope-resolver.ts";
 import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
@@ -40,7 +41,7 @@ export function jiraTrackerAdapter(
 			number: issueNumber(num),
 			repo,
 			title: issue.fields.summary,
-			description: extractText(issue.fields.description),
+			description: issue.fields.description ?? "",
 			labels: issue.fields.labels,
 			url: `${baseUrl}/browse/${issue.key}`,
 			createdAt: issue.fields.created,
@@ -129,18 +130,6 @@ function trimTrailingSlash(value: string): string {
 
 function quoteJqlString(value: string): string {
 	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function extractText(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (Array.isArray(value))
-		return value.map(extractText).filter(Boolean).join("\n");
-	if (value !== null && typeof value === "object") {
-		if ("text" in value && typeof value.text === "string") return value.text;
-		if ("content" in value && Array.isArray(value.content))
-			return extractText(value.content);
-	}
-	return "";
 }
 
 function parseJiraKey(project: string, key: string): number | null {

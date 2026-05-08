@@ -19,26 +19,6 @@ New client, new adapter, new branch in `create-code-host.ts`, new auth in `env.t
 
 ## Code quality findings
 
-### Med — `as unknown as AgentMessage` casts scattered through tests
-
-`branch-resolver.test.ts:146`, `step-runner.test.ts:135,173,396`. The SDK's `AgentMessage` is heavy; the casts work around shape mismatches. Acceptable for the scripted-message helpers, but the cast should live in one place.
-
-**Action:** extract a `buildAgentMessage` factory in `testing/support/`.
-
-### Med — `extractText` in `server/trackers/jira.ts:157` silently returns `""`
-
-For unrecognised description shapes. Combined with `description: z.unknown().nullable().optional()` in `jira-client.ts:8`, the issue description is effectively typed `unknown` and gets normalised by recursion. If a Jira ADF shape changes, you'll silently get empty descriptions in agent prompts.
-
-**Action:** `canonicalLog.append("warnings", ...)` on the unrecognised-object branch.
-
-### Med — `errorMessage` in `canonical-log.ts:7` is trivial indirection
-
-It's literally `err instanceof Error ? err.message : String(err)`, exported and used in many places, with a dedicated test block. Inline it.
-
-### Med — `addToMapEntry` silently overwrites non-map values
-
-`canonical-log.ts:84` — if an existing non-map value sits at the key, it gets clobbered. For a structured logger, a `console.warn` or throw on type collision would surface instrumentation bugs.
-
 ### Low — Module layout violation
 
 `prompt-preprocessor.ts:52-56` puts constants and regexes in the middle between public functions and private helpers. Per the "public types/interface and main implementation at top, private helpers at bottom" rule, move them to the bottom or next to consumers.
@@ -103,5 +83,4 @@ Timeout-and-buffer-overflow paths (lines 52-104 of the source) are integration t
 1. **Collapse the `fixtures.ts` `adaptRunAgent` / `LegacyRunAgent` shim.** Make `noopAgent` / `hangingAgent` direct `AgentInvoker` instances; remove `LegacyRunAgent` and its `QueryParams` re-derivation. SDK boundary appears once (in `claudeSdkAgentInvoker`).
 2. **Trim `jira.integration.test.ts` and `orchestrator.scheduling.integration.test.ts`.** Pull JQL-shape cases into a unit test against a fake `JiraClient`; keep one wire-shape integration. In the orchestrator file, drop tests that duplicate `step-runner.test.ts` behaviour and keep dispatch/scheduling/lifecycle-pin tests.
 3. **Standardise test data on `acme/widgets`** across branch-resolver, step-runner, and runner integration tests.
-4. **Inline `errorMessage` from `canonical-log.ts`** — trivial indirection used in many places.
-5. **Add a startup-race test for `orchestrator.start()`** covering recovery-then-tick with a tracker issue present.
+4. **Add a startup-race test for `orchestrator.start()`** covering recovery-then-tick with a tracker issue present.

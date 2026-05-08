@@ -136,7 +136,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								durationMs: clock.now() - startTime,
 							};
 						} catch (err) {
-							const error = canonicalLog.errorMessage(err);
+							const error = err instanceof Error ? err.message : String(err);
 							recordFailure(phase, error);
 							result = {
 								status: "failed",
@@ -188,7 +188,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		try {
 			await pushBranch(wsPath, branch);
 		} catch (err) {
-			recordFailure("push", canonicalLog.errorMessage(err));
+			recordFailure("push", err instanceof Error ? err.message : String(err));
 			return false;
 		}
 
@@ -208,7 +208,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			);
 			canonicalLog.set({ pr_url: pr.url });
 		} catch (err) {
-			recordFailure("change_request", canonicalLog.errorMessage(err));
+			recordFailure(
+				"change_request",
+				err instanceof Error ? err.message : String(err),
+			);
 			return false;
 		}
 
@@ -220,7 +223,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 				"awaiting_review",
 			);
 		} catch (err) {
-			recordFailure("tracker_transition", canonicalLog.errorMessage(err));
+			recordFailure(
+				"tracker_transition",
+				err instanceof Error ? err.message : String(err),
+			);
 			return false;
 		}
 		return true;
@@ -231,7 +237,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			canonicalLog.append("warnings", {
 				kind: "mark_failed_failed",
 				issue: `${repo}#${issue.number}`,
-				error: canonicalLog.errorMessage(err),
+				error: err instanceof Error ? err.message : String(err),
 			});
 		});
 	}

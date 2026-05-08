@@ -3,6 +3,11 @@ import * as canonicalLog from "../../canonical-log.ts";
 import type { StepEvent } from "../../event-bus.ts";
 import type { RunRepository } from "../../run-repository.ts";
 import type { RunContext } from "../../runner/runner.ts";
+import {
+	buildAssistantMessage,
+	buildErrorResult,
+	buildSuccessResult,
+} from "../../testing/support/agent-messages.ts";
 import type { Issue } from "../../trackers/types.ts";
 import {
 	issueKey,
@@ -27,17 +32,9 @@ type StepCostFields = {
 };
 
 function resultMessage(uuid: string, fields: StepCostFields): AgentMessage {
-	return {
-		type: "result",
-		subtype: "success",
-		duration_ms: 1,
-		duration_api_ms: 1,
-		is_error: false,
-		num_turns: 1,
-		result: "ok",
-		stop_reason: "end_turn",
-		total_cost_usd: fields.costUsd,
-		usage: {} as never,
+	return buildSuccessResult({
+		uuid,
+		totalCostUsd: fields.costUsd,
 		modelUsage: {
 			[fields.model]: {
 				inputTokens: fields.inputTokens,
@@ -50,10 +47,7 @@ function resultMessage(uuid: string, fields: StepCostFields): AgentMessage {
 				maxOutputTokens: 8_000,
 			},
 		},
-		permission_denials: [],
-		uuid,
-		session_id: "sess",
-	} as AgentMessage;
+	});
 }
 
 function captureBag(): {
@@ -130,13 +124,10 @@ const outputSchema = {
 };
 
 async function* yieldAssistant(sessionId: string): AsyncIterable<AgentMessage> {
-	yield {
-		type: "assistant",
-		session_id: sessionId,
-		message: { content: [] },
-		parent_tool_use_id: null,
+	yield buildAssistantMessage({
 		uuid: "00000000-0000-0000-0000-000000000010",
-	} as unknown as AgentMessage;
+		sessionId,
+	});
 }
 
 describe("runWorkflowSteps", () => {
@@ -170,30 +161,13 @@ describe("runWorkflowSteps", () => {
 		const recorder = createCtx();
 		const structured = { title: "Hello", tags: ["a"] };
 		const agent = createAgent(async function* () {
-			yield {
-				type: "assistant",
-				session_id: "sess",
-				message: { content: [] },
-				parent_tool_use_id: null,
+			yield buildAssistantMessage({
 				uuid: "00000000-0000-0000-0000-000000000010",
-			} as unknown as AgentMessage;
-			yield {
-				type: "result",
-				subtype: "success",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: false,
-				num_turns: 1,
-				result: "ok",
-				stop_reason: "end_turn",
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				structured_output: structured,
+			});
+			yield buildSuccessResult({
 				uuid: "00000000-0000-0000-0000-000000000020",
-				session_id: "sess",
-			} as AgentMessage;
+				structuredOutput: structured,
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
@@ -237,22 +211,10 @@ describe("runWorkflowSteps", () => {
 	it("aborts with step.failed when result.subtype is error_max_structured_output_retries", async () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
-			yield {
-				type: "result",
-				subtype: "error_max_structured_output_retries",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: true,
-				num_turns: 1,
-				stop_reason: null,
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				errors: [],
+			yield buildErrorResult({
 				uuid: "00000000-0000-0000-0000-000000000030",
-				session_id: "sess",
-			} as AgentMessage;
+				subtype: "error_max_structured_output_retries",
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
@@ -294,23 +256,10 @@ describe("runWorkflowSteps", () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
 			yield* yieldAssistant("sess");
-			yield {
-				type: "result",
-				subtype: "success",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: false,
-				num_turns: 1,
-				result: "ok",
-				stop_reason: "end_turn",
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				structured_output: { ignored: true },
+			yield buildSuccessResult({
 				uuid: "00000000-0000-0000-0000-000000000040",
-				session_id: "sess",
-			} as AgentMessage;
+				structuredOutput: { ignored: true },
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
@@ -370,30 +319,13 @@ describe("runWorkflowSteps", () => {
 	it("substitutes earlier step outputs into a later step's prompt", async () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
-			yield {
-				type: "assistant",
-				session_id: "sess",
-				message: { content: [] },
-				parent_tool_use_id: null,
+			yield buildAssistantMessage({
 				uuid: "00000000-0000-0000-0000-000000000050",
-			} as unknown as AgentMessage;
-			yield {
-				type: "result",
-				subtype: "success",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: false,
-				num_turns: 1,
-				result: "ok",
-				stop_reason: "end_turn",
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				structured_output: { title: "Earlier title" },
+			});
+			yield buildSuccessResult({
 				uuid: "00000000-0000-0000-0000-000000000051",
-				session_id: "sess",
-			} as AgentMessage;
+				structuredOutput: { title: "Earlier title" },
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
@@ -474,23 +406,10 @@ describe("runWorkflowSteps", () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
 			yield* yieldAssistant("sess");
-			yield {
-				type: "result",
-				subtype: "success",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: false,
-				num_turns: 1,
-				result: "ok",
-				stop_reason: "end_turn",
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				structured_output: { title: "Hello" },
+			yield buildSuccessResult({
 				uuid: "00000000-0000-0000-0000-000000000081",
-				session_id: "sess",
-			} as AgentMessage;
+				structuredOutput: { title: "Hello" },
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
@@ -531,22 +450,10 @@ describe("runWorkflowSteps", () => {
 	it("sets failed_step on the canonical bag when a step throws", async () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
-			yield {
-				type: "result",
-				subtype: "error_max_turns",
-				duration_ms: 1,
-				duration_api_ms: 1,
-				is_error: true,
-				num_turns: 1,
-				stop_reason: null,
-				total_cost_usd: 0,
-				usage: {} as never,
-				modelUsage: {},
-				permission_denials: [],
-				errors: [],
+			yield buildErrorResult({
 				uuid: "00000000-0000-0000-0000-000000000090",
-				session_id: "sess",
-			} as AgentMessage;
+				subtype: "error_max_turns",
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
@@ -660,18 +567,23 @@ describe("runWorkflowSteps", () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
 			yield* yieldAssistant("sess");
-			yield {
-				...resultMessage("00000000-0000-0000-0000-000000000070", {
-					model: "claude-sonnet-4-6",
-					costUsd: 0.04,
-					inputTokens: 800,
-					outputTokens: 150,
-				}),
+			yield buildErrorResult({
+				uuid: "00000000-0000-0000-0000-000000000070",
 				subtype: "error_max_turns",
-				is_error: true,
-				stop_reason: null,
-				errors: [],
-			} as AgentMessage;
+				totalCostUsd: 0.04,
+				modelUsage: {
+					"claude-sonnet-4-6": {
+						inputTokens: 800,
+						outputTokens: 150,
+						cacheReadInputTokens: 0,
+						cacheCreationInputTokens: 0,
+						webSearchRequests: 0,
+						costUSD: 0.04,
+						contextWindow: 200_000,
+						maxOutputTokens: 8_000,
+					},
+				},
+			});
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",

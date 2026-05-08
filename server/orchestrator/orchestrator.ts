@@ -76,7 +76,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			issue: `${repo}#${number}`,
 			from,
 			to,
-			error: canonicalLog.errorMessage(err),
+			error: err instanceof Error ? err.message : String(err),
 		});
 	}
 
@@ -111,7 +111,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			canonicalLog.append("warnings", {
 				kind: "fetch_active_issues_failed",
 				state: "pending",
-				error: canonicalLog.errorMessage(err),
+				error: err instanceof Error ? err.message : String(err),
 			});
 			pending = [];
 		}
@@ -148,7 +148,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 					canonicalLog.append("warnings", {
 						kind: "fetch_active_issues_failed",
 						state: "running",
-						error: canonicalLog.errorMessage(err),
+						error: err instanceof Error ? err.message : String(err),
 					});
 					return;
 				}
@@ -214,7 +214,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				canonicalLog.append("warnings", {
 					kind: "dispatch_failed",
 					issue_key: issue.key,
-					error: canonicalLog.errorMessage(err),
+					error: err instanceof Error ? err.message : String(err),
 				});
 				await tracker
 					.transitionState(repo, issue.number, "running", "pending")

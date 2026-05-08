@@ -159,7 +159,7 @@ async function runWorkflowStep({
 		});
 		return currentSessionId;
 	} catch (err) {
-		const error = canonicalLog.errorMessage(err);
+		const error = err instanceof Error ? err.message : String(err);
 		canonicalLog.set({
 			failed_step: { name: step.name, index: stepIndex, error },
 		});

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as canonicalLog from "../canonical-log.ts";
 
 type LogFields = Record<string, unknown>;
@@ -19,18 +19,6 @@ function capturingLogger(): {
 }
 
 describe("canonicalLog", () => {
-	describe("errorMessage", () => {
-		it("extracts message from Error instances", () => {
-			expect(canonicalLog.errorMessage(new Error("boom"))).toBe("boom");
-		});
-
-		it("converts non-Error values to strings", () => {
-			expect(canonicalLog.errorMessage("plain string")).toBe("plain string");
-			expect(canonicalLog.errorMessage(42)).toBe("42");
-			expect(canonicalLog.errorMessage(null)).toBe("null");
-		});
-	});
-
 	describe("outside a scope", () => {
 		it("set, append, and increment are no-ops", () => {
 			canonicalLog.set({ key: "value" });
@@ -171,6 +159,30 @@ describe("canonicalLog", () => {
 			expect(bag()).toEqual(
 				expect.objectContaining({ bytes_by_kind: { json: 768 } }),
 			);
+		});
+
+		it("warns and overwrites when the key already holds a non-map value", async () => {
+			const { logger, bag } = capturingLogger();
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+			await canonicalLog.run(
+				{ scope: "test" },
+				async () => {
+					canonicalLog.set({ tool_use_by_name: "Read" });
+					canonicalLog.incrementMap("tool_use_by_name", "Read");
+				},
+				logger,
+			);
+
+			expect(warn).toHaveBeenCalledWith(
+				expect.stringContaining(
+					'overwriting non-map value at key "tool_use_by_name"',
+				),
+			);
+			expect(bag()).toEqual(
+				expect.objectContaining({ tool_use_by_name: { Read: 1 } }),
+			);
+			warn.mockRestore();
 		});
 	});
 
