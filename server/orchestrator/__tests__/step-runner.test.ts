@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import * as canonicalLog from "../../canonical-log.ts";
 import type { StepEvent } from "../../event-bus.ts";
+import type { RunRepository } from "../../run-repository.ts";
 import type { RunContext } from "../../runner/runner.ts";
 import type { Issue } from "../../trackers/types.ts";
-import { issueKey, issueNumber, repoSlug, runId } from "../../types/brands.ts";
+import {
+	issueKey,
+	issueNumber,
+	type RunId,
+	repoSlug,
+	runId,
+} from "../../types/brands.ts";
 import type { RepoWorkflow } from "../../workflow/workflow.ts";
 import type {
 	AgentInvokeOptions,
@@ -77,29 +84,26 @@ const issue: Issue = {
 
 type ContextRecorder = {
 	ctx: RunContext;
+	runRepo: Pick<RunRepository, "writeStepOutput">;
 	stepEvents: StepEvent[];
-	stepOutputs: { name: string; value: unknown }[];
-	outputs: Record<string, unknown>;
+	stepOutputs: { runId: RunId; name: string; value: unknown }[];
 };
 
-function createCtx(
-	initialOutputs: Record<string, unknown> = {},
-): ContextRecorder {
+function createCtx(): ContextRecorder {
 	const stepEvents: StepEvent[] = [];
-	const stepOutputs: { name: string; value: unknown }[] = [];
-	const outputs: Record<string, unknown> = { ...initialOutputs };
+	const stepOutputs: { runId: RunId; name: string; value: unknown }[] = [];
 	const ctx: RunContext = {
 		runId: runId("test-run"),
 		emitToolUse: () => {},
 		emitStepEvent: (event) => stepEvents.push(event),
-		setStepOutput: (name, value) => {
-			stepOutputs.push({ name, value });
-			outputs[name] = value;
-		},
 		signal: new AbortController().signal,
-		outputs,
 	};
-	return { ctx, stepEvents, stepOutputs, outputs };
+	const runRepo: Pick<RunRepository, "writeStepOutput"> = {
+		writeStepOutput: (id, name, value) => {
+			stepOutputs.push({ runId: id, name, value });
+		},
+	};
+	return { ctx, runRepo, stepEvents, stepOutputs };
 }
 
 type ScriptedCall = AgentInvokeOptions;
@@ -146,8 +150,9 @@ describe("runWorkflowSteps", () => {
 			change_request: baseChangeRequest,
 		};
 
-		await runWorkflowSteps({
+		const outputs = await runWorkflowSteps({
 			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
 			agent,
 			workflow,
 			issue,
@@ -159,9 +164,10 @@ describe("runWorkflowSteps", () => {
 
 		expect(agent.calls[0]?.outputFormat).toBeUndefined();
 		expect(recorder.stepOutputs).toEqual([]);
+		expect(outputs).toEqual({});
 	});
 
-	it("passes outputFormat and captures structured_output for an output step", async () => {
+	it("passes outputFormat, persists structured_output, and returns outputs", async () => {
 		const recorder = createCtx();
 		const structured = { title: "Hello", tags: ["a"] };
 		const agent = createAgent(async function* () {
@@ -204,8 +210,9 @@ describe("runWorkflowSteps", () => {
 			change_request: baseChangeRequest,
 		};
 
-		await runWorkflowSteps({
+		const outputs = await runWorkflowSteps({
 			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
 			agent,
 			workflow,
 			issue,
@@ -220,9 +227,9 @@ describe("runWorkflowSteps", () => {
 			schema: outputSchema,
 		});
 		expect(recorder.stepOutputs).toEqual([
-			{ name: "summarise", value: structured },
+			{ runId: recorder.ctx.runId, name: "summarise", value: structured },
 		]);
-		expect(recorder.outputs["summarise"]).toEqual(structured);
+		expect(outputs).toEqual({ summarise: structured });
 		expect(recorder.stepEvents.map((e) => e.type)).toEqual([
 			"step.started",
 			"step.completed",
@@ -266,6 +273,7 @@ describe("runWorkflowSteps", () => {
 		await expect(
 			runWorkflowSteps({
 				ctx: recorder.ctx,
+				runRepo: recorder.runRepo,
 				agent,
 				workflow,
 				issue,
@@ -314,6 +322,7 @@ describe("runWorkflowSteps", () => {
 
 		await runWorkflowSteps({
 			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
 			agent,
 			workflow,
 			issue,
@@ -328,33 +337,6 @@ describe("runWorkflowSteps", () => {
 			"step.started",
 			"step.completed",
 		]);
-	});
-
-	it("exposes initialOutputs on ctx.outputs throughout the run", async () => {
-		const recorder = createCtx({ earlier: { x: "from-parent" } });
-		let observed: Record<string, unknown> | undefined;
-		const agent = createAgent(async function* (_opts) {
-			observed = { ...recorder.ctx.outputs };
-			yield* yieldAssistant("sess");
-		});
-		const workflow: RepoWorkflow = {
-			branch: "b",
-			steps: [{ name: "after", prompt: "after", resume_previous: false }],
-			change_request: baseChangeRequest,
-		};
-
-		await runWorkflowSteps({
-			ctx: recorder.ctx,
-			agent,
-			workflow,
-			issue,
-			cwd: "/work",
-			branch: "agent/issue-1",
-			baseBranch: "main",
-			model: "test-model",
-		});
-
-		expect(observed).toEqual({ earlier: { x: "from-parent" } });
 	});
 
 	it("substitutes the branch param into a step prompt", async () => {
@@ -374,6 +356,7 @@ describe("runWorkflowSteps", () => {
 
 		await runWorkflowSteps({
 			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
 			agent,
 			workflow,
 			issue,
@@ -435,6 +418,7 @@ describe("runWorkflowSteps", () => {
 
 		await runWorkflowSteps({
 			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
 			agent,
 			workflow,
 			issue,
@@ -468,6 +452,7 @@ describe("runWorkflowSteps", () => {
 			() =>
 				runWorkflowSteps({
 					ctx: recorder.ctx,
+					runRepo: recorder.runRepo,
 					agent,
 					workflow,
 					issue,
@@ -529,6 +514,7 @@ describe("runWorkflowSteps", () => {
 			() =>
 				runWorkflowSteps({
 					ctx: recorder.ctx,
+					runRepo: recorder.runRepo,
 					agent,
 					workflow,
 					issue,
@@ -581,6 +567,7 @@ describe("runWorkflowSteps", () => {
 				() =>
 					runWorkflowSteps({
 						ctx: recorder.ctx,
+						runRepo: recorder.runRepo,
 						agent,
 						workflow,
 						issue,
@@ -642,6 +629,7 @@ describe("runWorkflowSteps", () => {
 			() =>
 				runWorkflowSteps({
 					ctx: recorder.ctx,
+					runRepo: recorder.runRepo,
 					agent,
 					workflow,
 					issue,
@@ -701,6 +689,7 @@ describe("runWorkflowSteps", () => {
 				() =>
 					runWorkflowSteps({
 						ctx: recorder.ctx,
+						runRepo: recorder.runRepo,
 						agent,
 						workflow,
 						issue,
@@ -741,6 +730,7 @@ describe("runWorkflowSteps", () => {
 
 		await runWorkflowSteps({
 			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
 			agent,
 			workflow,
 			issue,

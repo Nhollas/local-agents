@@ -39,10 +39,6 @@ export function createCodeHostStub(): CodeHostStub {
 			nextChangeRequestError = error;
 		},
 
-		async fetchFile() {
-			return null;
-		},
-
 		cloneUrl(repo) {
 			return (
 				cloneUrls.get(repo) ?? `https://code-host.example.test/${repo}.git`

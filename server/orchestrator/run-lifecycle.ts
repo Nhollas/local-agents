@@ -1,6 +1,6 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
-import { logger } from "../logger.ts";
+import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
@@ -38,6 +38,7 @@ type RunLifecycleDeps = {
 	agent: AgentInvoker;
 	clock: Clock;
 	runShell: RunShell;
+	logger: Logger;
 	workspaceRoot: string;
 	model: string;
 };
@@ -57,11 +58,13 @@ function recordFailure(phase: FailurePhase, error: string): void {
 export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	const {
 		runner,
+		repo: runRepo,
 		tracker,
 		codeHost,
 		agent,
 		clock,
 		runShell,
+		logger,
 		workspaceRoot,
 		model,
 	} = deps;
@@ -91,6 +94,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						const startTime = clock.now();
 						let result: RunResult;
 						let branch: string | undefined;
+						let outputs: Record<string, unknown> = {};
 						let phase: FailurePhase = "branch_resolver";
 
 						try {
@@ -115,8 +119,9 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							canonicalLog.set({ repo_setup_ran: repoSetupRan });
 
 							phase = "step";
-							await runWorkflowSteps({
+							outputs = await runWorkflowSteps({
 								ctx,
+								runRepo,
 								agent,
 								workflow,
 								issue,
@@ -152,7 +157,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								ws.path,
 								branch,
 								baseBranch,
-								ctx.outputs,
+								outputs,
 							));
 
 						// Keep the workspace on any failure so the run can be inspected;
@@ -194,7 +199,14 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			outputs,
 		});
 		try {
-			await codeHost.createChangeRequest(repo, branch, baseBranch, title, body);
+			const pr = await codeHost.createChangeRequest(
+				repo,
+				branch,
+				baseBranch,
+				title,
+				body,
+			);
+			canonicalLog.set({ pr_url: pr.url });
 		} catch (err) {
 			recordFailure("change_request", canonicalLog.errorMessage(err));
 			return false;
@@ -215,7 +227,13 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	}
 
 	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {
-		await tracker.markFailed(repo, issue.number).catch(() => {});
+		await tracker.markFailed(repo, issue.number).catch((err) => {
+			canonicalLog.append("warnings", {
+				kind: "mark_failed_failed",
+				issue: `${repo}#${issue.number}`,
+				error: canonicalLog.errorMessage(err),
+			});
+		});
 	}
 
 	return { dispatch };

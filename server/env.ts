@@ -1,11 +1,20 @@
 import "dotenv/config";
 import { z } from "zod";
-import type { Config } from "./config.ts";
+
+const logLevelSchema = z.enum([
+	"fatal",
+	"error",
+	"warn",
+	"info",
+	"debug",
+	"trace",
+	"silent",
+]);
 
 const envSchema = z.object({
 	CONFIG_PATH: z.string().min(1),
 	PORT: z.coerce.number().default(3000),
-	LOG_LEVEL: z.string().default("info"),
+	LOG_LEVEL: logLevelSchema.default("info"),
 	GITLAB_TOKEN: z.string().optional(),
 	GITHUB_TOKEN: z.string().optional(),
 	JIRA_EMAIL: z.string().optional(),
@@ -13,29 +22,12 @@ const envSchema = z.object({
 });
 
 type Env = z.infer<typeof envSchema>;
+export type LogLevel = z.infer<typeof logLevelSchema>;
 
-export function loadEnv(config?: Pick<Config, "tracker" | "code_host">): Env {
-	const env = parseEnv(envSchema);
+export const env = parseEnv();
 
-	if (config?.code_host.kind === "gitlab") {
-		requireToken(env, "GITLAB_TOKEN");
-	}
-
-	if (config?.code_host.kind === "github") {
-		requireToken(env, "GITHUB_TOKEN");
-	}
-
-	if (config?.tracker.kind === "jira") {
-		requireToken(env, "JIRA_EMAIL");
-		requireToken(env, "JIRA_API_TOKEN");
-	}
-
-	return env;
-}
-
-function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
-	const result = schema.safeParse(process.env);
-
+function parseEnv(): Env {
+	const result = envSchema.safeParse(process.env);
 	if (!result.success) {
 		const issues = result.error.issues
 			.map((i) => `  ${i.path.join(".")}: ${i.message}`)
@@ -43,15 +35,5 @@ function parseEnv<T extends z.ZodTypeAny>(schema: T): z.infer<T> {
 		console.error(`Invalid environment variables:\n${issues}`);
 		process.exit(1);
 	}
-
 	return result.data;
-}
-
-function requireToken(env: Env, name: keyof Env) {
-	if (typeof env[name] !== "string" || env[name].length === 0) {
-		console.error(
-			`Invalid environment variables:\n  ${name}: ${name} is required`,
-		);
-		process.exit(1);
-	}
 }

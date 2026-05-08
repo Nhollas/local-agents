@@ -4,37 +4,23 @@ import { createCodeHost } from "./code-hosts/create-code-host.ts";
 import { loadConfig } from "./config.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
-import { loadEnv } from "./env.ts";
-import { createJiraClient } from "./jira-client.ts";
-import { logger } from "./logger.ts";
+import { env } from "./env.ts";
+import { createLogger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
-import { jiraTrackerAdapter } from "./trackers/jira.ts";
+import { createTracker } from "./trackers/create-tracker.ts";
 import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
-const baseEnv = loadEnv();
-const config = loadConfig(baseEnv.CONFIG_PATH);
-const env = loadEnv(config);
-
-if (!env.JIRA_EMAIL || !env.JIRA_API_TOKEN) {
-	throw new Error("JIRA_EMAIL and JIRA_API_TOKEN are required for Jira");
-}
+const config = loadConfig(env.CONFIG_PATH);
+const logger = createLogger(env.LOG_LEVEL);
 
 const db = getDb();
 migrate(db);
 
-const jira = createJiraClient({
-	baseUrl: config.tracker.base_url,
-	email: env.JIRA_EMAIL,
-	apiToken: env.JIRA_API_TOKEN,
-});
-const tracker = jiraTrackerAdapter(jira, {
-	project: config.tracker.project,
-	scopes: config.code_host.scopes,
-	baseUrl: config.tracker.base_url,
-	statuses: config.tracker.statuses,
-	triggerLabel: config.tracker.trigger_label,
+const tracker = createTracker(config.tracker, config.code_host.scopes, {
+	jiraEmail: env.JIRA_EMAIL,
+	jiraApiToken: env.JIRA_API_TOKEN,
 });
 
 const codeHost = createCodeHost(config.code_host, {
@@ -58,6 +44,7 @@ const orchestrator = createOrchestrator({
 	config,
 	workflow,
 	runner,
+	logger,
 });
 
 const checkHealth: HealthCheck = () => {
@@ -82,6 +69,7 @@ const app = createApi({
 	runner,
 	repo,
 	checkHealth,
+	logger,
 });
 
 orchestrator.start();

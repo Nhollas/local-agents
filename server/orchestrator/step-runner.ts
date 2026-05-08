@@ -1,4 +1,5 @@
 import * as canonicalLog from "../canonical-log.ts";
+import type { RunRepository } from "../run-repository.ts";
 import type { RunContext } from "../runner/runner.ts";
 import type { Issue } from "../trackers/types.ts";
 import {
@@ -13,6 +14,7 @@ import { recordAgentResult } from "./agent-metrics.ts";
 
 type RunWorkflowStepsParams = {
 	ctx: RunContext;
+	runRepo: Pick<RunRepository, "writeStepOutput">;
 	agent: AgentInvoker;
 	workflow: RepoWorkflow;
 	issue: Issue;
@@ -24,6 +26,7 @@ type RunWorkflowStepsParams = {
 
 export async function runWorkflowSteps({
 	ctx,
+	runRepo,
 	agent,
 	workflow,
 	issue,
@@ -31,8 +34,9 @@ export async function runWorkflowSteps({
 	baseBranch,
 	cwd,
 	model,
-}: RunWorkflowStepsParams): Promise<void> {
+}: RunWorkflowStepsParams): Promise<Record<string, unknown>> {
 	const { steps } = workflow;
+	const outputs: Record<string, unknown> = {};
 	let previousSessionId: string | undefined;
 	canonicalLog.set({ steps_total: steps.length, steps_completed: 0 });
 
@@ -43,6 +47,8 @@ export async function runWorkflowSteps({
 
 		const completedSessionId = await runWorkflowStep({
 			ctx,
+			runRepo,
+			outputs,
 			agent,
 			step,
 			stepIndex: index,
@@ -57,10 +63,14 @@ export async function runWorkflowSteps({
 
 		previousSessionId = completedSessionId;
 	}
+
+	return outputs;
 }
 
 type RunWorkflowStepParams = {
 	ctx: RunContext;
+	runRepo: Pick<RunRepository, "writeStepOutput">;
+	outputs: Record<string, unknown>;
 	agent: AgentInvoker;
 	step: WorkflowStep;
 	stepIndex: number;
@@ -75,6 +85,8 @@ type RunWorkflowStepParams = {
 
 async function runWorkflowStep({
 	ctx,
+	runRepo,
+	outputs,
 	agent,
 	step,
 	stepIndex,
@@ -98,7 +110,7 @@ async function runWorkflowStep({
 			issue,
 			branch,
 			base_branch: baseBranch,
-			outputs: ctx.outputs,
+			outputs,
 		});
 		const prompt = await expandMarkedShellBlocks(renderedPrompt, { cwd });
 
@@ -124,7 +136,12 @@ async function runWorkflowStep({
 				recordAgentResult(msg);
 				if (msg.subtype === "success") {
 					if (outputFormat) {
-						ctx.setStepOutput(step.name, msg.structured_output);
+						outputs[step.name] = msg.structured_output;
+						runRepo.writeStepOutput(
+							ctx.runId,
+							step.name,
+							msg.structured_output,
+						);
 						canonicalLog.append("step_outputs_collected", step.name);
 					}
 					continue;

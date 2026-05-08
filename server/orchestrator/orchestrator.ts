@@ -1,7 +1,7 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
-import { logger } from "../logger.ts";
+import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
@@ -19,6 +19,7 @@ type OrchestratorConfig = {
 	config: Config;
 	workflow: RepoWorkflow;
 	runner: Runner;
+	logger: Logger;
 	agent?: AgentInvoker;
 	clock?: Clock;
 	runShell?: RunShell;
@@ -56,11 +57,28 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		config,
 		workflow,
 		runner,
+		logger,
 		agent = claudeSdkAgentInvoker(),
 		clock = systemClock(),
 		runShell = realRunShell,
 	} = opts;
 	const { defaults } = config;
+
+	function logTransitionFailed(
+		repo: Issue["repo"],
+		number: Issue["number"],
+		from: "pending" | "running",
+		to: "pending" | "running",
+		err: unknown,
+	): void {
+		canonicalLog.append("warnings", {
+			kind: "state_transition_failed",
+			issue: `${repo}#${number}`,
+			from,
+			to,
+			error: canonicalLog.errorMessage(err),
+		});
+	}
 
 	const lifecycle = createRunLifecycle({
 		runner,
@@ -70,6 +88,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		agent,
 		clock,
 		runShell,
+		logger,
 		workspaceRoot: defaults.workspace_root,
 		model: defaults.model,
 	});
@@ -88,7 +107,12 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		try {
 			const result = await tracker.fetchActiveIssues("pending");
 			pending = [...result.issues];
-		} catch {
+		} catch (err) {
+			canonicalLog.append("warnings", {
+				kind: "fetch_active_issues_failed",
+				state: "pending",
+				error: canonicalLog.errorMessage(err),
+			});
 			pending = [];
 		}
 		pending.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -120,7 +144,12 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				try {
 					const result = await tracker.fetchActiveIssues("running");
 					runningIssues = result.issues;
-				} catch {
+				} catch (err) {
+					canonicalLog.append("warnings", {
+						kind: "fetch_active_issues_failed",
+						state: "running",
+						error: canonicalLog.errorMessage(err),
+					});
 					return;
 				}
 
@@ -134,6 +163,18 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 						),
 					),
 				);
+				for (const [index, r] of results.entries()) {
+					if (r.status === "rejected") {
+						const issue = runningIssues[index]!;
+						logTransitionFailed(
+							issue.repo,
+							issue.number,
+							"running",
+							"pending",
+							r.reason,
+						);
+					}
+				}
 				canonicalLog.set({
 					tracker_orphans_recovered: results.filter(
 						(r) => r.status === "fulfilled",
@@ -159,7 +200,12 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			}
 
 			const { repo } = issue;
-			await tracker.transitionState(repo, issue.number, "pending", "running");
+			try {
+				await tracker.transitionState(repo, issue.number, "pending", "running");
+			} catch (err) {
+				logTransitionFailed(repo, issue.number, "pending", "running", err);
+				continue;
+			}
 
 			try {
 				const handle = await lifecycle.dispatch({ issue, repo, workflow });
@@ -172,7 +218,15 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				});
 				await tracker
 					.transitionState(repo, issue.number, "running", "pending")
-					.catch(() => {});
+					.catch((rollbackErr) => {
+						logTransitionFailed(
+							repo,
+							issue.number,
+							"running",
+							"pending",
+							rollbackErr,
+						);
+					});
 				continue;
 			}
 
@@ -216,7 +270,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		},
 		start() {
 			logger.info(
-				{ interval: opts.config.defaults.polling_interval_ms },
+				{ interval: defaults.polling_interval_ms },
 				"orchestrator.starting",
 			);
 			void (async () => {
@@ -231,7 +285,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 						tick().catch((err) =>
 							logger.error({ err }, "orchestrator.tick_failed"),
 						),
-					opts.config.defaults.polling_interval_ms,
+					defaults.polling_interval_ms,
 				);
 			})();
 		},

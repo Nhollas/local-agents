@@ -13,6 +13,7 @@ import {
 } from "./fixtures.ts";
 import { createTestConfig } from "./test-config.ts";
 import { createTestDb } from "./test-db.ts";
+import { testLogger } from "./test-logger.ts";
 import { createTestWorkspaceRoot } from "./test-workspace.ts";
 import { createTrackerStub } from "./tracker-stub.ts";
 
@@ -51,6 +52,7 @@ export async function createTestOrchestrator(
 		workflow: options.workflow ?? createTestWorkflow(),
 		runner,
 		agent,
+		logger: testLogger,
 	});
 
 	return {

@@ -1,5 +1,4 @@
 import type { IssueKey, IssueNumber, RepoSlug } from "../types/brands.ts";
-import type { Result } from "../types/result.ts";
 
 export type Issue = {
 	key: IssueKey;
@@ -14,18 +13,11 @@ export type Issue = {
 
 export type TrackerState = "pending" | "running" | "awaiting_review";
 
-export type ParseIssueKeyError = {
-	kind: "invalid_format";
-	input: string;
-	message: string;
-};
-
 export type ActiveIssuesPage = {
 	issues: Issue[];
 };
 
 export type TrackerAdapter = {
-	fetchIssue(repo: RepoSlug, issueNumber: IssueNumber): Promise<Issue>;
 	fetchActiveIssues(state: TrackerState): Promise<ActiveIssuesPage>;
 	transitionState(
 		repo: RepoSlug,
@@ -34,7 +26,4 @@ export type TrackerAdapter = {
 		to: TrackerState,
 	): Promise<void>;
 	markFailed(repo: RepoSlug, issueNumber: IssueNumber): Promise<void>;
-	parseIssueKey(
-		key: string,
-	): Result<{ number: IssueNumber }, ParseIssueKeyError>;
 };
