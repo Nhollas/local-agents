@@ -66,9 +66,9 @@ function captureBag(): {
 }
 
 const issue: Issue = {
-	key: issueKey("owner/repo#1"),
+	key: issueKey("acme/widgets#1"),
 	number: issueNumber(1),
-	repo: repoSlug("owner/repo"),
+	repo: repoSlug("acme/widgets"),
 	title: "Fix it",
 	description: "",
 	labels: [],
@@ -202,9 +202,15 @@ describe("runWorkflowSteps", () => {
 			{ runId: recorder.ctx.runId, name: "summarise", value: structured },
 		]);
 		expect(outputs).toEqual({ summarise: structured });
-		expect(recorder.stepEvents.map((e) => e.type)).toEqual([
-			"step.started",
-			"step.completed",
+		expect(recorder.stepEvents).toEqual([
+			{
+				type: "step.started",
+				data: { name: "summarise", index: 0, total: 1 },
+			},
+			{
+				type: "step.completed",
+				data: { name: "summarise", index: 0, durationMs: expect.any(Number) },
+			},
 		]);
 	});
 
@@ -245,9 +251,19 @@ describe("runWorkflowSteps", () => {
 		).rejects.toThrow(/error_max_structured_output_retries/);
 
 		expect(agent.calls).toHaveLength(1);
-		expect(recorder.stepEvents.map((e) => e.type)).toEqual([
-			"step.started",
-			"step.failed",
+		expect(recorder.stepEvents).toEqual([
+			{
+				type: "step.started",
+				data: { name: "summarise", index: 0, total: 2 },
+			},
+			{
+				type: "step.failed",
+				data: {
+					name: "summarise",
+					index: 0,
+					error: expect.stringMatching(/error_max_structured_output_retries/),
+				},
+			},
 		]);
 		expect(recorder.stepOutputs).toEqual([]);
 	});
@@ -280,9 +296,15 @@ describe("runWorkflowSteps", () => {
 		});
 
 		expect(recorder.stepOutputs).toEqual([]);
-		expect(recorder.stepEvents.map((e) => e.type)).toEqual([
-			"step.started",
-			"step.completed",
+		expect(recorder.stepEvents).toEqual([
+			{
+				type: "step.started",
+				data: { name: "implement", index: 0, total: 1 },
+			},
+			{
+				type: "step.completed",
+				data: { name: "implement", index: 0, durationMs: expect.any(Number) },
+			},
 		]);
 	});
 

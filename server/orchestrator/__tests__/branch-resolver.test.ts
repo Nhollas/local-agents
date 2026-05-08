@@ -15,9 +15,9 @@ import type {
 import { resolveBranch } from "../branch-resolver.ts";
 
 const issue: Issue = {
-	key: issueKey("owner/repo#1"),
+	key: issueKey("acme/widgets#1"),
 	number: issueNumber(7),
-	repo: repoSlug("owner/repo"),
+	repo: repoSlug("acme/widgets"),
 	title: "Fix it",
 	description: "",
 	labels: [],
@@ -85,7 +85,7 @@ describe("resolveBranch", () => {
 		expect(result).toBe("feat/owner-repo-1-fix-it");
 		expect(agent.calls).toHaveLength(1);
 		expect(agent.calls[0]).toMatchObject({
-			prompt: "Propose a name for owner/repo#1",
+			prompt: "Propose a name for acme/widgets#1",
 			cwd: "/work",
 			model: "test-model",
 			outputFormat: {
