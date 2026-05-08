@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { createGitHubClient } from "../github-client.ts";
 import { GITHUB_API, REPO } from "../testing/support/fixtures.ts";
 import { server } from "../testing/support/msw.ts";
-import { githubToken } from "../types/brands.ts";
 
 describe("GitHub client retry", () => {
 	it("retries on 500 and succeeds on the next attempt", async () => {
@@ -14,7 +13,7 @@ describe("GitHub client retry", () => {
 			}),
 		);
 
-		const client = createGitHubClient(githubToken("test-token"), {
+		const client = createGitHubClient("test-token", {
 			baseDelayMs: 1,
 		});
 		const repo = await client.getRepo(REPO);
@@ -30,7 +29,7 @@ describe("GitHub client retry", () => {
 			),
 		);
 
-		const client = createGitHubClient(githubToken("test-token"), {
+		const client = createGitHubClient("test-token", {
 			maxAttempts: 2,
 			baseDelayMs: 1,
 		});

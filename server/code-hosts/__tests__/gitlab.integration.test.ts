@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createGitLabClient } from "../../gitlab-client.ts";
 import { GITLAB_API, GITLAB_BASE_URL } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
-import { branchName, gitlabToken, repoSlug } from "../../types/brands.ts";
+import { repoSlug } from "../../types/brands.ts";
 import { gitlabCodeHostAdapter } from "../gitlab.ts";
 
 const REPO = repoSlug("group/subgroup/project");
 const adapter = gitlabCodeHostAdapter(
-	createGitLabClient(gitlabToken("test-token"), { baseUrl: GITLAB_BASE_URL }),
+	createGitLabClient("test-token", { baseUrl: GITLAB_BASE_URL }),
 );
 
 describe("cloneUrl", () => {
@@ -20,10 +20,10 @@ describe("cloneUrl", () => {
 
 	it("embeds the configured token as HTTP basic auth when provided", () => {
 		const tokenAdapter = gitlabCodeHostAdapter(
-			createGitLabClient(gitlabToken("test-token"), {
+			createGitLabClient("test-token", {
 				baseUrl: GITLAB_BASE_URL,
 			}),
-			gitlabToken("token-with/special:chars"),
+			"token-with/special:chars",
 		);
 
 		expect(tokenAdapter.cloneUrl(REPO)).toBe(
@@ -33,7 +33,7 @@ describe("cloneUrl", () => {
 
 	it("defaults to gitlab.com when no base URL is configured", async () => {
 		const defaultAdapter = gitlabCodeHostAdapter(
-			createGitLabClient(gitlabToken("test-token")),
+			createGitLabClient("test-token"),
 		);
 
 		server.use(
@@ -163,8 +163,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			branchName("agent/issue-1"),
-			branchName("main"),
+			"agent/issue-1",
+			"main",
 			"Fix issue 1",
 			"Closes TEST-1",
 		);
@@ -192,8 +192,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			branchName("agent/issue-1"),
-			branchName("main"),
+			"agent/issue-1",
+			"main",
 			"Fix issue 1",
 			"Closes TEST-1",
 		);

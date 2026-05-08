@@ -1,12 +1,11 @@
 import type { Issue } from "../trackers/types.ts";
-import type { BranchName } from "../types/brands.ts";
 import type { ChangeRequestTemplate } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 
 type RenderChangeRequestParams = {
 	template: ChangeRequestTemplate;
 	issue: Issue;
-	branch: BranchName;
+	branch: string;
 	outputs?: Record<string, unknown>;
 };
 

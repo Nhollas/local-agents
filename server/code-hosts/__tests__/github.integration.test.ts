@@ -3,12 +3,9 @@ import { describe, expect, it } from "vitest";
 import { createGitHubClient } from "../../github-client.ts";
 import { GITHUB_API, REPO } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
-import { branchName, githubToken } from "../../types/brands.ts";
 import { githubCodeHostAdapter } from "../github.ts";
 
-const adapter = githubCodeHostAdapter(
-	createGitHubClient(githubToken("test-token")),
-);
+const adapter = githubCodeHostAdapter(createGitHubClient("test-token"));
 
 describe("cloneUrl", () => {
 	it("targets github.com", () => {
@@ -19,8 +16,8 @@ describe("cloneUrl", () => {
 
 	it("embeds the configured token as x-access-token basic auth when provided", () => {
 		const tokenAdapter = githubCodeHostAdapter(
-			createGitHubClient(githubToken("test-token")),
-			githubToken("token-with/special:chars"),
+			createGitHubClient("test-token"),
+			"token-with/special:chars",
 		);
 
 		expect(tokenAdapter.cloneUrl(REPO)).toBe(
@@ -118,8 +115,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			branchName("agent/issue-1"),
-			branchName("main"),
+			"agent/issue-1",
+			"main",
 			"Fix issue 1",
 			"Closes TEST-1",
 		);
@@ -147,8 +144,8 @@ describe("createChangeRequest", () => {
 
 		const result = await adapter.createChangeRequest(
 			REPO,
-			branchName("agent/issue-1"),
-			branchName("main"),
+			"agent/issue-1",
+			"main",
 			"Fix issue 1",
 			"Closes TEST-1",
 		);

@@ -4,7 +4,7 @@ import { logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import { type BranchName, branchName, type RepoSlug } from "../types/brands.ts";
+import type { RepoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
@@ -90,7 +90,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 					async () => {
 						const startTime = clock.now();
 						let result: RunResult;
-						let branch: BranchName | undefined;
+						let branch: string | undefined;
 						let phase: FailurePhase = "branch_resolver";
 
 						try {
@@ -106,7 +106,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							canonicalLog.set({
 								branch_resolver_ms: clock.now() - branchResolverStart,
 							});
-							branch = branchName(resolvedBranch);
+							branch = resolvedBranch;
 							canonicalLog.set({ branch });
 
 							phase = "setup";
@@ -175,8 +175,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		issue: Issue,
 		workflow: RepoWorkflow,
 		wsPath: string,
-		branch: BranchName,
-		baseBranch: BranchName,
+		branch: string,
+		baseBranch: string,
 		outputs: Record<string, unknown>,
 	): Promise<boolean> {
 		// Pinned order per ADR 0001: push → change-request → tracker.

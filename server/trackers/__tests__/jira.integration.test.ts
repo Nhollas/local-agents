@@ -8,13 +8,7 @@ import {
 	REPO,
 } from "../../testing/support/fixtures.ts";
 import { server } from "../../testing/support/msw.ts";
-import {
-	issueNumber,
-	jiraApiToken,
-	jiraEmail,
-	type RepoSlug,
-	repoSlug,
-} from "../../types/brands.ts";
+import { issueNumber, type RepoSlug, repoSlug } from "../../types/brands.ts";
 import { jiraTrackerAdapter } from "../jira.ts";
 
 const statuses = {
@@ -27,8 +21,8 @@ function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
 	return jiraTrackerAdapter(
 		createJiraClient({
 			baseUrl: JIRA_BASE_URL,
-			email: jiraEmail("agent@example.test"),
-			apiToken: jiraApiToken("jira-token"),
+			email: "agent@example.test",
+			apiToken: "jira-token",
 			maxAttempts: 1,
 		}),
 		{
@@ -179,8 +173,8 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = jiraTrackerAdapter(
 				createJiraClient({
 					baseUrl: JIRA_BASE_URL,
-					email: jiraEmail("agent@example.test"),
-					apiToken: jiraApiToken("jira-token"),
+					email: "agent@example.test",
+					apiToken: "jira-token",
 					maxAttempts: 1,
 				}),
 				{
@@ -329,8 +323,8 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = jiraTrackerAdapter(
 				createJiraClient({
 					baseUrl: JIRA_BASE_URL,
-					email: jiraEmail("agent@example.test"),
-					apiToken: jiraApiToken("jira-token"),
+					email: "agent@example.test",
+					apiToken: "jira-token",
 					maxAttempts: 1,
 				}),
 				{
@@ -412,8 +406,8 @@ describe("jiraTrackerAdapter", () => {
 			const tracker = jiraTrackerAdapter(
 				createJiraClient({
 					baseUrl: JIRA_BASE_URL,
-					email: jiraEmail("agent@example.test"),
-					apiToken: jiraApiToken("jira-token"),
+					email: "agent@example.test",
+					apiToken: "jira-token",
 					maxAttempts: 1,
 				}),
 				{

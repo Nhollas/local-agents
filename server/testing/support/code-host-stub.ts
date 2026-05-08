@@ -1,14 +1,10 @@
 import type { CodeHostAdapter } from "../../code-hosts/types.ts";
-import {
-	type BranchName,
-	branchName,
-	type RepoSlug,
-} from "../../types/brands.ts";
+import type { RepoSlug } from "../../types/brands.ts";
 
 type ChangeRequestRecord = {
 	repo: RepoSlug;
-	head: BranchName;
-	base: BranchName;
+	head: string;
+	base: string;
 	title: string;
 	body: string;
 };
@@ -54,7 +50,7 @@ export function createCodeHostStub(): CodeHostStub {
 		},
 
 		async defaultBranch(repo) {
-			return branchName(defaultBranches.get(repo) ?? "main");
+			return defaultBranches.get(repo) ?? "main";
 		},
 
 		async createChangeRequest(repo, head, base, title, body) {
