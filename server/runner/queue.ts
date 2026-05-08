@@ -31,9 +31,9 @@ export function createJobQueue(config: QueueConfig = {}): JobQueue {
 	}
 
 	function drain(): void {
-		while (running < maxConcurrency && pending.length > 0) {
-			// biome-ignore lint/style/noNonNullAssertion: while loop guarantees pending.length > 0
-			const execute = pending.shift()!;
+		while (running < maxConcurrency) {
+			const execute = pending.shift();
+			if (!execute) return;
 			running++;
 			execute().finally(() => {
 				running--;

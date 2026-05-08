@@ -64,6 +64,11 @@ async function runShellBlock(
 			cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
+		const { stdout: childStdout, stderr: childStderr } = child;
+		/* v8 ignore next 3 -- unreachable; stdio: ["ignore", "pipe", "pipe"] guarantees both streams */
+		if (!childStdout || !childStderr) {
+			throw new Error("Invariant: spawned child missing piped stdout/stderr");
+		}
 
 		let stdout = "";
 		let stderr = "";
@@ -85,10 +90,8 @@ async function runShellBlock(
 			);
 		}, timeoutMs);
 
-		// biome-ignore lint/style/noNonNullAssertion: stdout is present because stdio is configured as "pipe"
-		child.stdout!.setEncoding("utf8");
-		// biome-ignore lint/style/noNonNullAssertion: stdout is present because stdio is configured as "pipe"
-		child.stdout!.on("data", (chunk: string) => {
+		childStdout.setEncoding("utf8");
+		childStdout.on("data", (chunk: string) => {
 			stdout += chunk;
 			if (stdout.length + stderr.length > SHELL_EXPANSION_MAX_BUFFER) {
 				fail(
@@ -103,10 +106,8 @@ async function runShellBlock(
 			}
 		});
 
-		// biome-ignore lint/style/noNonNullAssertion: stderr is present because stdio is configured as "pipe"
-		child.stderr!.setEncoding("utf8");
-		// biome-ignore lint/style/noNonNullAssertion: stderr is present because stdio is configured as "pipe"
-		child.stderr!.on("data", (chunk: string) => {
+		childStderr.setEncoding("utf8");
+		childStderr.on("data", (chunk: string) => {
 			stderr += chunk;
 			if (stdout.length + stderr.length > SHELL_EXPANSION_MAX_BUFFER) {
 				fail(
