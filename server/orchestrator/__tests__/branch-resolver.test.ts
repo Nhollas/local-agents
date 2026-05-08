@@ -140,11 +140,10 @@ describe("resolveBranch", () => {
 			yield {
 				type: "assistant",
 				session_id: "sess",
-				// biome-ignore lint/suspicious/noExplicitAny: decouple from SDK shape
-				message: { content: [] } as any,
+				message: { content: [] },
 				parent_tool_use_id: null,
 				uuid: "00000000-0000-0000-0000-000000000040",
-			} as AgentMessage;
+			} as unknown as AgentMessage;
 		});
 
 		await expect(
