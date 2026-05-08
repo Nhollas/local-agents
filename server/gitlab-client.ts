@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
-import type { BranchName, GitLabToken, RepoSlug } from "./types/brands.ts";
+import type { RepoSlug } from "./types/brands.ts";
 
 const gitlabFileSchema = z.object({
 	content: z.string(),
@@ -15,31 +15,35 @@ const gitlabProjectSchema = z.object({
 	default_branch: z.string().min(1),
 });
 
+type GitLabFile = z.infer<typeof gitlabFileSchema>;
+type GitLabMergeRequest = z.infer<typeof gitlabMergeRequestSchema>;
+type GitLabProject = z.infer<typeof gitlabProjectSchema>;
+
 export type GitLabClient = {
 	baseUrl: string;
-	getProject(projectPath: RepoSlug): Promise<{ default_branch: string }>;
+	getProject(projectPath: RepoSlug): Promise<GitLabProject>;
 	getFileContent(
 		projectPath: RepoSlug,
 		filePath: string,
 		ref?: string,
-	): Promise<{ content: string }>;
+	): Promise<GitLabFile>;
 	listMergeRequests(
 		projectPath: RepoSlug,
 		params: {
-			source_branch: BranchName;
-			target_branch: BranchName;
+			source_branch: string;
+			target_branch: string;
 			state: string;
 		},
-	): Promise<{ iid: number; web_url: string }[]>;
+	): Promise<GitLabMergeRequest[]>;
 	createMergeRequest(
 		projectPath: RepoSlug,
 		params: {
-			source_branch: BranchName;
-			target_branch: BranchName;
+			source_branch: string;
+			target_branch: string;
 			title: string;
 			description: string;
 		},
-	): Promise<{ iid: number; web_url: string }>;
+	): Promise<GitLabMergeRequest>;
 };
 
 type GitLabClientOptions = HttpClientOptions & {
@@ -47,7 +51,7 @@ type GitLabClientOptions = HttpClientOptions & {
 };
 
 export function createGitLabClient(
-	token: GitLabToken,
+	token: string,
 	options: GitLabClientOptions = {},
 ): GitLabClient {
 	const baseUrl = trimTrailingSlash(options.baseUrl ?? DEFAULT_BASE_URL);

@@ -1,14 +1,13 @@
 import type { Config } from "../config.ts";
 import { createGitHubClient } from "../github-client.ts";
 import { createGitLabClient } from "../gitlab-client.ts";
-import type { GitHubToken, GitLabToken } from "../types/brands.ts";
 import { githubCodeHostAdapter } from "./github.ts";
 import { gitlabCodeHostAdapter } from "./gitlab.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
 export function createCodeHost(
 	codeHost: Config["code_host"],
-	tokens: { gitlab: GitLabToken | undefined; github: GitHubToken | undefined },
+	tokens: { gitlab: string | undefined; github: string | undefined },
 ): CodeHostAdapter {
 	switch (codeHost.kind) {
 		case "gitlab": {

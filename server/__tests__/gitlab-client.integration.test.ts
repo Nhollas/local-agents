@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createGitLabClient } from "../gitlab-client.ts";
 import { GITLAB_API, GITLAB_BASE_URL } from "../testing/support/fixtures.ts";
 import { server } from "../testing/support/msw.ts";
-import { branchName, gitlabToken, repoSlug } from "../types/brands.ts";
+import { repoSlug } from "../types/brands.ts";
 
 const REPO = repoSlug("group/project");
 
@@ -16,13 +16,13 @@ describe("GitLab client retry", () => {
 			}),
 		);
 
-		const client = createGitLabClient(gitlabToken("test-token"), {
+		const client = createGitLabClient("test-token", {
 			baseUrl: GITLAB_BASE_URL,
 			baseDelayMs: 1,
 		});
 		const mergeRequests = await client.listMergeRequests(REPO, {
-			source_branch: branchName("agent/issue-1"),
-			target_branch: branchName("main"),
+			source_branch: "agent/issue-1",
+			target_branch: "main",
 			state: "opened",
 		});
 
@@ -37,7 +37,7 @@ describe("GitLab client retry", () => {
 			),
 		);
 
-		const client = createGitLabClient(gitlabToken("test-token"), {
+		const client = createGitLabClient("test-token", {
 			baseUrl: GITLAB_BASE_URL,
 			maxAttempts: 2,
 			baseDelayMs: 1,

@@ -7,7 +7,6 @@ import {
 	JIRA_BASE_URL,
 } from "../testing/support/fixtures.ts";
 import { server } from "../testing/support/msw.ts";
-import { jiraApiToken, jiraEmail } from "../types/brands.ts";
 
 describe("Jira client", () => {
 	it("defaults search maxResults to 100", async () => {
@@ -36,8 +35,8 @@ describe("Jira client", () => {
 
 		const client = createJiraClient({
 			baseUrl: JIRA_BASE_URL,
-			email: jiraEmail("agent@example.test"),
-			apiToken: jiraApiToken("jira-token"),
+			email: "agent@example.test",
+			apiToken: "jira-token",
 			maxAttempts: 1,
 		});
 
@@ -62,8 +61,8 @@ describe("Jira client", () => {
 
 			const client = createJiraClient({
 				baseUrl: JIRA_BASE_URL,
-				email: jiraEmail("agent@example.test"),
-				apiToken: jiraApiToken("jira-token"),
+				email: "agent@example.test",
+				apiToken: "jira-token",
 				maxAttempts: 1,
 			});
 
@@ -96,8 +95,8 @@ describe("Jira client", () => {
 
 			const client = createJiraClient({
 				baseUrl: JIRA_BASE_URL,
-				email: jiraEmail("agent@example.test"),
-				apiToken: jiraApiToken("jira-token"),
+				email: "agent@example.test",
+				apiToken: "jira-token",
 				maxAttempts: 1,
 			});
 

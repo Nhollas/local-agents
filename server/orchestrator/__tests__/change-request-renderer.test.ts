@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../../trackers/types.ts";
-import {
-	branchName,
-	issueKey,
-	issueNumber,
-	repoSlug,
-} from "../../types/brands.ts";
+import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import { renderChangeRequest } from "../change-request-renderer.ts";
 
 const issue: Issue = {
@@ -27,7 +22,7 @@ describe("renderChangeRequest", () => {
 				body: "Closes {{ issue.key }}\nBranch: {{ branch }}",
 			},
 			issue,
-			branch: branchName("agent/issue-42"),
+			branch: "agent/issue-42",
 		});
 
 		expect(result).toEqual({

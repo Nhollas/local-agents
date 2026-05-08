@@ -1,33 +1,17 @@
-declare const brand: unique symbol;
+import { z } from "zod";
 
-export type Brand<T, Name extends string> = T & {
-	readonly [brand]: Name;
-};
-
-export type RepoSlug = Brand<string, "RepoSlug">;
+export const repoSlugSchema = z.string().min(1).brand<"RepoSlug">();
+export type RepoSlug = z.infer<typeof repoSlugSchema>;
 export const repoSlug = (value: string): RepoSlug => value as RepoSlug;
 
-export type IssueKey = Brand<string, "IssueKey">;
+export const issueKeySchema = z.string().min(1).brand<"IssueKey">();
+export type IssueKey = z.infer<typeof issueKeySchema>;
 export const issueKey = (value: string): IssueKey => value as IssueKey;
 
-export type IssueNumber = Brand<number, "IssueNumber">;
+export const issueNumberSchema = z.number().brand<"IssueNumber">();
+export type IssueNumber = z.infer<typeof issueNumberSchema>;
 export const issueNumber = (value: number): IssueNumber => value as IssueNumber;
 
-export type BranchName = Brand<string, "BranchName">;
-export const branchName = (value: string): BranchName => value as BranchName;
-
-export type RunId = Brand<string, "RunId">;
+export const runIdSchema = z.string().min(1).brand<"RunId">();
+export type RunId = z.infer<typeof runIdSchema>;
 export const runId = (value: string): RunId => value as RunId;
-
-export type GitLabToken = Brand<string, "GitLabToken">;
-export const gitlabToken = (value: string): GitLabToken => value as GitLabToken;
-
-export type GitHubToken = Brand<string, "GitHubToken">;
-export const githubToken = (value: string): GitHubToken => value as GitHubToken;
-
-export type JiraApiToken = Brand<string, "JiraApiToken">;
-export const jiraApiToken = (value: string): JiraApiToken =>
-	value as JiraApiToken;
-
-export type JiraEmail = Brand<string, "JiraEmail">;
-export const jiraEmail = (value: string): JiraEmail => value as JiraEmail;

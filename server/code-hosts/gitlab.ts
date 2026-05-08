@@ -1,11 +1,10 @@
 import type { GitLabClient } from "../gitlab-client.ts";
-import { branchName, type GitLabToken } from "../types/brands.ts";
 import { decorateCodeHost } from "./decorator.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
 export function gitlabCodeHostAdapter(
 	client: GitLabClient,
-	cloneToken?: GitLabToken,
+	cloneToken?: string,
 ): CodeHostAdapter {
 	return decorateCodeHost({
 		async fetchFile(repo, path, ref): Promise<string | null> {
@@ -30,7 +29,7 @@ export function gitlabCodeHostAdapter(
 
 		async defaultBranch(repo) {
 			const project = await client.getProject(repo);
-			return branchName(project.default_branch);
+			return project.default_branch;
 		},
 
 		async createChangeRequest(

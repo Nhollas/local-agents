@@ -1,40 +1,10 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
-import { type RepoSlug, repoSlug } from "./types/brands.ts";
+import { repoSlugSchema } from "./types/brands.ts";
 import { modelIdSchema } from "./types/model-id.ts";
 
-export type Config = {
-	tracker: {
-		kind: "jira";
-		base_url: string;
-		project: string;
-		trigger_label: string;
-		statuses: {
-			pending: string;
-			running: string;
-			awaiting_review: string;
-		};
-	};
-	code_host:
-		| {
-				kind: "gitlab";
-				scopes: RepoSlug[];
-				base_url: string;
-		  }
-		| {
-				kind: "github";
-				scopes: RepoSlug[];
-		  };
-	defaults: {
-		polling_interval_ms: number;
-		max_concurrent: number;
-		model: string;
-		workspace_root: string;
-	};
-};
-
-const repoSlugSchema = z.string().min(1).transform(repoSlug);
+export type Config = z.infer<typeof configSchema>;
 
 const configSchema = z
 	.object({

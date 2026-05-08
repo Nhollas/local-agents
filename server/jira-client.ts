@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
-import type { JiraApiToken, JiraEmail } from "./types/brands.ts";
 
 const jiraIssueSchema = z.object({
 	key: z.string(),
@@ -53,8 +52,8 @@ export type JiraClient = {
 
 type JiraClientOptions = HttpClientOptions & {
 	baseUrl: string;
-	email: JiraEmail;
-	apiToken: JiraApiToken;
+	email: string;
+	apiToken: string;
 };
 
 export function createJiraClient(options: JiraClientOptions): JiraClient {
@@ -144,6 +143,6 @@ function encodeIssueKey(key: string): string {
 	return encodeURIComponent(key);
 }
 
-function basicAuth(email: JiraEmail, apiToken: JiraApiToken): string {
+function basicAuth(email: string, apiToken: string): string {
 	return Buffer.from(`${email}:${apiToken}`, "utf8").toString("base64");
 }

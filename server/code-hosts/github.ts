@@ -1,11 +1,10 @@
 import type { GitHubClient } from "../github-client.ts";
-import { branchName, type GitHubToken } from "../types/brands.ts";
 import { decorateCodeHost } from "./decorator.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
 export function githubCodeHostAdapter(
 	client: GitHubClient,
-	cloneToken?: GitHubToken,
+	cloneToken?: string,
 ): CodeHostAdapter {
 	return decorateCodeHost({
 		async fetchFile(repo, path, ref): Promise<string | null> {
@@ -26,7 +25,7 @@ export function githubCodeHostAdapter(
 
 		async defaultBranch(repo) {
 			const project = await client.getRepo(repo);
-			return branchName(project.default_branch);
+			return project.default_branch;
 		},
 
 		async createChangeRequest(

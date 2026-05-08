@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
-import type { BranchName, GitHubToken, RepoSlug } from "./types/brands.ts";
+import type { RepoSlug } from "./types/brands.ts";
 
 const githubRepoSchema = z.object({
 	default_branch: z.string().min(1),
@@ -15,30 +15,34 @@ const githubPullRequestSchema = z.object({
 	html_url: z.string(),
 });
 
+type GitHubRepo = z.infer<typeof githubRepoSchema>;
+type GitHubContent = z.infer<typeof githubContentSchema>;
+type GitHubPullRequest = z.infer<typeof githubPullRequestSchema>;
+
 export type GitHubClient = {
-	getRepo(repo: RepoSlug): Promise<{ default_branch: string }>;
+	getRepo(repo: RepoSlug): Promise<GitHubRepo>;
 	getFileContent(
 		repo: RepoSlug,
 		path: string,
 		ref?: string,
-	): Promise<{ content: string }>;
+	): Promise<GitHubContent>;
 	listPullRequests(
 		repo: RepoSlug,
-		params: { head: string; base: BranchName; state: string },
-	): Promise<{ number: number; html_url: string }[]>;
+		params: { head: string; base: string; state: string },
+	): Promise<GitHubPullRequest[]>;
 	createPullRequest(
 		repo: RepoSlug,
 		params: {
 			title: string;
 			body: string;
-			head: BranchName;
-			base: BranchName;
+			head: string;
+			base: string;
 		},
-	): Promise<{ number: number; html_url: string }>;
+	): Promise<GitHubPullRequest>;
 };
 
 export function createGitHubClient(
-	token: GitHubToken,
+	token: string,
 	options: HttpClientOptions = {},
 ): GitHubClient {
 	const request = createJsonRequester({
