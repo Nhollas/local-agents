@@ -1,8 +1,8 @@
 import type { Config } from "../config.ts";
-import { createGitHubClient } from "../github-client.ts";
-import { createGitLabClient } from "../gitlab-client.ts";
 import { githubCodeHostAdapter } from "./github.ts";
+import { createGitHubClient } from "./github-client.ts";
 import { gitlabCodeHostAdapter } from "./gitlab.ts";
+import { createGitLabClient } from "./gitlab-client.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
 export function createCodeHost(

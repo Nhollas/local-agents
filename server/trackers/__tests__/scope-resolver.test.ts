@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { repoSlug } from "../../types/brands.ts";
 import { resolveRepo } from "../scope-resolver.ts";
-import { repoSlug } from "../types/brands.ts";
 
 describe("resolveRepo", () => {
 	it("returns the path when it exactly matches a scope", () => {

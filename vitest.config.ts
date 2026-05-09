@@ -10,7 +10,12 @@ export default defineConfig({
 		restoreMocks: true,
 		coverage: {
 			provider: "v8",
-			exclude: ["**/testing/**", "**/*.css", "server/env.ts"],
+			exclude: [
+				"**/__test-support__/**",
+				"**/testing/**",
+				"**/*.css",
+				"server/env.ts",
+			],
 		},
 		projects: [
 			{
@@ -29,7 +34,7 @@ export default defineConfig({
 					name: "integration",
 					include: ["**/*.integration.test.ts"],
 					exclude: ["node_modules/**", "dashboard/**"],
-					setupFiles: ["server/testing/setup/integration.ts"],
+					setupFiles: ["server/__test-support__/setup/integration.ts"],
 				},
 			},
 			{

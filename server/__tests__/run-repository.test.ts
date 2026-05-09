@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createTestDb } from "../__test-support__/support/test-db.ts";
 import { runStepOutputs, runs } from "../db/schema.ts";
 import { createRunRepository } from "../run-repository.ts";
-import { createTestDb } from "../testing/support/test-db.ts";
 import { issueKey, repoSlug, runId } from "../types/brands.ts";
 
 describe("run repository row projection", () => {

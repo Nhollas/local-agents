@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import {
+	createTestDb,
+	getEvents,
+	getRun,
+} from "../../__test-support__/support/test-db.ts";
 import type { Db } from "../../db/db.ts";
 import {
 	createRunRepository,
 	type RunRepository,
 } from "../../run-repository.ts";
-import {
-	createTestDb,
-	getEvents,
-	getRun,
-} from "../../testing/support/test-db.ts";
 import {
 	issueKey as ik,
 	runId as rid,

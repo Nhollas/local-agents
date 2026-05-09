@@ -8,7 +8,6 @@ import type { Logger } from "../logger.ts";
 import type { Run, RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
 import { runId as brandRunId } from "../types/brands.ts";
-import { assertNever } from "../types/exhaustive.ts";
 import { createCanonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
@@ -44,9 +43,6 @@ function runToWire(run: Run): RunWire {
 			return { ...run, error: null };
 		case "failed":
 			return run;
-		/* v8 ignore next 2 -- unreachable; Run union is exhaustively handled above */
-		default:
-			return assertNever(run);
 	}
 }
 

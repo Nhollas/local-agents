@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import * as canonicalLog from "../../canonical-log.ts";
-import type { StepEvent } from "../../event-bus.ts";
-import type { RunRepository } from "../../run-repository.ts";
-import type { RunContext } from "../../runner/runner.ts";
 import {
 	buildAssistantMessage,
 	buildErrorResult,
 	buildSuccessResult,
-} from "../../testing/support/agent-messages.ts";
+} from "../../__test-support__/support/agent-messages.ts";
+import * as canonicalLog from "../../canonical-log.ts";
+import type { StepEvent } from "../../event-bus.ts";
+import type { RunRepository } from "../../run-repository.ts";
+import type { RunContext } from "../../runner/runner.ts";
 import type { Issue } from "../../trackers/types.ts";
 import {
 	issueKey,

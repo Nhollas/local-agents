@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { jiraIssueKey, REPO } from "../../__test-support__/support/fixtures.ts";
+import { seedRun } from "../../__test-support__/support/test-db.ts";
+import { createTestOrchestrator } from "../../__test-support__/support/test-orchestrator.ts";
 import type { Db } from "../../db/db.ts";
 import { runs } from "../../db/schema.ts";
-import { jiraIssueKey, REPO } from "../../testing/support/fixtures.ts";
-import { seedRun } from "../../testing/support/test-db.ts";
-import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
 
 function seedStaleRun(db: Db) {
 	seedRun(db, {

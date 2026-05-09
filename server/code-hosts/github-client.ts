@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
-import type { RepoSlug } from "./types/brands.ts";
+import { createJsonRequester, type HttpClientOptions } from "../http-client.ts";
+import type { RepoSlug } from "../types/brands.ts";
 
 const githubRepoSchema = z.object({
 	default_branch: z.string().min(1),

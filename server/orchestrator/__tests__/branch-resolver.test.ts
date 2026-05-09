@@ -3,7 +3,7 @@ import {
 	buildAssistantMessage,
 	buildErrorResult,
 	buildSuccessResult,
-} from "../../testing/support/agent-messages.ts";
+} from "../../__test-support__/support/agent-messages.ts";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import type {

@@ -68,7 +68,6 @@ export function createJsonRequester(options: JsonRequesterOptions) {
 					await sleep(baseDelayMs * 2 ** (attempt - 1));
 					continue;
 				}
-				/* v8 ignore next -- defensive: fetch always rejects with an Error */
 				const message = err instanceof Error ? err.message : String(err);
 				throw new Error(
 					`${options.serviceName} API ${method} ${path} failed after ${maxAttempts} attempts: ${message}`,
@@ -92,7 +91,6 @@ export function createJsonRequester(options: JsonRequesterOptions) {
 			);
 		}
 
-		/* v8 ignore next -- defensive: loop always returns or throws */
 		throw lastError;
 	}
 

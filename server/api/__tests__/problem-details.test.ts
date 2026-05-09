@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { testLogger } from "../../testing/support/test-logger.ts";
+import { testLogger } from "../../__test-support__/support/test-logger.ts";
 import { createCanonicalLogMiddleware } from "../canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,

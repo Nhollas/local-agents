@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { runs } from "../../db/schema.ts";
 import {
 	hangingAgent,
 	jiraIssueKey,
 	REPO,
-} from "../../testing/support/fixtures.ts";
-import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+} from "../../__test-support__/support/fixtures.ts";
+import { createTestOrchestrator } from "../../__test-support__/support/test-orchestrator.ts";
+import { runs } from "../../db/schema.ts";
 import { repoSlug } from "../../types/brands.ts";
 
 describe("Orchestrator multi-repo scheduling", () => {

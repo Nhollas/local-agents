@@ -11,7 +11,6 @@ import {
 	runs,
 } from "./db/schema.ts";
 import type { IssueKey, RepoSlug, RunId } from "./types/brands.ts";
-import { assertNever } from "./types/exhaustive.ts";
 
 type RunBase = {
 	id: RunId;
@@ -203,8 +202,5 @@ function rowToRun(row: RunRow): Run {
 				durationMs: row.durationMs,
 				error: row.error,
 			};
-		/* v8 ignore next 2 -- unreachable; RunStatus is exhaustively handled above */
-		default:
-			return assertNever(row.status);
 	}
 }

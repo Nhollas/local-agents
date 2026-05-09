@@ -1,4 +1,4 @@
-import type { GitLabClient } from "../gitlab-client.ts";
+import type { GitLabClient } from "./gitlab-client.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
 export function gitlabCodeHostAdapter(
