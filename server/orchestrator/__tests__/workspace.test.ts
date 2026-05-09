@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { seedBareRepoMain } from "../../testing/support/test-workspace.ts";
+import { seedBareRepoMain } from "../../__test-support__/support/test-workspace.ts";
 import type { Issue } from "../../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../../types/brands.ts";
 import {

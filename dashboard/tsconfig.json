@@ -6,7 +6,6 @@
 		"jsx": "react-jsx",
 		"strict": true,
 		"exactOptionalPropertyTypes": true,
-		"noUncheckedIndexedAccess": true,
 		"noPropertyAccessFromIndexSignature": true,
 		"noImplicitOverride": true,
 		"noImplicitReturns": true,

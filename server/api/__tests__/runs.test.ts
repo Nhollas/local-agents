@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createTestApi } from "../../testing/support/test-api.ts";
-import { seedEvent, seedRun } from "../../testing/support/test-db.ts";
+import { createTestApi } from "../../__test-support__/support/test-api.ts";
+import { seedEvent, seedRun } from "../../__test-support__/support/test-db.ts";
 import { issueKey, repoSlug } from "../../types/brands.ts";
 
 describe("GET /runs", () => {

@@ -1,8 +1,7 @@
 import * as canonicalLog from "../canonical-log.ts";
-import type { JiraClient, JiraIssue } from "../jira-client.ts";
-
-import { resolveRepo } from "../scope-resolver.ts";
 import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
+import type { JiraClient, JiraIssue } from "./jira-client.ts";
+import { resolveRepo } from "./scope-resolver.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
 
 type JiraStatuses = Record<TrackerState, string>;
@@ -32,7 +31,6 @@ export function jiraTrackerAdapter(
 
 	function buildIssue(issue: JiraIssue, repo: RepoSlug): Issue {
 		const num = parseJiraKey(options.project, issue.key);
-		/* v8 ignore next 3 -- defensive check; Jira API returns keys matching its own search filter */
 		if (num == null) {
 			throw new Error(`Invalid Jira issue key from API: ${issue.key}`);
 		}

@@ -1,4 +1,4 @@
-import { type RepoSlug, repoSlug } from "./types/brands.ts";
+import { type RepoSlug, repoSlug } from "../types/brands.ts";
 
 export function resolveRepo(
 	path: string,

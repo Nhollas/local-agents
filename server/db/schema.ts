@@ -32,7 +32,6 @@ export const runEvents = sqliteTable(
 			.$type<Record<string, unknown>>(),
 		createdAt: text("created_at").notNull(),
 	},
-	/* v8 ignore next -- evaluated at module load, before coverage starts */
 	(table) => [index("idx_run_events_run_id").on(table.runId)],
 );
 
@@ -46,7 +45,6 @@ export const runStepOutputs = sqliteTable(
 			.$type<unknown>(),
 		createdAt: text("created_at").notNull(),
 	},
-	/* v8 ignore next -- evaluated at module load, before coverage starts */
 	(table) => [primaryKey({ columns: [table.runId, table.stepName] })],
 );
 

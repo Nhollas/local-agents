@@ -6,8 +6,8 @@ import {
 	jiraIssueKey,
 	noopAgent,
 	REPO,
-} from "../../testing/support/fixtures.ts";
-import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+} from "../../__test-support__/support/fixtures.ts";
+import { createTestOrchestrator } from "../../__test-support__/support/test-orchestrator.ts";
 
 const exec = promisify(execFile);
 

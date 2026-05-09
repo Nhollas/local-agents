@@ -1,10 +1,13 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { createGitLabClient } from "../../gitlab-client.ts";
-import { GITLAB_API, GITLAB_BASE_URL } from "../../testing/support/fixtures.ts";
-import { server } from "../../testing/support/msw.ts";
+import {
+	GITLAB_API,
+	GITLAB_BASE_URL,
+} from "../../__test-support__/support/fixtures.ts";
+import { server } from "../../__test-support__/support/msw.ts";
 import { repoSlug } from "../../types/brands.ts";
 import { gitlabCodeHostAdapter } from "../gitlab.ts";
+import { createGitLabClient } from "../gitlab-client.ts";
 
 const REPO = repoSlug("group/subgroup/project");
 const adapter = gitlabCodeHostAdapter(

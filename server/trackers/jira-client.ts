@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createJsonRequester, type HttpClientOptions } from "./http-client.ts";
+import { createJsonRequester, type HttpClientOptions } from "../http-client.ts";
 
 const jiraIssueSchema = z.object({
 	key: z.string(),

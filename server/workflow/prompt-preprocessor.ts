@@ -25,12 +25,7 @@ export async function expandMarkedShellBlocks(
 ): Promise<string> {
 	const commands: string[] = [];
 	for (const match of prompt.matchAll(markedShellBlockPattern)) {
-		const command = match[1];
-		/* v8 ignore next 3 -- unreachable; pattern's first capture group always matches */
-		if (command === undefined) {
-			throw new Error("Invariant: shell block match missing capture group");
-		}
-		commands.push(command);
+		commands.push(match[1]);
 	}
 	if (commands.length === 0) return prompt;
 
@@ -39,14 +34,7 @@ export async function expandMarkedShellBlocks(
 	);
 
 	let i = 0;
-	return prompt.replace(markedShellBlockPattern, () => {
-		const output = outputs[i++];
-		/* v8 ignore next 3 -- unreachable; outputs.length matches number of replacements */
-		if (output === undefined) {
-			throw new Error("Invariant: shell block output missing");
-		}
-		return output;
-	});
+	return prompt.replace(markedShellBlockPattern, () => outputs[i++]);
 }
 
 const SHELL_EXPANSION_TIMEOUT_MS = 30_000;
@@ -65,10 +53,6 @@ async function runShellBlock(
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 		const { stdout: childStdout, stderr: childStderr } = child;
-		/* v8 ignore next 3 -- unreachable; stdio: ["ignore", "pipe", "pipe"] guarantees both streams */
-		if (!childStdout || !childStderr) {
-			throw new Error("Invariant: spawned child missing piped stdout/stderr");
-		}
 
 		let stdout = "";
 		let stderr = "";

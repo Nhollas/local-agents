@@ -1,8 +1,8 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { GITHUB_API, REPO } from "../../__test-support__/support/fixtures.ts";
+import { server } from "../../__test-support__/support/msw.ts";
 import { createGitHubClient } from "../github-client.ts";
-import { GITHUB_API, REPO } from "../testing/support/fixtures.ts";
-import { server } from "../testing/support/msw.ts";
 
 describe("GitHub client retry", () => {
 	it("retries on 500 and succeeds on the next attempt", async () => {

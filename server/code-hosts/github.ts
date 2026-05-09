@@ -1,4 +1,4 @@
-import type { GitHubClient } from "../github-client.ts";
+import type { GitHubClient } from "./github-client.ts";
 import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
 
 export function githubCodeHostAdapter(

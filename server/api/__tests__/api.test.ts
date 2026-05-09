@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTestApi } from "../../testing/support/test-api.ts";
+import { createTestApi } from "../../__test-support__/support/test-api.ts";
 import { issueKey, repoSlug } from "../../types/brands.ts";
 import type { HealthCheck } from "../api.ts";
 

@@ -1,6 +1,6 @@
 import type { Config } from "../config.ts";
-import { createJiraClient } from "../jira-client.ts";
 import { jiraTrackerAdapter } from "./jira.ts";
+import { createJiraClient } from "./jira-client.ts";
 import type { TrackerAdapter } from "./types.ts";
 
 export function createTracker(

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { runs } from "../../db/schema.ts";
 import {
 	hangingAgent,
 	jiraIssueKey,
 	REPO,
-} from "../../testing/support/fixtures.ts";
-import { seedRun } from "../../testing/support/test-db.ts";
-import { createTestOrchestrator } from "../../testing/support/test-orchestrator.ts";
+} from "../../__test-support__/support/fixtures.ts";
+import { seedRun } from "../../__test-support__/support/test-db.ts";
+import { createTestOrchestrator } from "../../__test-support__/support/test-orchestrator.ts";
+import { runs } from "../../db/schema.ts";
 
 describe("Orchestrator scheduling", () => {
 	it("transitions pending → running on dispatch", async () => {

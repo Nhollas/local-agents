@@ -1,15 +1,15 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { createJiraClient } from "../../jira-client.ts";
 import {
 	createJiraIssue,
 	JIRA_API,
 	JIRA_BASE_URL,
 	REPO,
-} from "../../testing/support/fixtures.ts";
-import { server } from "../../testing/support/msw.ts";
+} from "../../__test-support__/support/fixtures.ts";
+import { server } from "../../__test-support__/support/msw.ts";
 import { issueNumber, type RepoSlug, repoSlug } from "../../types/brands.ts";
 import { jiraTrackerAdapter } from "../jira.ts";
+import { createJiraClient } from "../jira-client.ts";
 
 const statuses = {
 	pending: "To Do",
