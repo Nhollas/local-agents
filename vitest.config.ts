@@ -11,7 +11,7 @@ export default defineConfig({
 		coverage: {
 			provider: "v8",
 			exclude: [
-				"**/__test-support__/**",
+				"**/test-support/**",
 				"**/testing/**",
 				"**/*.css",
 				"server/env.ts",
@@ -34,7 +34,7 @@ export default defineConfig({
 					name: "integration",
 					include: ["**/*.integration.test.ts"],
 					exclude: ["node_modules/**", "dashboard/**"],
-					setupFiles: ["server/__test-support__/setup/integration.ts"],
+					setupFiles: ["server/test-support/integration-setup.ts"],
 				},
 			},
 			{

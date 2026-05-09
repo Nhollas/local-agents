@@ -1,6 +1,6 @@
 # Testing
 
-Tests live next to the code they cover, in `__tests__` folders inside each module. Everything runs under Vitest in a single Node process. There is one runner and one config; the layers differ in where they draw the boundary.
+Tests live next to the code they cover, colocated with their source files (`foo.ts` + `foo.test.ts`). Shared fixtures, factories, and adapter stubs live in `server/test-support/`. Everything runs under Vitest in a single Node process. There is one runner and one config; the layers differ in where they draw the boundary.
 
 For the system under test, see [architecture.md](architecture.md). For coding standards, see [coding-standards.md](coding-standards.md).
 
@@ -16,7 +16,7 @@ Each layer owns its assertions. HTTP details belong to the adapter layer; orches
 
 ## Test doubles
 
-The orchestrator integration tests use stub adapters in `server/testing/support/` that implement the production `TrackerAdapter` and `CodeHostAdapter` interfaces. They record calls and let tests assert against the recording. They do not model issue-state machines or change-request lifecycles internally — the real adapters do, and the adapter integration tests cover that.
+The orchestrator integration tests use stub adapters in `server/test-support/` that implement the production `TrackerAdapter` and `CodeHostAdapter` interfaces. They record calls and let tests assert against the recording. They do not model issue-state machines or change-request lifecycles internally — the real adapters do, and the adapter integration tests cover that.
 
 Because the stubs typecheck against the production interfaces, an interface change fails compilation before it fails a test.
 
