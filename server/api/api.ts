@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import type { Last24hStats } from "../db/stats-query.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { Logger } from "../logger.ts";
 import type { Orchestrator } from "../orchestrator/orchestrator.ts";
@@ -34,14 +35,18 @@ export function createApi({
 	runner,
 	repo,
 	queue,
+	readStats,
 	checkHealth,
 	logger,
+	clock = () => new Date(),
 }: {
 	runner: Runner;
 	repo: RunRepository;
 	queue: Pick<Orchestrator, "getQueueSnapshot">;
+	readStats: (now: Date) => Last24hStats;
 	checkHealth: HealthCheck;
 	logger: Logger;
+	clock?: () => Date;
 }) {
 	const app = new Hono<AppEnv>();
 	app.onError(problemDetailsHandler);
@@ -155,6 +160,20 @@ export function createApi({
 		},
 	);
 
+	app.get("/stats", (c) => {
+		const now = clock();
+		const stats: StatsWire = {
+			asOf: now.toISOString(),
+			running: {
+				active: repo.countRunning(),
+				max: runner.maxConcurrency,
+			},
+			queued: { count: queue.getQueueSnapshot().length },
+			last24h: readStats(now),
+		};
+		return c.json(stats);
+	});
+
 	app.get("/queue", (c) => {
 		const active: ActiveRunWire[] = repo
 			.getRuns({ status: "running", limit: 200 })
@@ -221,6 +240,13 @@ type CurrentStepWire = { name: string; index: number; total: number };
 type ActiveRunWire = RunWire & {
 	currentStep: CurrentStepWire | null;
 	progressRatio: number;
+};
+
+type StatsWire = {
+	asOf: string;
+	running: { active: number; max: number };
+	queued: { count: number };
+	last24h: Last24hStats;
 };
 
 function currentStepFor(steps: RunStepRow[]): CurrentStepWire | null {

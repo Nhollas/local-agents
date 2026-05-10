@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { OverviewStrip } from "./components/overview-strip.tsx";
 import { QueueColumn } from "./components/queue-column.tsx";
 import { RunBanner } from "./components/run-banner.tsx";
 import { Transcript } from "./components/transcript.tsx";
@@ -17,6 +18,7 @@ export function App() {
 					<span>local-agents</span>
 				</div>
 			</header>
+			<OverviewStrip />
 			<main className="shell">
 				<QueueColumn activeRunId={runId} />
 				<section className="center">

@@ -97,6 +97,7 @@ export type RunRepository = {
 		patch: Partial<Pick<ToolBashData, "state" | "exitCode">>,
 	): RunEvent | undefined;
 	getRunningSnapshot(): { id: RunId; issueKey: IssueKey; repo: RepoSlug }[];
+	countRunning(): number;
 	getRunById(id: RunId): Run | undefined;
 	getRuns(filters: {
 		status?: RunStatus | undefined;
@@ -224,6 +225,15 @@ export function createRunRepository(db: Db): RunRepository {
 					(row): row is { id: RunId; issueKey: IssueKey; repo: RepoSlug } =>
 						row.issueKey != null,
 				);
+		},
+
+		countRunning() {
+			const row = db
+				.select({ n: sql<number>`count(*)` })
+				.from(runs)
+				.where(eq(runs.status, "running"))
+				.get();
+			return row?.n ?? 0;
 		},
 
 		getRunById(id) {
