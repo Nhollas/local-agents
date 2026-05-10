@@ -25,7 +25,14 @@ type OrchestratorConfig = {
 	runShell?: RunShell;
 };
 
-type Orchestrator = {
+export type QueuedItem = {
+	issueKey: IssueKey;
+	issueTitle: string;
+	repo: Issue["repo"];
+	pendingSince: string;
+};
+
+export type Orchestrator = {
 	tick(): Promise<void>;
 	/** Reconcile DB and tracker state left over from a previous process. */
 	recover(): Promise<void>;
@@ -33,6 +40,13 @@ type Orchestrator = {
 	settled(): Promise<void>;
 	start(): void;
 	stop(): void;
+	/** Snapshot of the in-memory holding queue, ordered by `pendingSince` ascending. */
+	getQueueSnapshot(): QueuedItem[];
+};
+
+type QueueEntry = {
+	issue: Issue;
+	pendingSince: string;
 };
 
 type TickState = {
@@ -49,6 +63,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	let timer: ReturnType<typeof setInterval>;
 	let ticking = false;
 	const pendingPostRuns = new Set<Promise<unknown>>();
+	const holdingQueue = new Map<IssueKey, QueueEntry>();
 
 	const {
 		runRepo,
@@ -185,14 +200,34 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		);
 	}
 
-	async function dispatchPendingIssues(
-		state: TickState,
-	): Promise<DispatchTally> {
+	function reconcileQueue(state: TickState): void {
+		const pendingByKey = new Map(state.pending.map((i) => [i.key, i]));
+
+		for (const key of holdingQueue.keys()) {
+			if (!pendingByKey.has(key) || state.runningIssueKeys.has(key)) {
+				holdingQueue.delete(key);
+			}
+		}
+
+		const nowIso = new Date(clock.now()).toISOString();
+		for (const issue of state.pending) {
+			if (state.runningIssueKeys.has(issue.key)) continue;
+			const existing = holdingQueue.get(issue.key);
+			if (existing) {
+				existing.issue = issue;
+			} else {
+				holdingQueue.set(issue.key, { issue, pendingSince: nowIso });
+			}
+		}
+	}
+
+	async function dispatchFromQueue(state: TickState): Promise<DispatchTally> {
 		const tally: DispatchTally = {
 			dispatched: 0,
 			skippedAtCapacity: 0,
 		};
-		for (const issue of state.pending) {
+		for (const entry of [...holdingQueue.values()]) {
+			const { issue } = entry;
 			if (state.runningIssueKeys.has(issue.key)) continue;
 			if (state.runningIssueKeys.size >= defaults.max_concurrent) {
 				tally.skippedAtCapacity += 1;
@@ -230,6 +265,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				continue;
 			}
 
+			holdingQueue.delete(issue.key);
 			state.runningIssueKeys.add(issue.key);
 			tally.dispatched += 1;
 		}
@@ -249,7 +285,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 						pending_count: state.pending.length,
 						running_count: state.runningIssueKeys.size,
 					});
-					const tally = await dispatchPendingIssues(state);
+					reconcileQueue(state);
+					canonicalLog.set({ queued_count: holdingQueue.size });
+					const tally = await dispatchFromQueue(state);
 					canonicalLog.set({
 						dispatched_count: tally.dispatched,
 						skipped_at_capacity: tally.skippedAtCapacity,
@@ -291,6 +329,14 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		},
 		stop() {
 			clearInterval(timer);
+		},
+		getQueueSnapshot() {
+			return [...holdingQueue.values()].map((entry) => ({
+				issueKey: entry.issue.key,
+				issueTitle: entry.issue.title,
+				repo: entry.issue.repo,
+				pendingSince: entry.pendingSince,
+			}));
 		},
 	};
 }

@@ -4,6 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { Logger } from "../logger.ts";
+import type { Orchestrator } from "../orchestrator/orchestrator.ts";
 import type {
 	Run,
 	RunRepository,
@@ -32,11 +33,13 @@ export type HealthCheck = () => HealthCheckResult;
 export function createApi({
 	runner,
 	repo,
+	queue,
 	checkHealth,
 	logger,
 }: {
 	runner: Runner;
 	repo: RunRepository;
+	queue: Pick<Orchestrator, "getQueueSnapshot">;
 	checkHealth: HealthCheck;
 	logger: Logger;
 }) {
@@ -152,6 +155,20 @@ export function createApi({
 		},
 	);
 
+	app.get("/queue", (c) => {
+		const active: ActiveRunWire[] = repo
+			.getRuns({ status: "running", limit: 200 })
+			.map((run) => {
+				const steps = repo.getRunSteps(run.id);
+				return {
+					...runToWire(run),
+					currentStep: currentStepFor(steps),
+					progressRatio: progressRatioFor(steps),
+				};
+			});
+		return c.json({ active, queued: queue.getQueueSnapshot() });
+	});
+
 	app.get("/health", (c) => {
 		const result = checkHealth();
 		return c.json(result, result.status === "healthy" ? 200 : 503);
@@ -198,6 +215,26 @@ type RunWire = {
 };
 
 type StepWire = Omit<RunStepRow, "runId">;
+
+type CurrentStepWire = { name: string; index: number; total: number };
+
+type ActiveRunWire = RunWire & {
+	currentStep: CurrentStepWire | null;
+	progressRatio: number;
+};
+
+function currentStepFor(steps: RunStepRow[]): CurrentStepWire | null {
+	const running = steps.find((s) => s.state === "running");
+	if (!running) return null;
+	return { name: running.name, index: running.index, total: steps.length };
+}
+
+function progressRatioFor(steps: RunStepRow[]): number {
+	if (steps.length === 0) return 0;
+	const completed = steps.filter((s) => s.state === "completed").length;
+	const inFlight = steps.some((s) => s.state === "running") ? 0.5 : 0;
+	return (completed + inFlight) / steps.length;
+}
 
 async function writeFrame(
 	stream: {

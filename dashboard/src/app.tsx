@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { QueueColumn } from "./components/queue-column.tsx";
 import { RunBanner } from "./components/run-banner.tsx";
 import { Transcript } from "./components/transcript.tsx";
 import { WorkflowStripe } from "./components/workflow-stripe.tsx";
@@ -16,11 +17,12 @@ export function App() {
 					<span>local-agents</span>
 				</div>
 			</header>
-			<div className="shell">
+			<main className="shell">
+				<QueueColumn activeRunId={runId} />
 				<section className="center">
 					<CenterContent runId={runId} />
 				</section>
-			</div>
+			</main>
 		</>
 	);
 }

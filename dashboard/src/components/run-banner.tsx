@@ -1,5 +1,6 @@
 import { killRun } from "../lib/api.ts";
 import {
+	elapsedSinceMs,
 	formatCost,
 	formatElapsed,
 	formatTime,
@@ -12,9 +13,7 @@ type Props = {
 };
 
 export function RunBanner({ run }: Props) {
-	const elapsedMs =
-		run.durationMs ??
-		Math.max(0, Date.now() - new Date(run.startedAt).getTime());
+	const elapsedMs = run.durationMs ?? elapsedSinceMs(run.startedAt);
 	const tokens = (run.tokensInput ?? 0) + (run.tokensOutput ?? 0);
 
 	return (

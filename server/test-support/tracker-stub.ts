@@ -30,6 +30,7 @@ type FailedRecord = {
 
 type TrackerStub = TrackerAdapter & {
 	addIssue(state: TrackerState, input: AddIssueInput): Issue;
+	removeIssue(state: TrackerState, number: number): void;
 	readonly transitions: readonly TransitionRecord[];
 	readonly markedFailed: readonly FailedRecord[];
 	readonly fetchCalls: readonly TrackerState[];
@@ -71,6 +72,10 @@ export function createTrackerStub(
 			const issue = buildIssue(input);
 			active[state].push(issue);
 			return issue;
+		},
+
+		removeIssue(state, number) {
+			active[state] = active[state].filter((i) => i.number !== number);
 		},
 
 		get transitions() {

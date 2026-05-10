@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import type { RunDetail, RunEvent } from "../lib/types.ts";
+import type { QueueSnapshot, RunDetail, RunEvent } from "../lib/types.ts";
 
 export function runDetailHandler(runId: string, detail: RunDetail) {
 	return http.get(`/runs/${runId}`, () => HttpResponse.json(detail));
@@ -31,6 +31,10 @@ export function killRunHandler(
 	return http.post(`/runs/${runId}/kill`, () => HttpResponse.json(body));
 }
 
+export function queueHandler(snapshot: QueueSnapshot) {
+	return http.get("/queue", () => HttpResponse.json(snapshot));
+}
+
 function eventsStreamHandler() {
 	return http.get(
 		"/events",
@@ -51,4 +55,6 @@ function eventsStreamHandler() {
 	);
 }
 
-export const handlers = [eventsStreamHandler()];
+const defaultQueueHandler = queueHandler({ active: [], queued: [] });
+
+export const handlers = [eventsStreamHandler(), defaultQueueHandler];
