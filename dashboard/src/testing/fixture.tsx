@@ -1,88 +1,24 @@
-import { sse } from "msw";
 import { test as base } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { App } from "../app";
-import { ErrorBoundary } from "../components/error-boundary";
-import type { RunEvent } from "../lib/types";
-import { Providers } from "../providers";
-import { browserWorker } from "./msw";
-import { dashboardPageObject } from "./page-object";
+import { App } from "../app.tsx";
+import { ErrorBoundary } from "../components/error-boundary.tsx";
+import { Providers } from "../providers.tsx";
+import { dashboardPageObject } from "./page-object.ts";
 
-export const test = base
-	.extend("sseStream", { auto: true }, async () => {
-		let client: {
-			send(payload: Record<string, unknown>): void;
-			error(): void;
-			close(): void;
-		} | null = null;
-		let resolveConnected: (() => void) | null = null;
-		const connected = new Promise<void>((r) => {
-			resolveConnected = r;
-		});
-
-		browserWorker.use(
-			sse("/events", ({ client: c }) => {
-				client = c;
-				resolveConnected?.();
-			}),
-		);
-
-		return {
-			emit(event: RunEvent) {
-				if (!client) {
-					throw new Error(
-						"SSE client not connected — call waitForConnection() or use the dashboardPage fixture first",
-					);
-				}
-				client.send({
-					event: event.type,
-					data: JSON.stringify(event),
-				});
-			},
-			emitHeartbeat() {
-				if (!client) {
-					throw new Error(
-						"SSE client not connected — call waitForConnection() first",
-					);
-				}
-				client.send({ event: "heartbeat", data: "" });
-			},
-			async waitForConnection() {
-				await connected;
-			},
-			disconnect() {
-				if (!client) {
-					throw new Error(
-						"SSE client not connected — call waitForConnection() first",
-					);
-				}
-				client.error();
-			},
-			close() {
-				if (!client) {
-					throw new Error(
-						"SSE client not connected — call waitForConnection() first",
-					);
-				}
-				client.close();
-			},
-		};
-	})
-	.extend("dashboardPage", async ({ sseStream }) => {
-		return {
-			async mount() {
-				await render(
-					<ErrorBoundary>
-						<Providers>
-							<App />
-						</Providers>
-					</ErrorBoundary>,
-				);
-				await sseStream.waitForConnection();
-				return dashboardPageObject(page);
-			},
-		};
-	});
-
-export { expect } from "vitest";
+export const test = base.extend("dashboardPage", async () => {
+	return {
+		async mountAt(runId: string | null) {
+			const url = runId === null ? "/" : `/?runId=${runId}`;
+			window.history.replaceState({}, "", url);
+			await render(
+				<ErrorBoundary>
+					<Providers>
+						<App />
+					</Providers>
+				</ErrorBoundary>,
+			);
+			return dashboardPageObject(page);
+		},
+	};
+});

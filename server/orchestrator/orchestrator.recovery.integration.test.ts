@@ -8,13 +8,25 @@ import { createTestOrchestrator } from "../test-support/test-orchestrator.ts";
 function seedStaleRun(db: Db) {
 	seedRun(db, {
 		id: "stale-run",
-		agentName: "issue-5",
 		status: "running",
 		issueKey: jiraIssueKey(5),
 		issueTitle: "Stale issue",
 		startedAt: "2025-01-01T00:00:00Z",
 	});
 }
+
+const baseRunRow = {
+	branch: null,
+	workspaceDir: null,
+	issueUrl: null,
+	costUsd: null,
+	tokensInput: null,
+	tokensOutput: null,
+	prUrl: null,
+	prNumber: null,
+	prRepo: null,
+	prKind: null,
+};
 
 describe("Orchestrator startup recovery", () => {
 	it("fails DB runs left in 'running' from a previous process", async () => {
@@ -28,7 +40,6 @@ describe("Orchestrator startup recovery", () => {
 		expect(db.select().from(runs).all()).toEqual([
 			{
 				id: "stale-run",
-				agentName: "issue-5",
 				status: "failed",
 				error: "Stale run from previous session",
 				repo: REPO,
@@ -37,6 +48,7 @@ describe("Orchestrator startup recovery", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: null,
+				...baseRunRow,
 			},
 		]);
 	});

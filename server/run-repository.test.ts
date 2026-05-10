@@ -11,7 +11,6 @@ describe("run repository row projection", () => {
 		db.insert(runs)
 			.values({
 				id: runId("failed-1"),
-				agentName: "agent",
 				status: "failed",
 				repo: repoSlug("acme/widgets"),
 				issueKey: issueKey("acme/widgets#1"),
@@ -26,15 +25,21 @@ describe("run repository row projection", () => {
 		const run = repo.getRunById(runId("failed-1"));
 		expect(run).toEqual({
 			id: "failed-1",
-			agentName: "agent",
 			status: "failed",
 			repo: "acme/widgets",
+			branch: null,
+			workspaceDir: null,
 			issueKey: "acme/widgets#1",
 			issueTitle: "boom",
+			issueUrl: null,
 			startedAt: "2025-01-01T00:00:00Z",
 			completedAt: "2025-01-01T00:00:02Z",
 			durationMs: 2000,
 			error: "exploded",
+			costUsd: null,
+			tokensInput: null,
+			tokensOutput: null,
+			pr: null,
 		});
 	});
 });

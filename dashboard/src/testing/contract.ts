@@ -1,51 +1,43 @@
-import type { RunDetailFromApi, RunFromApi } from "../lib/api";
-import type { RunEvent, RunEventType } from "../lib/types";
+import type { Run, RunDetail, Step } from "../lib/types.ts";
 
-type RunEventOfType<T extends RunEventType> = Extract<RunEvent, { type: T }>;
-
-const defaultData: { [T in RunEventType]: RunEventOfType<T>["data"] } = {
-	"run:started": { issueKey: "test/repo#1", issueTitle: "Test issue" },
-	"run:output": {},
-	"run:tool_use": { tool: "Bash", target: "echo test" },
-	"run:completed": { durationMs: 1000 },
-	"run:failed": { error: "test error", durationMs: 1000 },
-};
-
-export function createRunEvent<T extends RunEventType>(
-	type: T,
-	overrides?: Partial<Omit<RunEventOfType<T>, "type">>,
-): RunEventOfType<T> {
-	return {
-		type,
-		runId: "run-1",
-		agentName: "test-agent",
-		data: defaultData[type],
-		createdAt: "2026-03-20T12:00:00.000Z",
-		...overrides,
-	} as RunEventOfType<T>;
-}
-
-export function createRunFromApi(overrides?: Partial<RunFromApi>): RunFromApi {
+export function createRun(overrides: Partial<Run> = {}): Run {
 	return {
 		id: "run-1",
-		agentName: "test-agent",
-		status: "completed",
-		error: null,
+		status: "running",
+		repo: "acme/api",
+		branch: null,
+		workspaceDir: null,
 		issueKey: null,
 		issueTitle: null,
-		startedAt: "2026-03-20T12:00:00.000Z",
-		completedAt: "2026-03-20T12:00:01.500Z",
-		durationMs: 1500,
+		issueUrl: null,
+		startedAt: "2026-05-09T14:27:56Z",
+		completedAt: null,
+		durationMs: null,
+		costUsd: null,
+		tokensInput: null,
+		tokensOutput: null,
+		pr: null,
+		error: null,
 		...overrides,
 	};
 }
 
-export function createRunDetailFromApi(
-	overrides?: Partial<RunDetailFromApi>,
-): RunDetailFromApi {
-	const { events, ...rest } = overrides ?? {};
+export function createStep(
+	overrides: Partial<Step> & { index: number; name: string },
+): Step {
 	return {
-		...createRunFromApi(rest),
-		events: events ?? [],
+		state: "pending",
+		startedAt: null,
+		completedAt: null,
+		durationMs: null,
+		error: null,
+		...overrides,
+	};
+}
+
+export function createRunDetail(overrides: Partial<RunDetail> = {}): RunDetail {
+	return {
+		run: overrides.run ?? createRun(),
+		steps: overrides.steps ?? [],
 	};
 }

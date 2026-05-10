@@ -164,16 +164,16 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 					),
 				);
 				for (const [index, r] of results.entries()) {
-					if (r.status === "rejected") {
-						const issue = runningIssues[index]!;
-						logTransitionFailed(
-							issue.repo,
-							issue.number,
-							"running",
-							"pending",
-							r.reason,
-						);
-					}
+					if (r.status !== "rejected") continue;
+					const issue = runningIssues[index];
+					if (!issue) continue;
+					logTransitionFailed(
+						issue.repo,
+						issue.number,
+						"running",
+						"pending",
+						r.reason,
+					);
 				}
 				canonicalLog.set({
 					tracker_orphans_recovered: results.filter(

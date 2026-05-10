@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { Db } from "../db/db.ts";
 import { migrate } from "../db/migrate.ts";
-import { runEvents, runs } from "../db/schema.ts";
+import { runEvents, runSteps, runs } from "../db/schema.ts";
 import { issueKey, repoSlug, runId } from "../types/brands.ts";
 
 export function createTestDb(): Db {
@@ -37,7 +37,6 @@ export function seedRun(db: Db, overrides: LooseRunInsert) {
 
 	db.insert(runs)
 		.values({
-			agentName: "test-agent",
 			startedAt: now,
 			completedAt,
 			...variantDefaultsByStatus[status],
@@ -50,23 +49,18 @@ export function seedRun(db: Db, overrides: LooseRunInsert) {
 		.run();
 }
 
-type LooseEventInsert = Omit<
-	Partial<typeof runEvents.$inferInsert>,
-	"id" | "runId"
-> & {
-	id: string;
+type LooseStepInsert = Omit<Partial<typeof runSteps.$inferInsert>, "runId"> & {
 	runId: string;
+	index: number;
+	name: string;
 };
 
-export function seedEvent(db: Db, overrides: LooseEventInsert) {
-	const { id, runId: runIdStr, ...rest } = overrides;
-	db.insert(runEvents)
+export function seedStep(db: Db, overrides: LooseStepInsert) {
+	const { runId: runIdStr, ...rest } = overrides;
+	db.insert(runSteps)
 		.values({
-			type: "run:started",
-			data: {},
-			createdAt: new Date().toISOString(),
+			state: "pending",
 			...rest,
-			id,
 			runId: runId(runIdStr),
 		})
 		.run();

@@ -60,10 +60,10 @@ describe("GET /events", () => {
 			await readWithTimeout();
 
 			runner.enqueue({
-				name: "sse-agent",
 				repo: repoSlug("test/repo"),
 				issueKey: issueKey("test/repo#42"),
 				issueTitle: "SSE test issue",
+				issueUrl: null,
 				handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 			});
 
@@ -83,7 +83,6 @@ describe("GET /events", () => {
 
 			expect(collected).toContain("event: run:started");
 			expect(collected).toContain("event: run:completed");
-			expect(collected).toContain("sse-agent");
 			expect(collected).toContain("test/repo#42");
 		} finally {
 			reader.cancel();

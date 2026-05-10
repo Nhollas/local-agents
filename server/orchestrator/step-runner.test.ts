@@ -76,9 +76,14 @@ const issue: Issue = {
 	createdAt: "2026-01-01T00:00:00Z",
 };
 
+type StepRepoSubset = Pick<
+	RunRepository,
+	"writeStepOutput" | "startStep" | "completeStep" | "failStep" | "addRunUsage"
+>;
+
 type ContextRecorder = {
 	ctx: RunContext;
-	runRepo: Pick<RunRepository, "writeStepOutput">;
+	runRepo: StepRepoSubset;
 	stepEvents: StepEvent[];
 	stepOutputs: { runId: RunId; name: string; value: unknown }[];
 };
@@ -92,10 +97,14 @@ function createCtx(): ContextRecorder {
 		emitStepEvent: (event) => stepEvents.push(event),
 		signal: new AbortController().signal,
 	};
-	const runRepo: Pick<RunRepository, "writeStepOutput"> = {
+	const runRepo: StepRepoSubset = {
 		writeStepOutput: (id, name, value) => {
 			stepOutputs.push({ runId: id, name, value });
 		},
+		startStep: () => {},
+		completeStep: () => {},
+		failStep: () => {},
+		addRunUsage: () => {},
 	};
 	return { ctx, runRepo, stepEvents, stepOutputs };
 }
@@ -205,11 +214,11 @@ describe("runWorkflowSteps", () => {
 		expect(recorder.stepEvents).toEqual([
 			{
 				type: "step.started",
-				data: { name: "summarise", index: 0, total: 1 },
+				data: { name: "summarise", index: 1, total: 1 },
 			},
 			{
 				type: "step.completed",
-				data: { name: "summarise", index: 0, durationMs: expect.any(Number) },
+				data: { name: "summarise", index: 1, durationMs: expect.any(Number) },
 			},
 		]);
 	});
@@ -254,13 +263,13 @@ describe("runWorkflowSteps", () => {
 		expect(recorder.stepEvents).toEqual([
 			{
 				type: "step.started",
-				data: { name: "summarise", index: 0, total: 2 },
+				data: { name: "summarise", index: 1, total: 2 },
 			},
 			{
 				type: "step.failed",
 				data: {
 					name: "summarise",
-					index: 0,
+					index: 1,
 					error: expect.stringMatching(/error_max_structured_output_retries/),
 				},
 			},
@@ -299,11 +308,11 @@ describe("runWorkflowSteps", () => {
 		expect(recorder.stepEvents).toEqual([
 			{
 				type: "step.started",
-				data: { name: "implement", index: 0, total: 1 },
+				data: { name: "implement", index: 1, total: 1 },
 			},
 			{
 				type: "step.completed",
-				data: { name: "implement", index: 0, durationMs: expect.any(Number) },
+				data: { name: "implement", index: 1, durationMs: expect.any(Number) },
 			},
 		]);
 	});
@@ -508,7 +517,7 @@ describe("runWorkflowSteps", () => {
 
 		expect(bag()["failed_step"]).toEqual({
 			name: "implement",
-			index: 0,
+			index: 1,
 			error: "error_max_turns",
 		});
 		expect(bag()["steps_total"]).toBe(2);

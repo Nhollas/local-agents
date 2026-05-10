@@ -22,6 +22,19 @@ const failedHandler = (error: string) => async (): Promise<RunResult> => ({
 	durationMs: 0,
 });
 
+const baseRunRow = {
+	branch: null,
+	workspaceDir: null,
+	issueUrl: null,
+	costUsd: null,
+	tokensInput: null,
+	tokensOutput: null,
+	prUrl: null,
+	prNumber: null,
+	prRepo: null,
+	prKind: null,
+};
+
 describe("Runner integration", () => {
 	let db: Db;
 	let repo: RunRepository;
@@ -36,10 +49,10 @@ describe("Runner integration", () => {
 		let resolveHandler!: (result: RunResult) => void;
 
 		const { runId } = runner.enqueue({
-			name: "test-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Test issue",
+			issueUrl: null,
 			handler: () =>
 				new Promise((r) => {
 					resolveHandler = r;
@@ -50,7 +63,6 @@ describe("Runner integration", () => {
 		const run = getRun(db, runId);
 		expect(run).toEqual({
 			id: runId,
-			agentName: "test-job",
 			status: "running",
 			error: null,
 			repo: "acme/widgets",
@@ -59,6 +71,7 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: null,
 			durationMs: null,
+			...baseRunRow,
 		});
 
 		resolveHandler({ status: "completed", durationMs: 0 });
@@ -71,10 +84,10 @@ describe("Runner integration", () => {
 
 		// Fill the single slot with a blocking job
 		runner.enqueue({
-			name: "blocker",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Blocker",
+			issueUrl: null,
 			handler: () =>
 				new Promise((r) => {
 					resolveBlocker = r;
@@ -83,10 +96,10 @@ describe("Runner integration", () => {
 
 		// Second job sits in the pending queue — not yet executing
 		const { runId } = runner.enqueue({
-			name: "queued-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Queued issue",
+			issueUrl: null,
 			handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 		});
 
@@ -96,7 +109,6 @@ describe("Runner integration", () => {
 		const run = getRun(db, runId);
 		expect(run).toEqual({
 			id: runId,
-			agentName: "queued-job",
 			status: "running",
 			error: null,
 			repo: "acme/widgets",
@@ -105,6 +117,7 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: null,
 			durationMs: null,
+			...baseRunRow,
 		});
 
 		resolveBlocker({ status: "completed", durationMs: 0 });
@@ -115,10 +128,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId, done } = runner.enqueue({
-			name: "fast-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Fast issue",
+			issueUrl: null,
 			handler: completedHandler,
 		});
 
@@ -131,7 +144,6 @@ describe("Runner integration", () => {
 		const run = getRun(db, runId);
 		expect(run).toEqual({
 			id: runId,
-			agentName: "fast-job",
 			status: "completed",
 			error: null,
 			repo: "acme/widgets",
@@ -140,6 +152,7 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
+			...baseRunRow,
 		});
 	});
 
@@ -147,10 +160,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { done } = runner.enqueue({
-			name: "crash-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#99"),
 			issueTitle: "Crash issue",
+			issueUrl: null,
 			handler: failedHandler("catastrophic failure"),
 		});
 
@@ -167,10 +180,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			name: "lifecycle-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#4"),
 			issueTitle: "Lifecycle issue",
+			issueUrl: null,
 			handler: completedHandler,
 		});
 
@@ -199,10 +212,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			name: "fail-event-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#5"),
 			issueTitle: "Fail event issue",
+			issueUrl: null,
 			handler: failedHandler("boom"),
 		});
 
@@ -234,10 +247,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			name: "tool-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#6"),
 			issueTitle: "Tool issue",
+			issueUrl: null,
 			handler: async (ctx) => {
 				ctx.emitToolUse("Read", "/src/index.ts");
 				ctx.emitToolUse("Edit", "/src/index.ts");
@@ -284,10 +297,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId, done } = runner.enqueue({
-			name: "killable-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#7"),
 			issueTitle: "Killable issue",
+			issueUrl: null,
 			handler: () => new Promise(() => {}), // never resolves naturally
 		});
 
@@ -304,7 +317,6 @@ describe("Runner integration", () => {
 		const run = getRun(db, runId);
 		expect(run).toEqual({
 			id: runId,
-			agentName: "killable-job",
 			status: "failed",
 			error: ABORT_ERROR,
 			repo: "acme/widgets",
@@ -313,6 +325,7 @@ describe("Runner integration", () => {
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
 			durationMs: expect.any(Number),
+			...baseRunRow,
 		});
 	});
 
@@ -326,10 +339,10 @@ describe("Runner integration", () => {
 		const runner = createRunner({ repo });
 
 		const { runId, done } = runner.enqueue({
-			name: "default-concurrency-job",
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#10"),
 			issueTitle: "Default concurrency",
+			issueUrl: null,
 			handler: completedHandler,
 		});
 

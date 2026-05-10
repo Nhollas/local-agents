@@ -4,7 +4,7 @@ import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import type { RepoSlug } from "../types/brands.ts";
+import type { RepoSlug, RunId } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
@@ -77,16 +77,15 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		const ws = await ensureWorkspace(issue, workspaceRoot, cloneUrl);
 
 		return runner.enqueue({
-			name: `issue-${issue.number}`,
 			repo,
 			issueKey: issue.key,
 			issueTitle: issue.title,
+			issueUrl: issue.url,
 			handler: (ctx) =>
 				canonicalLog.run(
 					{
 						scope: "run",
 						run_id: ctx.runId,
-						agent: `issue-${issue.number}`,
 						issue_key: issue.key,
 						workspace_reused: !ws.created,
 					},
@@ -96,6 +95,12 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						let branch: string | undefined;
 						let outputs: Record<string, unknown> = {};
 						let phase: FailurePhase = "branch_resolver";
+
+						runRepo.setRunWorkspaceDir(ctx.runId, ws.path);
+						runRepo.insertSteps(
+							ctx.runId,
+							workflow.steps.map((s, i) => ({ index: i + 1, name: s.name })),
+						);
 
 						try {
 							const branchResolverStart = clock.now();
@@ -112,6 +117,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							});
 							branch = resolvedBranch;
 							canonicalLog.set({ branch });
+							runRepo.setRunBranch(ctx.runId, branch);
 
 							phase = "setup";
 							await ensureBranch(ws.path, branch);
@@ -151,6 +157,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							result.status === "completed" &&
 							branch !== undefined &&
 							(await finalizeSuccess(
+								ctx.runId,
 								repo,
 								issue,
 								workflow,
@@ -176,6 +183,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	}
 
 	async function finalizeSuccess(
+		runId: RunId,
 		repo: RepoSlug,
 		issue: Issue,
 		workflow: RepoWorkflow,
@@ -206,6 +214,12 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 				title,
 				body,
 			);
+			runRepo.setRunPr(runId, {
+				repo,
+				number: pr.number,
+				url: pr.url,
+				kind: "opened",
+			});
 			canonicalLog.set({ pr_url: pr.url });
 		} catch (err) {
 			recordFailure(
