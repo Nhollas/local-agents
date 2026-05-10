@@ -59,6 +59,7 @@ describe("GET /queue", () => {
 					status: "running",
 					error: null,
 					repo: "acme/api",
+					repoUrl: null,
 					branch: "fix/ACME-1284-npm-install-hang",
 					workspaceDir: "/tmp/lag/9f3b2e1",
 					issueKey: "ACME-1284",

@@ -71,6 +71,13 @@
 			"when": 1778435816704,
 			"tag": "0009_daffy_starjammers",
 			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "6",
+			"when": 1778443339865,
+			"tag": "0010_parched_professor_monster",
+			"breakpoints": true
 		}
 	]
 }

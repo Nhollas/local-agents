@@ -28,6 +28,7 @@ export type RunPr = {
 type RunBase = {
 	id: RunId;
 	repo: RepoSlug;
+	repoUrl: string | null;
 	branch: string | null;
 	workspaceDir: string | null;
 	issueKey: IssueKey | null;
@@ -84,6 +85,7 @@ export type RunRepository = {
 	insertRun(run: {
 		id: RunId;
 		repo: RepoSlug;
+		repoUrl: string;
 		issueKey: IssueKey;
 		issueTitle: string;
 		issueUrl: string | null;
@@ -442,6 +444,7 @@ function rowToRun(row: RunRow, failedStep: RunFailedStep | null): Run {
 	const base: RunBase = {
 		id: row.id,
 		repo: row.repo,
+		repoUrl: row.repoUrl,
 		branch: row.branch,
 		workspaceDir: row.workspaceDir,
 		issueKey: row.issueKey,

@@ -10,7 +10,11 @@ import { useRunDetail } from "./hooks/use-run-detail.ts";
 import { useRunEventInvalidator } from "./hooks/use-run-event-invalidator.ts";
 import { useRunEvents } from "./hooks/use-run-events.ts";
 import { useRunRoute } from "./hooks/use-run-route.ts";
+import { useNowEverySecond } from "./hooks/use-tick.ts";
+import { formatTime } from "./lib/format.ts";
 import type { Step } from "./lib/types.ts";
+
+const APP_VERSION = "v0.4.2";
 
 export function App() {
 	useRunEventInvalidator();
@@ -20,8 +24,12 @@ export function App() {
 		<>
 			<header className="app">
 				<div className="brand">
-					<span className="mark">l</span>
+					<span className="mark">L</span>
 					<span>local-agents</span>
+					<span className="v mono">{APP_VERSION}</span>
+				</div>
+				<div className="meta-right">
+					<LiveClock />
 				</div>
 			</header>
 			<OverviewStrip />
@@ -66,6 +74,11 @@ function RunDetailView({ runId }: { runId: string }) {
 function TranscriptView({ runId, steps }: { runId: string; steps: Step[] }) {
 	const events = useRunEvents(runId);
 	return <Transcript events={events} steps={steps} />;
+}
+
+function LiveClock() {
+	const now = useNowEverySecond(true);
+	return <span className="mono">{formatTime(now)}</span>;
 }
 
 function Placeholder({ children }: { children: ReactNode }) {

@@ -7,6 +7,7 @@ export type ChangeRequest = {
 
 export type CodeHostAdapter = {
 	cloneUrl(repo: RepoSlug): string;
+	repoUrl(repo: RepoSlug): string;
 	defaultBranch(repo: RepoSlug): Promise<string>;
 	createChangeRequest(
 		repo: RepoSlug,

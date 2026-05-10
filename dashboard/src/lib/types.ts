@@ -27,6 +27,7 @@ export type Run = {
 	id: string;
 	status: RunStatus;
 	repo: string;
+	repoUrl: string | null;
 	branch: string | null;
 	workspaceDir: string | null;
 	issueKey: string | null;

@@ -219,6 +219,7 @@ type RunWire = {
 	id: string;
 	status: Run["status"];
 	repo: string;
+	repoUrl: string | null;
 	branch: string | null;
 	workspaceDir: string | null;
 	issueKey: string | null;
@@ -291,6 +292,7 @@ function runToWire(run: Run): RunWire {
 		id: run.id,
 		status: run.status,
 		repo: run.repo,
+		repoUrl: run.repoUrl,
 		branch: run.branch,
 		workspaceDir: run.workspaceDir,
 		issueKey: run.issueKey,

@@ -17,6 +17,10 @@ export function gitlabCodeHostAdapter(
 			);
 		},
 
+		repoUrl(repo): string {
+			return `${client.baseUrl}/${repo}`;
+		},
+
 		async defaultBranch(repo) {
 			const project = await client.getProject(repo);
 			return project.default_branch;

@@ -82,6 +82,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 		return runner.enqueue({
 			repo,
+			repoUrl: codeHost.repoUrl(repo),
 			issueKey: issue.key,
 			issueTitle: issue.title,
 			issueUrl: issue.url,

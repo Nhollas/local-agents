@@ -64,6 +64,7 @@ describe("GET /events", () => {
 				issueKey: issueKey("test/repo#42"),
 				issueTitle: "SSE test issue",
 				issueUrl: null,
+				repoUrl: "https://code-host.example.test/test/repo",
 				handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 			});
 
@@ -98,6 +99,7 @@ describe("GET /events", () => {
 			issueKey: issueKey("test/repo#100"),
 			issueTitle: "Replay test",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/test/repo",
 			handler: async (ctx) => {
 				ctx.emit({
 					kind: "agent:say",
