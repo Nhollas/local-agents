@@ -72,6 +72,7 @@ describe("GET /queue", () => {
 					tokensOutput: 2600,
 					pr: null,
 					failedStep: null,
+					finalizeFailure: null,
 					currentStep: { name: "implement", index: 1, total: 3 },
 					progressRatio: 0.5 / 3,
 				},

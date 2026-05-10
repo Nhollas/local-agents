@@ -1,8 +1,15 @@
+import type { MouseEvent } from "react";
 import { useQueue } from "../hooks/use-queue.ts";
-import { elapsedSinceMs, formatElapsed, formatTime } from "../lib/format.ts";
+import { useNowEverySecond } from "../hooks/use-tick.ts";
+import { formatElapsed, formatTime } from "../lib/format.ts";
 import type { ActiveRun, QueuedItem } from "../lib/types.ts";
 
-export function QueueColumn({ activeRunId }: { activeRunId: string | null }) {
+type Props = {
+	activeRunId: string | null;
+	onSelectRun: (runId: string) => void;
+};
+
+export function QueueColumn({ activeRunId, onSelectRun }: Props) {
 	const { data } = useQueue();
 	const active = data?.active ?? [];
 	const queued = data?.queued ?? [];
@@ -13,7 +20,12 @@ export function QueueColumn({ activeRunId }: { activeRunId: string | null }) {
 				<h2>Active</h2>
 			</div>
 			{active.map((run) => (
-				<ActiveRow key={run.id} run={run} selected={run.id === activeRunId} />
+				<ActiveRow
+					key={run.id}
+					run={run}
+					selected={run.id === activeRunId}
+					onSelect={onSelectRun}
+				/>
 			))}
 			<div className="hgroup-head">Queued</div>
 			{queued.map((item) => (
@@ -23,8 +35,17 @@ export function QueueColumn({ activeRunId }: { activeRunId: string | null }) {
 	);
 }
 
-function ActiveRow({ run, selected }: { run: ActiveRun; selected: boolean }) {
-	const elapsedMs = elapsedSinceMs(run.startedAt);
+function ActiveRow({
+	run,
+	selected,
+	onSelect,
+}: {
+	run: ActiveRun;
+	selected: boolean;
+	onSelect: (runId: string) => void;
+}) {
+	const now = useNowEverySecond(true);
+	const elapsedMs = Math.max(0, now - new Date(run.startedAt).getTime());
 	const widthPct = Math.max(0, Math.min(1, run.progressRatio)) * 100;
 
 	return (
@@ -32,6 +53,12 @@ function ActiveRow({ run, selected }: { run: ActiveRun; selected: boolean }) {
 			className={`qrow${selected ? " active" : ""}`}
 			href={`/?runId=${encodeURIComponent(run.id)}`}
 			data-testid={`queue-active-${run.id}`}
+			onClick={(e) => {
+				if (isPlainLeftClick(e)) {
+					e.preventDefault();
+					onSelect(run.id);
+				}
+			}}
 		>
 			<div className="qrow-top">
 				<span className="pip running" />
@@ -75,4 +102,8 @@ function QueuedRow({ item }: { item: QueuedItem }) {
 			</div>
 		</div>
 	);
+}
+
+function isPlainLeftClick(e: MouseEvent): boolean {
+	return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 }

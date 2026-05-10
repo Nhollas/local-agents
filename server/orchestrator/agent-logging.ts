@@ -114,9 +114,17 @@ function emitToolEvent(
 			});
 			return;
 		}
+		case "StructuredOutput":
+			return;
 		default: {
 			const summary = stringInput(
-				input["pattern"] ?? input["file_path"] ?? input["command"] ?? "",
+				input["description"] ??
+					input["pattern"] ??
+					input["query"] ??
+					input["url"] ??
+					input["file_path"] ??
+					input["command"] ??
+					"",
 			);
 			ctx.emit({
 				kind: "tool:other",

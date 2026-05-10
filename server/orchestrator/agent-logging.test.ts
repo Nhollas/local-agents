@@ -147,7 +147,7 @@ describe("emitAgentMessageEvents", () => {
 		]);
 	});
 
-	it("emits tool:other for unrecognised tools", () => {
+	it("emits tool:other for unrecognised tools, summarising via known input fields", () => {
 		const { ctx, emitted } = captureCtx();
 		emitAgentMessageEvents(
 			toolUseMsg("WebSearch", { query: "vitest coverage" }),
@@ -157,9 +157,37 @@ describe("emitAgentMessageEvents", () => {
 			{
 				kind: "tool:other",
 				stepName: "implement",
-				data: { tool: "WebSearch", summary: "" },
+				data: { tool: "WebSearch", summary: "vitest coverage" },
 			},
 		]);
+	});
+
+	it("uses the Agent tool's description as its tool:other summary", () => {
+		const { ctx, emitted } = captureCtx();
+		emitAgentMessageEvents(
+			toolUseMsg("Agent", {
+				description: "find duplicate detection sites",
+				prompt: "long prompt body that should not surface in the transcript",
+				subagent_type: "general-purpose",
+			}),
+			{ ctx, stepName: "implement", cwd: "/work" },
+		);
+		expect(emitted).toEqual([
+			{
+				kind: "tool:other",
+				stepName: "implement",
+				data: { tool: "Agent", summary: "find duplicate detection sites" },
+			},
+		]);
+	});
+
+	it("does not emit a transcript event for StructuredOutput", () => {
+		const { ctx, emitted } = captureCtx();
+		emitAgentMessageEvents(
+			toolUseMsg("StructuredOutput", { value: { title: "summary" } }),
+			{ ctx, stepName: "summarise", cwd: "/work" },
+		);
+		expect(emitted).toEqual([]);
 	});
 
 	it("aggregates a tool_use_by_name counter on the canonical bag", async () => {

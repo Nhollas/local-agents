@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, memo } from "react";
 import { useRecentRuns } from "../hooks/use-recent-runs.ts";
 import {
 	formatCompactCost,
@@ -8,7 +8,13 @@ import {
 } from "../lib/format.ts";
 import type { Run, RunPr } from "../lib/types.ts";
 
-export function RecentRunsColumn() {
+type Props = {
+	onSelectRun: (runId: string) => void;
+};
+
+export const RecentRunsColumn = memo(function RecentRunsColumn({
+	onSelectRun,
+}: Props) {
 	const { data } = useRecentRuns();
 	const runs = (data ?? []).filter((r) => r.status !== "running");
 	const groups = groupByLocalDay(runs, new Date());
@@ -22,18 +28,23 @@ export function RecentRunsColumn() {
 				<Fragment key={group.label}>
 					<div className="hgroup-head">{group.label}</div>
 					{group.runs.map((run) => (
-						<HistoryRow key={run.id} run={run} />
+						<HistoryRow key={run.id} run={run} onSelect={onSelectRun} />
 					))}
 				</Fragment>
 			))}
 		</section>
 	);
-}
+});
 
-function HistoryRow({ run }: { run: Run }) {
-	const href = `/?runId=${encodeURIComponent(run.id)}`;
-	const navigate = () => {
-		window.location.assign(href);
+function HistoryRow({
+	run,
+	onSelect,
+}: {
+	run: Run;
+	onSelect: (runId: string) => void;
+}) {
+	const select = () => {
+		onSelect(run.id);
 	};
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: row contains a nested PR <a>, so the row itself can't be an <a>; role="link" + keyboard handler preserves accessibility.
@@ -42,11 +53,11 @@ function HistoryRow({ run }: { run: Run }) {
 			data-testid={`recent-run-${run.id}`}
 			role="link"
 			tabIndex={0}
-			onClick={navigate}
+			onClick={select}
 			onKeyDown={(e) => {
 				if (e.key === "Enter" || e.key === " ") {
 					e.preventDefault();
-					navigate();
+					select();
 				}
 			}}
 		>
@@ -85,10 +96,13 @@ function HistoryRow({ run }: { run: Run }) {
 function FailureTag({ run }: { run: Run }) {
 	const error = run.error ?? "failed";
 	const step = run.failedStep;
+	const finalize = run.finalizeFailure;
 	const text =
 		step != null
 			? `step ${step.index} · ${step.name} · ${error}`
-			: `failed · ${error}`;
+			: finalize != null
+				? `${finalize.phase} · ${finalize.error}`
+				: `failed · ${error}`;
 	return <span className="err">{text}</span>;
 }
 

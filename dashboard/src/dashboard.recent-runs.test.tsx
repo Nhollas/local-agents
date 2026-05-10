@@ -117,6 +117,41 @@ describe("dashboard recent runs column", () => {
 		await expect.element(row).not.toHaveTextContent("#");
 	});
 
+	test("finalize-failed run renders the phase + finalize error and no PR link", async ({
+		dashboardPage,
+	}) => {
+		const today = new Date();
+		today.setHours(14, 9, 0, 0);
+
+		browserWorker.use(
+			recentRunsHandler([
+				createRun({
+					id: "fail-finalize",
+					status: "failed",
+					issueTitle: "duplicate detection on feedback submission",
+					issueKey: "ACME-9",
+					repo: "acme/api",
+					startedAt: today.toISOString(),
+					completedAt: new Date(today.getTime() + 1_033_437).toISOString(),
+					durationMs: 1_033_437,
+					costUsd: 4.57,
+					error: "push: Permission denied",
+					finalizeFailure: {
+						phase: "push",
+						error: "Permission denied",
+					},
+				}),
+			]),
+		);
+
+		const page = await dashboardPage.mountAt(null);
+
+		const row = page.getByTestId("recent-run-fail-finalize");
+		await expect.element(row).toHaveTextContent("push · Permission denied");
+		await expect.element(row).not.toHaveTextContent("step 1");
+		await expect.element(row).not.toHaveTextContent("#");
+	});
+
 	test("excludes running runs from the recent column", async ({
 		dashboardPage,
 	}) => {

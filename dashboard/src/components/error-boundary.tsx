@@ -1,7 +1,8 @@
-import { Component } from "react";
+import { Component, type ReactNode } from "react";
 
 type Props = {
-	children: React.ReactNode;
+	children: ReactNode;
+	fallback?: (error: Error, reset: () => void) => ReactNode;
 };
 
 type State = {
@@ -15,14 +16,27 @@ export class ErrorBoundary extends Component<Props, State> {
 		return { error };
 	}
 
+	private reset = () => {
+		this.setState({ error: null });
+	};
+
 	override render() {
-		if (this.state.error) {
-			return (
-				<div className="placeholder" role="alert">
-					{this.state.error.message}
-				</div>
-			);
-		}
-		return this.props.children;
+		const { error } = this.state;
+		if (error == null) return this.props.children;
+		if (this.props.fallback != null)
+			return this.props.fallback(error, this.reset);
+		return (
+			<div className="placeholder" role="alert">
+				<span>{error.message}</span>
+				<button
+					type="button"
+					className="btn"
+					onClick={this.reset}
+					data-testid="error-retry"
+				>
+					Retry
+				</button>
+			</div>
+		);
 	}
 }

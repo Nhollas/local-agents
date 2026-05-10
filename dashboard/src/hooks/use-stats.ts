@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchStats } from "../lib/api.ts";
 import type { Stats } from "../lib/types.ts";
 
-const POLL_INTERVAL_MS = 5_000;
+const POLL_INTERVAL_MS = 60_000;
 
 export function useStats() {
 	return useQuery<Stats>({

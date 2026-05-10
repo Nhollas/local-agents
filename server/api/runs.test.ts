@@ -12,6 +12,7 @@ const baseRunWire = {
 	tokensOutput: null,
 	pr: null,
 	failedStep: null,
+	finalizeFailure: null,
 };
 
 describe("GET /runs", () => {
@@ -295,6 +296,7 @@ describe("GET /runs/:id", () => {
 				tokensOutput: 2600,
 				pr: null,
 				failedStep: null,
+				finalizeFailure: null,
 			},
 			steps: [
 				{

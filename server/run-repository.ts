@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { Db } from "./db/db.ts";
 import {
+	type FinalizeFailurePhase,
 	type PrKind,
 	type RunEventData,
 	type RunEventKind,
@@ -41,6 +42,11 @@ type RunBase = {
 
 export type RunFailedStep = { index: number; name: string };
 
+export type RunFinalizeFailure = {
+	phase: FinalizeFailurePhase;
+	error: string;
+};
+
 export type RunningRun = RunBase & { status: "running" };
 export type CompletedRun = RunBase & {
 	status: "completed";
@@ -53,6 +59,7 @@ export type FailedRun = RunBase & {
 	durationMs: number | null;
 	error: string;
 	failedStep: RunFailedStep | null;
+	finalizeFailure: RunFinalizeFailure | null;
 };
 
 export type Run = RunningRun | CompletedRun | FailedRun;
@@ -88,7 +95,12 @@ export type RunRepository = {
 	): void;
 	failRun(
 		runId: RunId,
-		params: { error: string; completedAt: string; durationMs?: number },
+		params: {
+			error: string;
+			completedAt: string;
+			durationMs?: number;
+			finalizeFailure?: RunFinalizeFailure;
+		},
 	): void;
 	setRunBranch(runId: RunId, branch: string): void;
 	setRunWorkspaceDir(runId: RunId, workspaceDir: string): void;
@@ -151,12 +163,16 @@ export function createRunRepository(db: Db): RunRepository {
 		},
 
 		failRun(runId, params) {
-			const { durationMs, ...rest } = params;
+			const { durationMs, finalizeFailure, ...rest } = params;
 			db.update(runs)
 				.set({
 					status: "failed",
 					...rest,
 					...(durationMs != null && { durationMs }),
+					...(finalizeFailure != null && {
+						finalizeFailurePhase: finalizeFailure.phase,
+						finalizeFailureError: finalizeFailure.error,
+					}),
 				})
 				.where(eq(runs.id, runId))
 				.run();
@@ -466,6 +482,13 @@ function rowToRun(row: RunRow, failedStep: RunFailedStep | null): Run {
 				durationMs: row.durationMs,
 				error: row.error,
 				failedStep,
+				finalizeFailure:
+					row.finalizeFailurePhase != null && row.finalizeFailureError != null
+						? {
+								phase: row.finalizeFailurePhase,
+								error: row.finalizeFailureError,
+							}
+						: null,
 			};
 	}
 }

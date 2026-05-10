@@ -8,8 +8,25 @@ import type {
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 	const res = await fetch(url, init);
-	if (!res.ok) throw new Error(`API request failed: ${res.status}`);
+	if (!res.ok)
+		throw new Error(`API request failed: ${await readErrorDetail(res)}`);
 	return res;
+}
+
+async function readErrorDetail(res: Response): Promise<string> {
+	try {
+		const body = (await res.clone().json()) as {
+			detail?: unknown;
+			title?: unknown;
+		};
+		if (typeof body.detail === "string" && body.detail.length > 0)
+			return body.detail;
+		if (typeof body.title === "string" && body.title.length > 0)
+			return body.title;
+	} catch {
+		// fall through to status code
+	}
+	return `${res.status}`;
 }
 
 export async function fetchRunDetail(runId: string): Promise<RunDetail> {

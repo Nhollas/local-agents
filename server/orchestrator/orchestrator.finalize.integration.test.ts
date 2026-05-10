@@ -59,4 +59,29 @@ describe("Orchestrator success-path finalization", () => {
 		]);
 		expect(tracker.markedFailed).toEqual([{ repo: REPO, number: 12 }]);
 	});
+
+	it("marks the run failed with finalizeFailure when push fails", async () => {
+		await using ctx = await createTestOrchestrator({ runAgent: noopAgent });
+		const { orchestrator, runner, workspace, repo: runRepo } = ctx;
+		ctx.tracker.addIssue("pending", { number: 13, repo: REPO });
+		const issueKey = jiraIssueKey(13);
+		await workspace.preCreateWorkspace(issueKey, { brokenRemote: true });
+
+		await orchestrator.tick();
+		await runner.queue.waitForIdle();
+		await orchestrator.settled();
+
+		const [run] = runRepo.getRuns({ limit: 1 });
+		if (run?.status !== "failed") throw new Error("expected failed run");
+		expect(run.finalizeFailure?.phase).toBe("push");
+		expect(run.finalizeFailure?.error).toMatch(/git push/);
+		expect(run.error).toMatch(/^push: /);
+
+		const systemEvents = runRepo
+			.getRunEvents(run.id)
+			.filter((e) => e.kind === "system");
+		expect(
+			systemEvents.some((e) => e.data.message === "finalize failed: push"),
+		).toBe(true);
+	});
 });

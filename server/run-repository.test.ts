@@ -41,6 +41,7 @@ describe("run repository row projection", () => {
 			tokensOutput: null,
 			pr: null,
 			failedStep: null,
+			finalizeFailure: null,
 		});
 	});
 
