@@ -192,17 +192,25 @@ describe("Runner integration", () => {
 		const events = getEvents(db, runId);
 		expect(events).toEqual([
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:started",
+				kind: "run:started",
+				stepName: null,
 				data: { issueKey: ik("acme/widgets#4"), issueTitle: "Lifecycle issue" },
 				createdAt: expect.any(String),
 			},
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:completed",
-				data: { durationMs: expect.any(Number) },
+				kind: "run:completed",
+				stepName: null,
+				data: {
+					durationMs: expect.any(Number),
+					costUsd: 0,
+					tokens: { in: 0, out: 0 },
+				},
 				createdAt: expect.any(String),
 			},
 		]);
@@ -224,9 +232,11 @@ describe("Runner integration", () => {
 		const events = getEvents(db, runId);
 		expect(events).toEqual([
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:started",
+				kind: "run:started",
+				stepName: null,
 				data: {
 					issueKey: ik("acme/widgets#5"),
 					issueTitle: "Fail event issue",
@@ -234,16 +244,18 @@ describe("Runner integration", () => {
 				createdAt: expect.any(String),
 			},
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:failed",
+				kind: "run:failed",
+				stepName: null,
 				data: { error: "boom", durationMs: expect.any(Number) },
 				createdAt: expect.any(String),
 			},
 		]);
 	});
 
-	it("records tool_use events when emitToolUse is called", async () => {
+	it("records typed tool events when ctx.emit is called", async () => {
 		const runner = createRunner({ repo, maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
@@ -252,8 +264,21 @@ describe("Runner integration", () => {
 			issueTitle: "Tool issue",
 			issueUrl: null,
 			handler: async (ctx) => {
-				ctx.emitToolUse("Read", "/src/index.ts");
-				ctx.emitToolUse("Edit", "/src/index.ts");
+				ctx.emit({
+					kind: "tool:read",
+					stepName: "implement",
+					data: { path: "src/index.ts", lines: 0 },
+				});
+				ctx.emit({
+					kind: "tool:edit",
+					stepName: "implement",
+					data: {
+						path: "src/index.ts",
+						added: 0,
+						removed: 0,
+						summary: "",
+					},
+				});
 				return { status: "completed", durationMs: 0 };
 			},
 		});
@@ -263,34 +288,115 @@ describe("Runner integration", () => {
 		const events = getEvents(db, runId);
 		expect(events).toEqual([
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:started",
+				kind: "run:started",
+				stepName: null,
 				data: { issueKey: ik("acme/widgets#6"), issueTitle: "Tool issue" },
 				createdAt: expect.any(String),
 			},
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:tool_use",
-				data: { tool: "Read", target: "/src/index.ts" },
+				kind: "tool:read",
+				stepName: "implement",
+				data: { path: "src/index.ts", lines: 0 },
 				createdAt: expect.any(String),
 			},
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:tool_use",
-				data: { tool: "Edit", target: "/src/index.ts" },
+				kind: "tool:edit",
+				stepName: "implement",
+				data: { path: "src/index.ts", added: 0, removed: 0, summary: "" },
 				createdAt: expect.any(String),
 			},
 			{
+				seq: expect.any(Number),
 				id: expect.any(String),
 				runId,
-				type: "run:completed",
-				data: { durationMs: expect.any(Number) },
+				kind: "run:completed",
+				stepName: null,
+				data: {
+					durationMs: expect.any(Number),
+					costUsd: 0,
+					tokens: { in: 0, out: 0 },
+				},
 				createdAt: expect.any(String),
 			},
 		]);
+	});
+
+	it("flips in-flight tool:bash events to aborted on kill", async () => {
+		const runner = createRunner({ repo, maxConcurrency: 1 });
+
+		const { runId, done } = runner.enqueue({
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#8"),
+			issueTitle: "Killed mid-bash",
+			issueUrl: null,
+			handler: async (ctx) => {
+				ctx.emit({
+					kind: "tool:bash",
+					stepName: "implement",
+					data: {
+						command: "sleep 60",
+						cwd: "/work",
+						state: "running",
+						exitCode: null,
+					},
+				});
+				return new Promise<RunResult>(() => {});
+			},
+		});
+
+		await Promise.resolve();
+		// Give the handler a tick to emit the tool:bash event.
+		await new Promise((r) => setTimeout(r, 5));
+		runner.kill(runId);
+		await done;
+
+		const events = getEvents(db, runId).filter((e) => e.kind === "tool:bash");
+		expect(events).toHaveLength(1);
+		expect(events[0]?.data).toEqual({
+			command: "sleep 60",
+			cwd: "/work",
+			state: "aborted",
+			exitCode: null,
+		});
+	});
+
+	it("flips in-flight tool:bash events to exited on normal completion", async () => {
+		const runner = createRunner({ repo, maxConcurrency: 1 });
+
+		const { runId, done } = runner.enqueue({
+			repo: rs("acme/widgets"),
+			issueKey: ik("acme/widgets#9"),
+			issueTitle: "Bash exits normally",
+			issueUrl: null,
+			handler: async (ctx) => {
+				ctx.emit({
+					kind: "tool:bash",
+					stepName: "implement",
+					data: {
+						command: "ls",
+						cwd: "/work",
+						state: "running",
+						exitCode: null,
+					},
+				});
+				return { status: "completed", durationMs: 0 };
+			},
+		});
+
+		await done;
+
+		const events = getEvents(db, runId).filter((e) => e.kind === "tool:bash");
+		expect(events).toHaveLength(1);
+		expect((events[0]?.data as { state: string }).state).toBe("exited");
 	});
 
 	it("aborts a running job when killed", async () => {

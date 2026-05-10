@@ -7,6 +7,7 @@ import type { AppEnv } from "./types.ts";
 const STATUS_TITLES = {
 	400: "Bad Request",
 	404: "Not Found",
+	409: "Conflict",
 	422: "Unprocessable Content",
 	500: "Internal Server Error",
 } as const;

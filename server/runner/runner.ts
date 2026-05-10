@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { eventBus, type RunEvent, type StepEvent } from "../event-bus.ts";
+import type { RunEventData, RunEventKind, ToolBashData } from "../db/schema.ts";
+import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
 import {
 	type IssueKey,
@@ -11,10 +12,22 @@ import { createJobQueue, type JobQueue } from "./queue.ts";
 
 export const ABORT_ERROR = "Run killed by user";
 
+export type EmitInput<K extends RunEventKind = RunEventKind> = {
+	kind: K;
+	stepName: string | null;
+	data: Extract<RunEvent, { kind: K }>["data"];
+};
+
 export type RunContext = {
 	runId: RunId;
-	emitToolUse: (tool: string, target: string) => void;
-	emitStepEvent: (event: StepEvent) => void;
+	emit<K extends RunEventKind>(
+		input: EmitInput<K>,
+		createdAt?: string,
+	): Extract<RunEvent, { kind: K }>;
+	updateToolBashState(
+		eventId: string,
+		patch: Partial<Pick<ToolBashData, "state" | "exitCode">>,
+	): RunEvent | undefined;
 	signal: AbortSignal;
 };
 
@@ -56,28 +69,29 @@ export function createRunner(config: RunnerConfig): Runner {
 	);
 	const activeRuns = new Map<RunId, AbortController>();
 
-	type EventPayload = {
-		[E in RunEvent as E["type"]]: Pick<E, "type" | "data">;
-	}[RunEvent["type"]];
-
-	function emitEvent(
+	function emitFor<K extends RunEventKind>(
 		id: RunId,
-		event: EventPayload,
+		input: EmitInput<K>,
 		createdAt = new Date().toISOString(),
-	): void {
-		// Post-narrowing: TS doesn't recombine the discriminated union through a spread.
-		const fullEvent = {
-			...event,
+	): Extract<RunEvent, { kind: K }> {
+		const event = repo.insertEvent({
 			runId: id,
+			kind: input.kind,
+			stepName: input.stepName,
+			data: input.data as RunEventData,
 			createdAt,
-		} as RunEvent;
-		repo.insertEvent({
-			runId: id,
-			type: event.type,
-			data: event.data,
-			createdAt,
-		});
-		eventBus.emit(fullEvent);
+		}) as Extract<RunEvent, { kind: K }>;
+		eventBus.emit(event);
+		return event;
+	}
+
+	function flushInflightBash(id: RunId, finalState: "exited" | "aborted") {
+		for (const event of repo.getInflightToolBash(id)) {
+			const updated = repo.updateToolBashState(event.id, {
+				state: finalState,
+			});
+			if (updated) eventBus.emit(updated);
+		}
 	}
 
 	function kill(id: RunId): boolean {
@@ -110,10 +124,11 @@ export function createRunner(config: RunnerConfig): Runner {
 			startedAt,
 		});
 
-		emitEvent(
+		emitFor(
 			id,
 			{
-				type: "run:started",
+				kind: "run:started",
+				stepName: null,
 				data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
 			},
 			startedAt,
@@ -122,15 +137,15 @@ export function createRunner(config: RunnerConfig): Runner {
 		queue.enqueue(async () => {
 			const executionStart = Date.now();
 
-			const emitToolUse = (tool: string, target: string) => {
-				emitEvent(id, {
-					type: "run:tool_use",
-					data: { tool, target },
-				});
-			};
-
-			const emitStepEvent: RunContext["emitStepEvent"] = (event) => {
-				emitEvent(id, event);
+			const ctx: RunContext = {
+				runId: id,
+				emit: (input, createdAt) => emitFor(id, input, createdAt),
+				updateToolBashState: (eventId, patch) => {
+					const updated = repo.updateToolBashState(eventId, patch);
+					if (updated) eventBus.emit(updated);
+					return updated;
+				},
+				signal: controller.signal,
 			};
 
 			const abortPromise = new Promise<RunResult>((resolve) => {
@@ -143,24 +158,30 @@ export function createRunner(config: RunnerConfig): Runner {
 				});
 			});
 
-			const result = await Promise.race([
-				job.handler({
-					runId: id,
-					emitToolUse,
-					emitStepEvent,
-					signal: controller.signal,
-				}),
-				abortPromise,
-			]);
+			const result = await Promise.race([job.handler(ctx), abortPromise]);
 
 			const completedAt = new Date().toISOString();
+			const aborted = controller.signal.aborted;
+			flushInflightBash(id, aborted ? "aborted" : "exited");
 
 			if (result.status === "completed") {
 				repo.completeRun(id, { completedAt, durationMs: result.durationMs });
 
-				emitEvent(
+				const run = repo.getRunById(id);
+				emitFor(
 					id,
-					{ type: "run:completed", data: { durationMs: result.durationMs } },
+					{
+						kind: "run:completed",
+						stepName: null,
+						data: {
+							durationMs: result.durationMs,
+							costUsd: run?.costUsd ?? 0,
+							tokens: {
+								in: run?.tokensInput ?? 0,
+								out: run?.tokensOutput ?? 0,
+							},
+						},
+					},
 					completedAt,
 				);
 			} else {
@@ -170,10 +191,11 @@ export function createRunner(config: RunnerConfig): Runner {
 					durationMs: result.durationMs,
 				});
 
-				emitEvent(
+				emitFor(
 					id,
 					{
-						type: "run:failed",
+						kind: "run:failed",
+						stepName: null,
 						data: { error: result.error, durationMs: result.durationMs },
 					},
 					completedAt,

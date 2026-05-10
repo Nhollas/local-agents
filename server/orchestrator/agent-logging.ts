@@ -1,43 +1,140 @@
 import * as canonicalLog from "../canonical-log.ts";
+import type { RunContext } from "../runner/runner.ts";
 
 export type AgentMessage = {
 	type: "assistant";
 	message: { content: ContentBlock[] };
 };
 
-/** Log assistant text and tool use activity from an agent message. */
-export function logAgentMessage(
+type EmitContext = {
+	ctx: Pick<RunContext, "emit">;
+	stepName: string;
+	cwd: string;
+};
+
+export function emitAgentMessageEvents(
 	msg: AgentMessage,
-	workDir: string,
-	emitToolUse?: (tool: string, target: string) => void,
+	{ ctx, stepName, cwd }: EmitContext,
 ): void {
 	for (const block of msg.message.content) {
-		if (!isToolUse(block)) continue;
-		const raw = String(
-			block.input["pattern"] ??
-				block.input["file_path"] ??
-				block.input["command"] ??
-				"",
-		);
-		const detail = shortPath(raw, workDir).slice(0, 100);
+		if (isTextBlock(block)) {
+			const text = block.text.trim();
+			if (text.length === 0) continue;
+			ctx.emit({
+				kind: "agent:say",
+				stepName,
+				data: { text },
+			});
+			continue;
+		}
+		if (!isToolUseBlock(block)) continue;
 		canonicalLog.incrementMap("tool_use_by_name", block.name);
-		emitToolUse?.(block.name, detail);
+		emitToolEvent(block, { ctx, stepName, cwd });
+	}
+}
+
+export function trackAgentToolUseBag(msg: AgentMessage): void {
+	for (const block of msg.message.content) {
+		if (!isToolUseBlock(block)) continue;
+		canonicalLog.incrementMap("tool_use_by_name", block.name);
 	}
 }
 
 type TextBlock = { type: "text"; text: string };
 type ToolUseBlock = {
 	type: "tool_use";
+	id?: string;
 	name: string;
 	input: Record<string, unknown>;
 };
 type ContentBlock = TextBlock | ToolUseBlock | { type: string };
 
-function isToolUse(block: ContentBlock): block is ToolUseBlock {
+function isTextBlock(block: ContentBlock): block is TextBlock {
+	return block.type === "text" && typeof (block as TextBlock).text === "string";
+}
+
+function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
 	return block.type === "tool_use";
 }
 
-/** Strip the workdir prefix from a path for cleaner logging. */
+function emitToolEvent(
+	block: ToolUseBlock,
+	{ ctx, stepName, cwd }: EmitContext,
+): void {
+	const input = block.input;
+	switch (block.name) {
+		case "Read": {
+			ctx.emit({
+				kind: "tool:read",
+				stepName,
+				data: {
+					path: shortPath(stringInput(input["file_path"]), cwd),
+					lines: 0,
+				},
+			});
+			return;
+		}
+		case "Edit":
+		case "Write":
+		case "MultiEdit": {
+			ctx.emit({
+				kind: "tool:edit",
+				stepName,
+				data: {
+					path: shortPath(stringInput(input["file_path"]), cwd),
+					added: 0,
+					removed: 0,
+					summary: "",
+				},
+			});
+			return;
+		}
+		case "Grep": {
+			ctx.emit({
+				kind: "tool:grep",
+				stepName,
+				data: {
+					pattern: stringInput(input["pattern"]),
+					path: shortPath(stringInput(input["path"] ?? ""), cwd),
+					matches: 0,
+				},
+			});
+			return;
+		}
+		case "Bash": {
+			ctx.emit({
+				kind: "tool:bash",
+				stepName,
+				data: {
+					command: stringInput(input["command"]),
+					cwd,
+					state: "running",
+					exitCode: null,
+				},
+			});
+			return;
+		}
+		default: {
+			const summary = stringInput(
+				input["pattern"] ?? input["file_path"] ?? input["command"] ?? "",
+			);
+			ctx.emit({
+				kind: "tool:other",
+				stepName,
+				data: {
+					tool: block.name,
+					summary: shortPath(summary, cwd).slice(0, 100),
+				},
+			});
+		}
+	}
+}
+
+function stringInput(value: unknown): string {
+	if (value == null) return "";
+	return String(value);
+}
+
 function shortPath(fullPath: string, workDir: string): string {
 	const privatePrefixed = `/private${workDir}`;
 	if (fullPath.startsWith(privatePrefixed)) {

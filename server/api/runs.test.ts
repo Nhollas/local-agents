@@ -338,7 +338,7 @@ describe("POST /runs/:id/kill", () => {
 		expect(await res.json()).toEqual({ killed: true });
 	});
 
-	it("returns 404 when run is not running", async () => {
+	it("returns 404 when the run does not exist", async () => {
 		const { app } = createTestApi();
 
 		const res = await app.request("/runs/unknown/kill", { method: "POST" });
@@ -348,7 +348,128 @@ describe("POST /runs/:id/kill", () => {
 			type: "about:blank",
 			status: 404,
 			title: "Not Found",
-			detail: "Run not found or not running",
+			detail: "Not found",
+			requestId: expect.any(String),
+		});
+	});
+
+	it("returns 409 when the run is already completed", async () => {
+		const { app, db } = createTestApi();
+		seedRun(db, { id: "done", status: "completed" });
+
+		const res = await app.request("/runs/done/kill", { method: "POST" });
+
+		expect(res.status).toBe(409);
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 409,
+			title: "Conflict",
+			detail: "Run already completed",
+			requestId: expect.any(String),
+		});
+	});
+
+	it("returns 409 when the run is already failed", async () => {
+		const { app, db } = createTestApi();
+		seedRun(db, { id: "boom", status: "failed", error: "x" });
+
+		const res = await app.request("/runs/boom/kill", { method: "POST" });
+
+		expect(res.status).toBe(409);
+	});
+});
+
+describe("GET /runs/:id/events", () => {
+	it("returns 404 for unknown run", async () => {
+		const { app } = createTestApi();
+		const res = await app.request("/runs/missing/events");
+		expect(res.status).toBe(404);
+	});
+
+	it("returns events ordered oldest → newest with monotonic seq", async () => {
+		const { app, runner } = createTestApi();
+		const { runId, done } = runner.enqueue({
+			repo: repoSlug("test/repo"),
+			issueKey: issueKey("test/repo#1"),
+			issueTitle: "Event ordering",
+			issueUrl: null,
+			handler: async (ctx) => {
+				ctx.emit({
+					kind: "agent:say",
+					stepName: "implement",
+					data: { text: "first" },
+				});
+				ctx.emit({
+					kind: "agent:say",
+					stepName: "implement",
+					data: { text: "second" },
+				});
+				return { status: "completed", durationMs: 0 };
+			},
+		});
+		await done;
+
+		const res = await app.request(`/runs/${runId}/events`);
+		expect(res.status).toBe(200);
+		const events = (await res.json()) as Array<{
+			seq: number;
+			kind: string;
+			data: { text?: string };
+		}>;
+		expect(events.map((e) => e.kind)).toEqual([
+			"run:started",
+			"agent:say",
+			"agent:say",
+			"run:completed",
+		]);
+		const seqs = events.map((e) => e.seq);
+		expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+		expect(new Set(seqs).size).toBe(seqs.length);
+	});
+
+	it("filters events by since cursor (strictly greater seq)", async () => {
+		const { app, runner } = createTestApi();
+		const { runId, done } = runner.enqueue({
+			repo: repoSlug("test/repo"),
+			issueKey: issueKey("test/repo#2"),
+			issueTitle: "Since cursor",
+			issueUrl: null,
+			handler: async (ctx) => {
+				ctx.emit({
+					kind: "agent:say",
+					stepName: "implement",
+					data: { text: "a" },
+				});
+				ctx.emit({
+					kind: "agent:say",
+					stepName: "implement",
+					data: { text: "b" },
+				});
+				return { status: "completed", durationMs: 0 };
+			},
+		});
+		await done;
+
+		const all = (await (
+			await app.request(`/runs/${runId}/events`)
+		).json()) as Array<{ id: string; kind: string }>;
+		const cursor = all[1]?.id;
+		const after = (await (
+			await app.request(`/runs/${runId}/events?since=${cursor}`)
+		).json()) as Array<{ kind: string }>;
+		expect(after.map((e) => e.kind)).toEqual(["agent:say", "run:completed"]);
+	});
+
+	it("returns 400 for unknown since cursor", async () => {
+		const { app, db } = createTestApi();
+		seedRun(db, { id: "live", status: "running" });
+		const res = await app.request("/runs/live/events?since=does-not-exist");
+		expect(res.status).toBe(400);
+		expect(await res.json()).toEqual({
+			type: "about:blank",
+			status: 400,
+			title: "Bad Request",
+			detail: "Unknown since cursor",
 			requestId: expect.any(String),
 		});
 	});

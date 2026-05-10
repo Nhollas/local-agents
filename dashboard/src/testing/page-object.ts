@@ -39,6 +39,18 @@ export function dashboardPageObject(page: PageType) {
 		expectPlaceholder: async (text: string | RegExp) => {
 			await expect.element(self.getPlaceholder()).toHaveTextContent(text);
 		},
+
+		getTranscript: () => page.getByTestId("transcript"),
+		getEvent: (id: string) => page.getByTestId(`ev-${id}`),
+		getStepDivider: (index: number) =>
+			page.getByTestId(`step-divider-${index}`),
+		getKillButton: () => page.getByTestId("kill-button"),
+		getBashCursor: () => page.getByTestId("bash-cursor"),
+		getBashAborted: () => page.getByTestId("bash-aborted"),
+
+		expectTranscriptContains: async (text: string | RegExp) => {
+			await expect.element(self.getTranscript()).toHaveTextContent(text);
+		},
 	};
 	return Object.assign(page, self);
 }

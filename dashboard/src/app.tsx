@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { RunBanner } from "./components/run-banner.tsx";
+import { Transcript } from "./components/transcript.tsx";
 import { WorkflowStripe } from "./components/workflow-stripe.tsx";
 import { useRunDetail } from "./hooks/use-run-detail.ts";
+import { useRunEvents } from "./hooks/use-run-events.ts";
 
 export function App() {
 	const runId = readRunIdFromUrl();
@@ -24,16 +26,20 @@ export function App() {
 }
 
 function CenterContent({ runId }: { runId: string | null }) {
-	const { data, isLoading, error } = useRunDetail(runId);
+	const detail = useRunDetail(runId);
+	const events = useRunEvents(runId);
 
 	if (runId == null) return <Placeholder>No run selected.</Placeholder>;
-	if (isLoading) return <Placeholder>Loading…</Placeholder>;
-	if (error) return <Placeholder>{error.message}</Placeholder>;
-	if (!data) return null;
+	if (detail.isLoading) return <Placeholder>Loading…</Placeholder>;
+	if (detail.error) return <Placeholder>{detail.error.message}</Placeholder>;
+	if (!detail.data) return null;
+
+	const eventsList = events.status === "ready" ? events.events : [];
 	return (
 		<>
-			<RunBanner run={data.run} />
-			<WorkflowStripe steps={data.steps} />
+			<RunBanner run={detail.data.run} />
+			<WorkflowStripe steps={detail.data.steps} />
+			<Transcript events={eventsList} steps={detail.data.steps} />
 		</>
 	);
 }

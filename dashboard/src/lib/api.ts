@@ -1,4 +1,4 @@
-import type { RunDetail } from "./types.ts";
+import type { RunDetail, RunEvent } from "./types.ts";
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 	const res = await fetch(url, init);
@@ -8,5 +8,15 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 
 export async function fetchRunDetail(runId: string): Promise<RunDetail> {
 	const res = await apiFetch(`/runs/${runId}`);
+	return res.json();
+}
+
+export async function fetchRunEvents(runId: string): Promise<RunEvent[]> {
+	const res = await apiFetch(`/runs/${runId}/events`);
+	return res.json();
+}
+
+export async function killRun(runId: string): Promise<{ killed: boolean }> {
+	const res = await apiFetch(`/runs/${runId}/kill`, { method: "POST" });
 	return res.json();
 }

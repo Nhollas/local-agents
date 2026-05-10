@@ -1,33 +1,43 @@
 import { EventEmitter } from "node:events";
 import type {
+	AgentSayData,
 	RunCompletedData,
 	RunFailedData,
-	RunOutputData,
 	RunStartedData,
-	RunToolUseData,
 	StepCompletedData,
 	StepFailedData,
 	StepStartedData,
+	SystemData,
+	ToolBashData,
+	ToolEditData,
+	ToolGrepData,
+	ToolOtherData,
+	ToolReadData,
 } from "./db/schema.ts";
 import type { RunId } from "./types/brands.ts";
 
 type RunEventBase = {
+	id: string;
+	seq: number;
 	runId: RunId;
+	stepName: string | null;
 	createdAt: string;
 };
 
-export type StepEvent =
-	| { type: "step.started"; data: StepStartedData }
-	| { type: "step.completed"; data: StepCompletedData }
-	| { type: "step.failed"; data: StepFailedData };
-
 export type RunEvent =
-	| (RunEventBase & { type: "run:started"; data: RunStartedData })
-	| (RunEventBase & { type: "run:output"; data: RunOutputData })
-	| (RunEventBase & { type: "run:tool_use"; data: RunToolUseData })
-	| (RunEventBase & StepEvent)
-	| (RunEventBase & { type: "run:completed"; data: RunCompletedData })
-	| (RunEventBase & { type: "run:failed"; data: RunFailedData });
+	| (RunEventBase & { kind: "run:started"; data: RunStartedData })
+	| (RunEventBase & { kind: "run:completed"; data: RunCompletedData })
+	| (RunEventBase & { kind: "run:failed"; data: RunFailedData })
+	| (RunEventBase & { kind: "step:started"; data: StepStartedData })
+	| (RunEventBase & { kind: "step:completed"; data: StepCompletedData })
+	| (RunEventBase & { kind: "step:failed"; data: StepFailedData })
+	| (RunEventBase & { kind: "agent:say"; data: AgentSayData })
+	| (RunEventBase & { kind: "tool:read"; data: ToolReadData })
+	| (RunEventBase & { kind: "tool:edit"; data: ToolEditData })
+	| (RunEventBase & { kind: "tool:grep"; data: ToolGrepData })
+	| (RunEventBase & { kind: "tool:bash"; data: ToolBashData })
+	| (RunEventBase & { kind: "tool:other"; data: ToolOtherData })
+	| (RunEventBase & { kind: "system"; data: SystemData });
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50);

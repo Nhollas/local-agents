@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 
 import type { Db } from "./db/db.ts";
 import {
 	type PrKind,
-	type RunEventType,
+	type RunEventData,
+	type RunEventKind,
 	type RunStatus,
 	runEvents,
 	runStepOutputs,
 	runSteps,
 	runs,
+	type ToolBashData,
 } from "./db/schema.ts";
+import type { RunEvent } from "./event-bus.ts";
 import type { IssueKey, RepoSlug, RunId } from "./types/brands.ts";
 
 export type RunPr = {
@@ -51,14 +54,20 @@ export type FailedRun = RunBase & {
 
 export type Run = RunningRun | CompletedRun | FailedRun;
 
-export type RunEvent = typeof runEvents.$inferSelect;
-
 export type RunStep = typeof runSteps.$inferSelect;
 
 export type StepUsage = {
 	costUsd: number;
 	tokensInput: number;
 	tokensOutput: number;
+};
+
+export type InsertEventInput = {
+	runId: RunId;
+	kind: RunEventKind;
+	stepName: string | null;
+	data: RunEventData;
+	createdAt: string;
 };
 
 export type RunRepository = {
@@ -82,12 +91,11 @@ export type RunRepository = {
 	setRunWorkspaceDir(runId: RunId, workspaceDir: string): void;
 	setRunPr(runId: RunId, pr: RunPr): void;
 	addRunUsage(runId: RunId, usage: StepUsage): void;
-	insertEvent(event: {
-		runId: RunId;
-		type: RunEventType;
-		data: Record<string, unknown>;
-		createdAt: string;
-	}): void;
+	insertEvent(event: InsertEventInput): RunEvent;
+	updateToolBashState(
+		eventId: string,
+		patch: Partial<Pick<ToolBashData, "state" | "exitCode">>,
+	): RunEvent | undefined;
 	getRunningSnapshot(): { id: RunId; issueKey: IssueKey; repo: RepoSlug }[];
 	getRunById(id: RunId): Run | undefined;
 	getRuns(filters: {
@@ -96,6 +104,10 @@ export type RunRepository = {
 		limit: number;
 	}): Run[];
 	getRunEvents(runId: RunId): RunEvent[];
+	getRunEventsAfterSeq(runId: RunId, sinceSeq: number): RunEvent[];
+	getAllEventsAfterSeq(sinceSeq: number): RunEvent[];
+	getEventSeqById(id: string): number | undefined;
+	getInflightToolBash(runId: RunId): RunEvent[];
 	insertSteps(
 		runId: RunId,
 		steps: ReadonlyArray<{ index: number; name: string }>,
@@ -178,9 +190,28 @@ export function createRunRepository(db: Db): RunRepository {
 		},
 
 		insertEvent(event) {
-			db.insert(runEvents)
-				.values({ id: randomUUID(), ...event })
+			const id = randomUUID();
+			const row = db
+				.insert(runEvents)
+				.values({ id, ...event })
+				.returning()
+				.get();
+			return rowToEvent(row);
+		},
+
+		updateToolBashState(eventId, patch) {
+			const row = db
+				.select()
+				.from(runEvents)
+				.where(eq(runEvents.id, eventId))
+				.get();
+			if (!row || row.kind !== "tool:bash") return undefined;
+			const merged: ToolBashData = { ...(row.data as ToolBashData), ...patch };
+			db.update(runEvents)
+				.set({ data: merged })
+				.where(eq(runEvents.id, eventId))
 				.run();
+			return rowToEvent({ ...row, data: merged });
 		},
 
 		getRunningSnapshot() {
@@ -223,8 +254,48 @@ export function createRunRepository(db: Db): RunRepository {
 				.select()
 				.from(runEvents)
 				.where(eq(runEvents.runId, runId))
-				.orderBy(asc(runEvents.createdAt))
-				.all();
+				.orderBy(asc(runEvents.seq))
+				.all()
+				.map(rowToEvent);
+		},
+
+		getRunEventsAfterSeq(runId, sinceSeq) {
+			return db
+				.select()
+				.from(runEvents)
+				.where(and(eq(runEvents.runId, runId), gt(runEvents.seq, sinceSeq)))
+				.orderBy(asc(runEvents.seq))
+				.all()
+				.map(rowToEvent);
+		},
+
+		getAllEventsAfterSeq(sinceSeq) {
+			return db
+				.select()
+				.from(runEvents)
+				.where(gt(runEvents.seq, sinceSeq))
+				.orderBy(asc(runEvents.seq))
+				.all()
+				.map(rowToEvent);
+		},
+
+		getEventSeqById(id) {
+			const row = db
+				.select({ seq: runEvents.seq })
+				.from(runEvents)
+				.where(eq(runEvents.id, id))
+				.get();
+			return row?.seq;
+		},
+
+		getInflightToolBash(runId) {
+			return db
+				.select()
+				.from(runEvents)
+				.where(and(eq(runEvents.runId, runId), eq(runEvents.kind, "tool:bash")))
+				.all()
+				.filter((row) => (row.data as ToolBashData).state === "running")
+				.map(rowToEvent);
 		},
 
 		insertSteps(runId, steps) {
@@ -294,6 +365,7 @@ export function createRunRepository(db: Db): RunRepository {
 }
 
 type RunRow = typeof runs.$inferSelect;
+type RunEventRow = typeof runEvents.$inferSelect;
 
 function rowToRun(row: RunRow): Run {
 	const pr =
@@ -353,4 +425,16 @@ function rowToRun(row: RunRow): Run {
 				error: row.error,
 			};
 	}
+}
+
+function rowToEvent(row: RunEventRow): RunEvent {
+	return {
+		id: row.id,
+		seq: row.seq as number,
+		runId: row.runId,
+		kind: row.kind,
+		stepName: row.stepName,
+		data: row.data,
+		createdAt: row.createdAt,
+	} as RunEvent;
 }

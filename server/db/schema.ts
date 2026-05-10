@@ -49,15 +49,18 @@ export const runSteps = sqliteTable(
 export const runEvents = sqliteTable(
 	"run_events",
 	{
-		id: text("id").primaryKey(),
+		seq: integer("seq").primaryKey({ autoIncrement: true }),
+		id: text("id").notNull().unique(),
 		runId: text("run_id").notNull().$type<RunId>(),
-		type: text("type").notNull().$type<RunEventType>(),
-		data: text("data", { mode: "json" })
-			.notNull()
-			.$type<Record<string, unknown>>(),
+		kind: text("kind").notNull().$type<RunEventKind>(),
+		stepName: text("step_name"),
+		data: text("data", { mode: "json" }).notNull().$type<RunEventData>(),
 		createdAt: text("created_at").notNull(),
 	},
-	(table) => [index("idx_run_events_run_id").on(table.runId)],
+	(table) => [
+		index("idx_run_events_run_id").on(table.runId),
+		index("idx_run_events_seq").on(table.seq),
+	],
 );
 
 export const runStepOutputs = sqliteTable(
@@ -77,25 +80,82 @@ export type RunStatus = "running" | "completed" | "failed";
 export type RunStepState = "pending" | "running" | "completed" | "failed";
 export type PrKind = "opened" | "commented";
 
-export type RunEventType =
+export type RunEventKind =
 	| "run:started"
-	| "run:output"
-	| "run:tool_use"
-	| "step.started"
-	| "step.completed"
-	| "step.failed"
 	| "run:completed"
-	| "run:failed";
+	| "run:failed"
+	| "step:started"
+	| "step:completed"
+	| "step:failed"
+	| "agent:say"
+	| "tool:read"
+	| "tool:edit"
+	| "tool:grep"
+	| "tool:bash"
+	| "tool:other"
+	| "system";
 
-export type RunStartedData = { issueKey: IssueKey; issueTitle: string };
-export type RunOutputData = Record<string, unknown>;
-export type RunToolUseData = { tool: string; target: string };
+export type RunStartedData = {
+	issueKey: string | null;
+	issueTitle: string | null;
+};
+export type RunCompletedData = {
+	durationMs: number;
+	costUsd: number;
+	tokens: { in: number; out: number };
+};
+export type RunFailedData = { error: string; durationMs: number };
+
 export type StepStartedData = { name: string; index: number; total: number };
 export type StepCompletedData = {
 	name: string;
 	index: number;
 	durationMs: number;
 };
-export type StepFailedData = { name: string; index: number; error: string };
-export type RunCompletedData = { durationMs: number };
-export type RunFailedData = { error: string; durationMs: number };
+export type StepFailedData = {
+	name: string;
+	index: number;
+	error: string;
+	durationMs: number;
+};
+
+export type AgentSayData = { text: string };
+
+export type ToolReadData = { path: string; lines: number };
+export type ToolEditData = {
+	path: string;
+	added: number;
+	removed: number;
+	summary: string;
+};
+export type ToolGrepData = { pattern: string; path: string; matches: number };
+export type ToolBashState = "running" | "exited" | "aborted";
+export type ToolBashData = {
+	command: string;
+	cwd: string | null;
+	state: ToolBashState;
+	exitCode: number | null;
+};
+export type ToolOtherData = { tool: string; summary: string };
+
+export type SystemData = {
+	message: string;
+	command: string | null;
+	path: string | null;
+	exitCode: number | null;
+};
+
+export type RunEventData =
+	| RunStartedData
+	| RunCompletedData
+	| RunFailedData
+	| StepStartedData
+	| StepCompletedData
+	| StepFailedData
+	| AgentSayData
+	| ToolReadData
+	| ToolEditData
+	| ToolGrepData
+	| ToolBashData
+	| ToolOtherData
+	| SystemData;

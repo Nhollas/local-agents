@@ -2,9 +2,14 @@ import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
-import type { RunHandle, Runner, RunResult } from "../runner/runner.ts";
+import type {
+	RunContext,
+	RunHandle,
+	Runner,
+	RunResult,
+} from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import type { RepoSlug, RunId } from "../types/brands.ts";
+import type { RepoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
@@ -101,6 +106,16 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							ctx.runId,
 							workflow.steps.map((s, i) => ({ index: i + 1, name: s.name })),
 						);
+						ctx.emit({
+							kind: "system",
+							stepName: null,
+							data: {
+								message: "workspace prepared",
+								command: null,
+								path: ws.path,
+								exitCode: null,
+							},
+						});
 
 						try {
 							const branchResolverStart = clock.now();
@@ -118,11 +133,33 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							branch = resolvedBranch;
 							canonicalLog.set({ branch });
 							runRepo.setRunBranch(ctx.runId, branch);
+							ctx.emit({
+								kind: "system",
+								stepName: null,
+								data: {
+									message: "branch resolved",
+									command: null,
+									path: branch,
+									exitCode: null,
+								},
+							});
 
 							phase = "setup";
 							await ensureBranch(ws.path, branch);
 							const repoSetupRan = await runRepoSetup(ws.path, runShell);
 							canonicalLog.set({ repo_setup_ran: repoSetupRan });
+							if (repoSetupRan) {
+								ctx.emit({
+									kind: "system",
+									stepName: null,
+									data: {
+										message: "repo setup ran",
+										command: ".agent/setup.sh",
+										path: ws.path,
+										exitCode: 0,
+									},
+								});
+							}
 
 							phase = "step";
 							outputs = await runWorkflowSteps({
@@ -157,7 +194,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							result.status === "completed" &&
 							branch !== undefined &&
 							(await finalizeSuccess(
-								ctx.runId,
+								ctx,
 								repo,
 								issue,
 								workflow,
@@ -183,7 +220,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	}
 
 	async function finalizeSuccess(
-		runId: RunId,
+		ctx: RunContext,
 		repo: RepoSlug,
 		issue: Issue,
 		workflow: RepoWorkflow,
@@ -214,13 +251,23 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 				title,
 				body,
 			);
-			runRepo.setRunPr(runId, {
+			runRepo.setRunPr(ctx.runId, {
 				repo,
 				number: pr.number,
 				url: pr.url,
 				kind: "opened",
 			});
 			canonicalLog.set({ pr_url: pr.url });
+			ctx.emit({
+				kind: "system",
+				stepName: null,
+				data: {
+					message: "change request opened",
+					command: null,
+					path: pr.url,
+					exitCode: null,
+				},
+			});
 		} catch (err) {
 			recordFailure(
 				"change_request",
