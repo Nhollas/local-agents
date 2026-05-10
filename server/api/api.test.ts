@@ -38,7 +38,7 @@ describe("GET /health", () => {
 });
 
 describe("GET /events", () => {
-	it("delivers run lifecycle events over SSE", async () => {
+	it("delivers run lifecycle events over SSE with id/event/data frames", async () => {
 		const { app, runner } = createTestApi();
 
 		const res = await app.request("/events");
@@ -83,9 +83,70 @@ describe("GET /events", () => {
 
 			expect(collected).toContain("event: run:started");
 			expect(collected).toContain("event: run:completed");
+			expect(collected).toContain("id: ");
 			expect(collected).toContain("test/repo#42");
 		} finally {
 			reader.cancel();
+		}
+	});
+
+	it("replays only events with seq > Last-Event-ID's seq on reconnect", async () => {
+		const { app, runner } = createTestApi();
+
+		const { runId, done } = runner.enqueue({
+			repo: repoSlug("test/repo"),
+			issueKey: issueKey("test/repo#100"),
+			issueTitle: "Replay test",
+			issueUrl: null,
+			handler: async (ctx) => {
+				ctx.emit({
+					kind: "agent:say",
+					stepName: "implement",
+					data: { text: "first" },
+				});
+				ctx.emit({
+					kind: "agent:say",
+					stepName: "implement",
+					data: { text: "second" },
+				});
+				return { status: "completed", durationMs: 0 };
+			},
+		});
+		await done;
+
+		const list = (await (
+			await app.request(`/runs/${runId}/events`)
+		).json()) as Array<{ id: string; kind: string; data: { text?: string } }>;
+		const lastEventId = list[1]?.id;
+		expect(lastEventId).toBeTruthy();
+
+		const res = await app.request("/events", {
+			headers: { "Last-Event-ID": lastEventId as string },
+		});
+		const reader = res.body?.getReader();
+		if (!reader) throw new Error("expected stream");
+		const decoder = new TextDecoder();
+
+		try {
+			let collected = "";
+			for (let i = 0; i < 20; i++) {
+				const { value, done } = await Promise.race([
+					reader.read(),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error("timeout")), 5_000),
+					),
+				]);
+				if (done) break;
+				collected += decoder.decode(value, { stream: true });
+				if (collected.includes("run:completed")) break;
+			}
+			// First "agent:say" was at lastEventId — should NOT be replayed.
+			// Only events strictly after it (the second say + run:completed).
+			expect(collected).not.toContain('"text":"first"');
+			expect(collected).toContain('"text":"second"');
+			expect(collected).toContain("event: run:completed");
+		} finally {
+			await reader.cancel();
 		}
 	});
 });

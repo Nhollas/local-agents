@@ -45,14 +45,20 @@ export function createApi({
 
 	app.get("/events", (c) => {
 		return streamSSE(c, async (stream) => {
-			const handler = async (event: RunEvent) => {
-				try {
-					await stream.writeSSE({
-						event: event.type,
-						data: JSON.stringify(event),
-					});
-				} catch {
-					// stream aborted; cleanup runs via onAbort
+			const lastEventId =
+				c.req.header("Last-Event-ID") ??
+				c.req.query("lastEventId") ??
+				undefined;
+			const sinceSeq =
+				lastEventId != null ? (repo.getEventSeqById(lastEventId) ?? 0) : 0;
+
+			const buffered: RunEvent[] = [];
+			let live = false;
+			const handler = (event: RunEvent) => {
+				if (live) {
+					void writeFrame(stream, event);
+				} else {
+					buffered.push(event);
 				}
 			};
 
@@ -61,6 +67,17 @@ export function createApi({
 			stream.onAbort(() => {
 				eventBus.off(handler);
 			});
+
+			let replayedSeq = sinceSeq;
+			for (const event of repo.getAllEventsAfterSeq(sinceSeq)) {
+				await writeFrame(stream, event);
+				replayedSeq = event.seq;
+			}
+			// Drain anything that arrived during replay.
+			for (const event of buffered.splice(0)) {
+				if (event.seq > replayedSeq) await writeFrame(stream, event);
+			}
+			live = true;
 
 			while (true) {
 				await stream.writeSSE({ event: "heartbeat", data: "" });
@@ -98,15 +115,40 @@ export function createApi({
 		},
 	);
 
+	app.get(
+		"/runs/:id/events",
+		zValidator("param", runParamSchema, zodProblemHook),
+		zValidator("query", runEventsQuerySchema, zodProblemHook),
+		(c) => {
+			const { id } = c.req.valid("param");
+			const { since } = c.req.valid("query");
+
+			const run = repo.getRunById(id);
+			if (!run) throw new ProblemDetailsError(404, "Not found");
+
+			if (since != null) {
+				const sinceSeq = repo.getEventSeqById(since);
+				if (sinceSeq == null) {
+					throw new ProblemDetailsError(400, "Unknown since cursor");
+				}
+				return c.json(repo.getRunEventsAfterSeq(id, sinceSeq));
+			}
+			return c.json(repo.getRunEvents(id));
+		},
+	);
+
 	app.post(
 		"/runs/:id/kill",
 		zValidator("param", runParamSchema, zodProblemHook),
 		(c) => {
 			const { id } = c.req.valid("param");
+			const run = repo.getRunById(id);
+			if (!run) throw new ProblemDetailsError(404, "Not found");
+			if (run.status !== "running") {
+				throw new ProblemDetailsError(409, `Run already ${run.status}`);
+			}
 			const killed = runner.kill(id);
-			if (!killed)
-				throw new ProblemDetailsError(404, "Run not found or not running");
-			return c.json({ killed: true });
+			return c.json({ killed });
 		},
 	);
 
@@ -132,6 +174,10 @@ const runParamSchema = z.object({
 	id: z.string().min(1).transform(brandRunId),
 });
 
+const runEventsQuerySchema = z.object({
+	since: z.string().min(1).optional(),
+});
+
 type RunWire = {
 	id: string;
 	status: Run["status"];
@@ -152,6 +198,27 @@ type RunWire = {
 };
 
 type StepWire = Omit<RunStepRow, "runId">;
+
+async function writeFrame(
+	stream: {
+		writeSSE: (frame: {
+			id?: string;
+			event: string;
+			data: string;
+		}) => Promise<void>;
+	},
+	event: RunEvent,
+): Promise<void> {
+	try {
+		await stream.writeSSE({
+			id: event.id,
+			event: event.kind,
+			data: JSON.stringify(event),
+		});
+	} catch {
+		// stream aborted; cleanup runs via onAbort
+	}
+}
 
 function runToWire(run: Run): RunWire {
 	const base: Omit<RunWire, "completedAt" | "durationMs" | "error"> = {

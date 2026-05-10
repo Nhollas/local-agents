@@ -9,7 +9,7 @@ import {
 import type { RepoWorkflow, WorkflowStep } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
-import { logAgentMessage } from "./agent-logging.ts";
+import { emitAgentMessageEvents } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 
 type StepRunRepository = Pick<
@@ -107,8 +107,9 @@ async function runWorkflowStep({
 	const startedAt = new Date(startedAtMs).toISOString();
 	let currentSessionId = resumeSessionId;
 	runRepo.startStep(ctx.runId, stepIndex, { startedAt });
-	ctx.emitStepEvent({
-		type: "step.started",
+	ctx.emit({
+		kind: "step:started",
+		stepName: step.name,
 		data: { name: step.name, index: stepIndex, total: totalSteps },
 	});
 
@@ -138,7 +139,7 @@ async function runWorkflowStep({
 			...(outputFormat && { outputFormat }),
 		})) {
 			if (msg.type === "assistant") {
-				logAgentMessage(msg, cwd, ctx.emitToolUse);
+				emitAgentMessageEvents(msg, { ctx, stepName: step.name, cwd });
 				currentSessionId = msg.session_id;
 				continue;
 			}
@@ -179,17 +180,19 @@ async function runWorkflowStep({
 		});
 		canonicalLog.increment("steps_completed");
 		canonicalLog.incrementMap("step_durations_ms", step.name, durationMs);
-		ctx.emitStepEvent({
-			type: "step.completed",
+		ctx.emit({
+			kind: "step:completed",
+			stepName: step.name,
 			data: { name: step.name, index: stepIndex, durationMs },
 		});
 		return currentSessionId;
 	} catch (err) {
 		const error = err instanceof Error ? err.message : String(err);
 		const completedAtMs = Date.now();
+		const durationMs = completedAtMs - startedAtMs;
 		runRepo.failStep(ctx.runId, stepIndex, {
 			completedAt: new Date(completedAtMs).toISOString(),
-			durationMs: completedAtMs - startedAtMs,
+			durationMs,
 			error,
 		});
 		runRepo.addRunUsage(ctx.runId, {
@@ -200,9 +203,10 @@ async function runWorkflowStep({
 		canonicalLog.set({
 			failed_step: { name: step.name, index: stepIndex, error },
 		});
-		ctx.emitStepEvent({
-			type: "step.failed",
-			data: { name: step.name, index: stepIndex, error },
+		ctx.emit({
+			kind: "step:failed",
+			stepName: step.name,
+			data: { name: step.name, index: stepIndex, error, durationMs },
 		});
 		throw err;
 	}

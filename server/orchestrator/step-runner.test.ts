@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as canonicalLog from "../canonical-log.ts";
-import type { StepEvent } from "../event-bus.ts";
+import type { RunEvent } from "../event-bus.ts";
 import type { RunRepository } from "../run-repository.ts";
-import type { RunContext } from "../runner/runner.ts";
+import type { EmitInput, RunContext } from "../runner/runner.ts";
 import {
 	buildAssistantMessage,
 	buildErrorResult,
@@ -84,17 +84,20 @@ type StepRepoSubset = Pick<
 type ContextRecorder = {
 	ctx: RunContext;
 	runRepo: StepRepoSubset;
-	stepEvents: StepEvent[];
+	emitted: EmitInput[];
 	stepOutputs: { runId: RunId; name: string; value: unknown }[];
 };
 
 function createCtx(): ContextRecorder {
-	const stepEvents: StepEvent[] = [];
+	const emitted: EmitInput[] = [];
 	const stepOutputs: { runId: RunId; name: string; value: unknown }[] = [];
 	const ctx: RunContext = {
 		runId: runId("test-run"),
-		emitToolUse: () => {},
-		emitStepEvent: (event) => stepEvents.push(event),
+		emit: ((input: EmitInput) => {
+			emitted.push(input);
+			return {} as RunEvent;
+		}) as RunContext["emit"],
+		updateToolBashState: () => undefined,
 		signal: new AbortController().signal,
 	};
 	const runRepo: StepRepoSubset = {
@@ -106,7 +109,7 @@ function createCtx(): ContextRecorder {
 		failStep: () => {},
 		addRunUsage: () => {},
 	};
-	return { ctx, runRepo, stepEvents, stepOutputs };
+	return { ctx, runRepo, emitted, stepOutputs };
 }
 
 type ScriptedCall = AgentInvokeOptions;
@@ -211,19 +214,21 @@ describe("runWorkflowSteps", () => {
 			{ runId: recorder.ctx.runId, name: "summarise", value: structured },
 		]);
 		expect(outputs).toEqual({ summarise: structured });
-		expect(recorder.stepEvents).toEqual([
+		expect(recorder.emitted).toEqual([
 			{
-				type: "step.started",
+				kind: "step:started",
+				stepName: "summarise",
 				data: { name: "summarise", index: 1, total: 1 },
 			},
 			{
-				type: "step.completed",
+				kind: "step:completed",
+				stepName: "summarise",
 				data: { name: "summarise", index: 1, durationMs: expect.any(Number) },
 			},
 		]);
 	});
 
-	it("aborts with step.failed when result.subtype is error_max_structured_output_retries", async () => {
+	it("aborts with step:failed when result.subtype is error_max_structured_output_retries", async () => {
 		const recorder = createCtx();
 		const agent = createAgent(async function* () {
 			yield buildErrorResult({
@@ -260,17 +265,20 @@ describe("runWorkflowSteps", () => {
 		).rejects.toThrow(/error_max_structured_output_retries/);
 
 		expect(agent.calls).toHaveLength(1);
-		expect(recorder.stepEvents).toEqual([
+		expect(recorder.emitted).toEqual([
 			{
-				type: "step.started",
+				kind: "step:started",
+				stepName: "summarise",
 				data: { name: "summarise", index: 1, total: 2 },
 			},
 			{
-				type: "step.failed",
+				kind: "step:failed",
+				stepName: "summarise",
 				data: {
 					name: "summarise",
 					index: 1,
 					error: expect.stringMatching(/error_max_structured_output_retries/),
+					durationMs: expect.any(Number),
 				},
 			},
 		]);
@@ -305,13 +313,15 @@ describe("runWorkflowSteps", () => {
 		});
 
 		expect(recorder.stepOutputs).toEqual([]);
-		expect(recorder.stepEvents).toEqual([
+		expect(recorder.emitted).toEqual([
 			{
-				type: "step.started",
+				kind: "step:started",
+				stepName: "implement",
 				data: { name: "implement", index: 1, total: 1 },
 			},
 			{
-				type: "step.completed",
+				kind: "step:completed",
+				stepName: "implement",
 				data: { name: "implement", index: 1, durationMs: expect.any(Number) },
 			},
 		]);

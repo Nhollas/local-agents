@@ -44,3 +44,90 @@ export type RunDetail = {
 	run: Run;
 	steps: Step[];
 };
+
+type RunEventBase = {
+	id: string;
+	seq: number;
+	runId: string;
+	stepName: string | null;
+	createdAt: string;
+};
+
+export type ToolBashState = "running" | "exited" | "aborted";
+
+export type RunEvent =
+	| (RunEventBase & {
+			kind: "run:started";
+			data: { issueKey: string | null; issueTitle: string | null };
+	  })
+	| (RunEventBase & {
+			kind: "run:completed";
+			data: {
+				durationMs: number;
+				costUsd: number;
+				tokens: { in: number; out: number };
+			};
+	  })
+	| (RunEventBase & {
+			kind: "run:failed";
+			data: { error: string; durationMs: number };
+	  })
+	| (RunEventBase & {
+			kind: "step:started";
+			data: { name: string; index: number; total: number };
+	  })
+	| (RunEventBase & {
+			kind: "step:completed";
+			data: { name: string; index: number; durationMs: number };
+	  })
+	| (RunEventBase & {
+			kind: "step:failed";
+			data: {
+				name: string;
+				index: number;
+				error: string;
+				durationMs: number;
+			};
+	  })
+	| (RunEventBase & { kind: "agent:say"; data: { text: string } })
+	| (RunEventBase & {
+			kind: "tool:read";
+			data: { path: string; lines: number };
+	  })
+	| (RunEventBase & {
+			kind: "tool:edit";
+			data: {
+				path: string;
+				added: number;
+				removed: number;
+				summary: string;
+			};
+	  })
+	| (RunEventBase & {
+			kind: "tool:grep";
+			data: { pattern: string; path: string; matches: number };
+	  })
+	| (RunEventBase & {
+			kind: "tool:bash";
+			data: {
+				command: string;
+				cwd: string | null;
+				state: ToolBashState;
+				exitCode: number | null;
+			};
+	  })
+	| (RunEventBase & {
+			kind: "tool:other";
+			data: { tool: string; summary: string };
+	  })
+	| (RunEventBase & {
+			kind: "system";
+			data: {
+				message: string;
+				command: string | null;
+				path: string | null;
+				exitCode: number | null;
+			};
+	  });
+
+export type RunEventKind = RunEvent["kind"];

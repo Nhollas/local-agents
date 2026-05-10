@@ -1,3 +1,4 @@
+import { killRun } from "../lib/api.ts";
 import {
 	formatCost,
 	formatElapsed,
@@ -68,7 +69,14 @@ export function RunBanner({ run }: Props) {
 				<div className="banner-actions">
 					<StatusTag status={run.status} />
 					{run.status === "running" && (
-						<button type="button" className="btn danger" disabled>
+						<button
+							type="button"
+							className="btn danger"
+							data-testid="kill-button"
+							onClick={() => {
+								void killRun(run.id);
+							}}
+						>
 							Kill <span className="key">K</span>
 						</button>
 					)}

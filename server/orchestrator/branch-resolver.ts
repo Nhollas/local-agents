@@ -2,7 +2,7 @@ import type { Issue } from "../trackers/types.ts";
 import type { WorkflowBranch } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
-import { logAgentMessage } from "./agent-logging.ts";
+import { trackAgentToolUseBag } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 
 type ResolveBranchParams = {
@@ -40,7 +40,7 @@ export async function resolveBranch({
 		outputFormat,
 	})) {
 		if (msg.type === "assistant") {
-			logAgentMessage(msg, cwd);
+			trackAgentToolUseBag(msg);
 			continue;
 		}
 		if (msg.type !== "result") continue;

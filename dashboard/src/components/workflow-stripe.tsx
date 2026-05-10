@@ -1,5 +1,9 @@
-import { formatStepDuration, formatStepNumber } from "../lib/format.ts";
-import type { RunStepState, Step } from "../lib/types.ts";
+import {
+	formatStepDuration,
+	formatStepNumber,
+	STEP_STATE_CLASS,
+} from "../lib/format.ts";
+import type { Step } from "../lib/types.ts";
 
 type Props = {
 	steps: Step[];
@@ -12,7 +16,7 @@ export function WorkflowStripe({ steps }: Props) {
 				{steps.map((step) => (
 					<div
 						key={step.index}
-						className={`ws ${STATE_CLASS[step.state]}`}
+						className={`ws ${STEP_STATE_CLASS[step.state]}`}
 						data-testid={`step-${step.index}`}
 					>
 						<div className="num mono">{formatStepNumber(step.index)}</div>
@@ -24,10 +28,3 @@ export function WorkflowStripe({ steps }: Props) {
 		</div>
 	);
 }
-
-const STATE_CLASS: Record<RunStepState, string> = {
-	pending: "",
-	running: "now",
-	completed: "done",
-	failed: "failed",
-};

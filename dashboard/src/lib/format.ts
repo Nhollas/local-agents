@@ -1,3 +1,5 @@
+import type { RunStepState } from "./types.ts";
+
 export function formatTime(iso: string): string {
 	const d = new Date(iso);
 	const hh = String(d.getHours()).padStart(2, "0");
@@ -36,3 +38,10 @@ export function formatTokens(total: number | null): string {
 export function formatStepNumber(index: number): string {
 	return String(index).padStart(2, "0");
 }
+
+export const STEP_STATE_CLASS: Record<RunStepState, string> = {
+	pending: "",
+	running: "now",
+	completed: "done",
+	failed: "failed",
+};

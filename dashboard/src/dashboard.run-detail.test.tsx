@@ -4,6 +4,7 @@ import { test } from "./testing/fixture.tsx";
 import {
 	runDetailHandler,
 	runDetailNotFoundHandler,
+	runEventsHandler,
 } from "./testing/handlers.ts";
 import { browserWorker } from "./testing/msw.ts";
 
@@ -12,6 +13,7 @@ describe("dashboard centre column", () => {
 		dashboardPage,
 	}) => {
 		browserWorker.use(
+			runEventsHandler("run_9f3b2e1c"),
 			runDetailHandler(
 				"run_9f3b2e1c",
 				createRunDetail({
@@ -63,6 +65,7 @@ describe("dashboard centre column", () => {
 		dashboardPage,
 	}) => {
 		browserWorker.use(
+			runEventsHandler("run-failed"),
 			runDetailHandler(
 				"run-failed",
 				createRunDetail({
@@ -110,7 +113,10 @@ describe("dashboard centre column", () => {
 	test("shows the error placeholder when the run is unknown", async ({
 		dashboardPage,
 	}) => {
-		browserWorker.use(runDetailNotFoundHandler("missing"));
+		browserWorker.use(
+			runEventsHandler("missing"),
+			runDetailNotFoundHandler("missing"),
+		);
 		const page = await dashboardPage.mountAt("missing");
 		await page.expectPlaceholder(/404|failed/i);
 	});
