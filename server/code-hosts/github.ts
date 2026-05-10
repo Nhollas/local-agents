@@ -13,6 +13,10 @@ export function githubCodeHostAdapter(
 			return `https://x-access-token:${encodeURIComponent(cloneToken)}@github.com/${repo}.git`;
 		},
 
+		repoUrl(repo): string {
+			return `https://github.com/${repo}`;
+		},
+
 		async defaultBranch(repo) {
 			const project = await client.getRepo(repo);
 			return project.default_branch;

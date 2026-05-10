@@ -26,6 +26,7 @@ const baseRunRow = {
 	branch: null,
 	workspaceDir: null,
 	issueUrl: null,
+	repoUrl: "https://code-host.example.test/acme/widgets",
 	costUsd: null,
 	tokensInput: null,
 	tokensOutput: null,
@@ -55,6 +56,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Test issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: () =>
 				new Promise((r) => {
 					resolveHandler = r;
@@ -90,6 +92,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#1"),
 			issueTitle: "Blocker",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: () =>
 				new Promise((r) => {
 					resolveBlocker = r;
@@ -102,6 +105,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Queued issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 		});
 
@@ -134,6 +138,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Fast issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: completedHandler,
 		});
 
@@ -166,6 +171,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#99"),
 			issueTitle: "Crash issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: failedHandler("catastrophic failure"),
 		});
 
@@ -186,6 +192,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#4"),
 			issueTitle: "Lifecycle issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: completedHandler,
 		});
 
@@ -226,6 +233,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#5"),
 			issueTitle: "Fail event issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: failedHandler("boom"),
 		});
 
@@ -265,6 +273,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#6"),
 			issueTitle: "Tool issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: async (ctx) => {
 				ctx.emit({
 					kind: "tool:read",
@@ -340,6 +349,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#8"),
 			issueTitle: "Killed mid-bash",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: async (ctx) => {
 				ctx.emit({
 					kind: "tool:bash",
@@ -379,6 +389,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#9"),
 			issueTitle: "Bash exits normally",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: async (ctx) => {
 				ctx.emit({
 					kind: "tool:bash",
@@ -409,6 +420,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#7"),
 			issueTitle: "Killable issue",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: () => new Promise(() => {}), // never resolves naturally
 		});
 
@@ -451,6 +463,7 @@ describe("Runner integration", () => {
 			issueKey: ik("acme/widgets#10"),
 			issueTitle: "Default concurrency",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: completedHandler,
 		});
 

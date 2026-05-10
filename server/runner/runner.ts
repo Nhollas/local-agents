@@ -33,6 +33,7 @@ export type RunContext = {
 
 export type AgentJob = {
 	repo: RepoSlug;
+	repoUrl: string;
 	issueKey: IssueKey;
 	issueTitle: string;
 	issueUrl: string | null;
@@ -123,6 +124,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		repo.insertRun({
 			id,
 			repo: job.repo,
+			repoUrl: job.repoUrl,
 			issueKey: job.issueKey,
 			issueTitle: job.issueTitle,
 			issueUrl: job.issueUrl,

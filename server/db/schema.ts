@@ -14,6 +14,7 @@ export const runs = sqliteTable("runs", {
 	status: text("status").notNull().$type<RunStatus>(),
 	error: text("error"),
 	repo: text("repo").notNull().$type<RepoSlug>(),
+	repoUrl: text("repo_url"),
 	branch: text("branch"),
 	workspaceDir: text("workspace_dir"),
 	issueKey: text("issue_key").$type<IssueKey>(),

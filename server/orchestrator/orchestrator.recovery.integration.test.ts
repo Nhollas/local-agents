@@ -19,6 +19,7 @@ const baseRunRow = {
 	branch: null,
 	workspaceDir: null,
 	issueUrl: null,
+	repoUrl: null,
 	costUsd: null,
 	tokensInput: null,
 	tokensOutput: null,

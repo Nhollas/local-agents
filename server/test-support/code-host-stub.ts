@@ -45,6 +45,10 @@ export function createCodeHostStub(): CodeHostStub {
 			);
 		},
 
+		repoUrl(repo) {
+			return `https://code-host.example.test/${repo}`;
+		},
+
 		async defaultBranch(repo) {
 			return defaultBranches.get(repo) ?? "main";
 		},

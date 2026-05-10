@@ -1,7 +1,7 @@
 import type { RunStepState } from "./types.ts";
 
-export function formatTime(iso: string): string {
-	const d = new Date(iso);
+export function formatTime(input: string | number | Date): string {
+	const d = input instanceof Date ? input : new Date(input);
 	const hh = String(d.getHours()).padStart(2, "0");
 	const mm = String(d.getMinutes()).padStart(2, "0");
 	const ss = String(d.getSeconds()).padStart(2, "0");

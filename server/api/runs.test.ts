@@ -7,6 +7,7 @@ const baseRunWire = {
 	branch: null,
 	workspaceDir: null,
 	issueUrl: null,
+	repoUrl: null,
 	costUsd: null,
 	tokensInput: null,
 	tokensOutput: null,
@@ -283,6 +284,7 @@ describe("GET /runs/:id", () => {
 				status: "running",
 				error: null,
 				repo: "acme/api",
+				repoUrl: null,
 				branch: "fix/ACME-1284-npm-install-hang",
 				workspaceDir: "/tmp/lag/9f3b2e1",
 				issueKey: "acme/api#1284",
@@ -365,6 +367,7 @@ describe("POST /runs/:id/kill", () => {
 			issueKey: issueKey("test/repo#1"),
 			issueTitle: "Long running job",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/test/repo",
 			handler: () => new Promise(() => {}),
 		});
 
@@ -429,6 +432,7 @@ describe("GET /runs/:id/events", () => {
 			issueKey: issueKey("test/repo#1"),
 			issueTitle: "Event ordering",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/test/repo",
 			handler: async (ctx) => {
 				ctx.emit({
 					kind: "agent:say",
@@ -470,6 +474,7 @@ describe("GET /runs/:id/events", () => {
 			issueKey: issueKey("test/repo#2"),
 			issueTitle: "Since cursor",
 			issueUrl: null,
+			repoUrl: "https://code-host.example.test/test/repo",
 			handler: async (ctx) => {
 				ctx.emit({
 					kind: "agent:say",

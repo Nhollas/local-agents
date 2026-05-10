@@ -8,6 +8,7 @@ const baseRunRow = {
 	branch: null,
 	workspaceDir: null,
 	issueUrl: null,
+	repoUrl: null,
 	costUsd: null,
 	tokensInput: null,
 	tokensOutput: null,
@@ -25,6 +26,7 @@ function dispatchedRunRow(issueNum: number) {
 		branch: `agent/issue-${issueNum}`,
 		workspaceDir: expect.any(String),
 		issueUrl: `https://tracker.example.test/browse/${jiraIssueKey(issueNum)}`,
+		repoUrl: `https://code-host.example.test/${REPO}`,
 	};
 }
 

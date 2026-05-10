@@ -17,6 +17,7 @@ export function RunBanner({ run }: Props) {
 	const elapsedMs =
 		run.durationMs ?? Math.max(0, now - new Date(run.startedAt).getTime());
 	const tokens = (run.tokensInput ?? 0) + (run.tokensOutput ?? 0);
+	const hasUsage = (run.costUsd ?? 0) > 0 || tokens > 0;
 
 	return (
 		<div className="run-banner" data-testid="run-banner">
@@ -38,7 +39,11 @@ export function RunBanner({ run }: Props) {
 						)}
 						<span>
 							<span className="label">Repo</span>
-							{run.repo}
+							{run.repoUrl != null ? (
+								<a href={run.repoUrl}>{run.repo}</a>
+							) : (
+								run.repo
+							)}
 						</span>
 						{run.branch != null && (
 							<span>
@@ -54,11 +59,13 @@ export function RunBanner({ run }: Props) {
 							<span className="label">Elapsed</span>
 							<span className="mono">{formatElapsed(elapsedMs)}</span>
 						</span>
-						<span>
-							<span className="label">Cost</span>
-							{formatCost(run.costUsd)}{" "}
-							<span className="dim">· {formatTokens(tokens)}</span>
-						</span>
+						{hasUsage && (
+							<span>
+								<span className="label">Cost</span>
+								{formatCost(run.costUsd)}{" "}
+								<span className="dim">· {formatTokens(tokens)}</span>
+							</span>
+						)}
 						{run.workspaceDir != null && (
 							<span>
 								<span className="label">Workspace</span>

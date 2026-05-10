@@ -14,6 +14,7 @@ export function createRun(overrides: Partial<Run> = {}): Run {
 		id: "run-1",
 		status: "running",
 		repo: "acme/api",
+		repoUrl: null,
 		branch: null,
 		workspaceDir: null,
 		issueKey: null,

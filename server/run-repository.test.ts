@@ -27,6 +27,7 @@ describe("run repository row projection", () => {
 			id: "failed-1",
 			status: "failed",
 			repo: "acme/widgets",
+			repoUrl: null,
 			branch: null,
 			workspaceDir: null,
 			issueKey: "acme/widgets#1",
