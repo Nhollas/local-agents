@@ -1,4 +1,4 @@
-import type { QueueSnapshot, RunDetail, RunEvent } from "./types.ts";
+import type { QueueSnapshot, RunDetail, RunEvent, Stats } from "./types.ts";
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 	const res = await fetch(url, init);
@@ -23,5 +23,10 @@ export async function killRun(runId: string): Promise<{ killed: boolean }> {
 
 export async function fetchQueueSnapshot(): Promise<QueueSnapshot> {
 	const res = await apiFetch("/queue");
+	return res.json();
+}
+
+export async function fetchStats(): Promise<Stats> {
+	const res = await apiFetch("/stats");
 	return res.json();
 }

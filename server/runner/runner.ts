@@ -53,6 +53,7 @@ export type Runner = {
 	enqueue(job: AgentJob): RunHandle;
 	kill(runId: RunId): boolean;
 	readonly queue: JobQueue;
+	readonly maxConcurrency: number;
 };
 
 type RunnerConfig = {
@@ -60,13 +61,12 @@ type RunnerConfig = {
 	maxConcurrency?: number;
 };
 
+const DEFAULT_MAX_CONCURRENCY = 5;
+
 export function createRunner(config: RunnerConfig): Runner {
 	const { repo } = config;
-	const queue = createJobQueue(
-		config.maxConcurrency != null
-			? { maxConcurrency: config.maxConcurrency }
-			: {},
-	);
+	const maxConcurrency = config.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+	const queue = createJobQueue({ maxConcurrency });
 	const activeRuns = new Map<RunId, AbortController>();
 
 	function emitFor<K extends RunEventKind>(
@@ -209,6 +209,6 @@ export function createRunner(config: RunnerConfig): Runner {
 		return { runId: id, done };
 	}
 
-	const runner: Runner = { enqueue, kill, queue };
+	const runner: Runner = { enqueue, kill, queue, maxConcurrency };
 	return runner;
 }

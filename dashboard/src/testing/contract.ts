@@ -5,6 +5,7 @@ import type {
 	Run,
 	RunDetail,
 	RunEvent,
+	Stats,
 	Step,
 } from "../lib/types.ts";
 
@@ -91,6 +92,26 @@ export function createQueueSnapshot(
 	return {
 		active: overrides.active ?? [],
 		queued: overrides.queued ?? [],
+	};
+}
+
+export function createStats(overrides: Partial<Stats> = {}): Stats {
+	return {
+		asOf: "2026-05-09T14:32:08.000Z",
+		running: { active: 0, max: 0 },
+		queued: { count: 0 },
+		last24h: {
+			completed: 0,
+			completedDelta: 0,
+			failed: 0,
+			successRate: 1,
+			spendUsd: 0,
+			spendDeltaUsd: 0,
+			p50DurationMs: 0,
+			p95DurationMs: 0,
+			durationSparkline: [],
+		},
+		...overrides,
 	};
 }
 

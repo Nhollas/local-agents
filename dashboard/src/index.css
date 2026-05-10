@@ -127,6 +127,103 @@ header.app .meta-right {
 	color: var(--fg-3);
 }
 
+/* ───── overview strip ───── */
+
+.overview {
+	border-bottom: var(--b);
+	border-left: var(--b);
+	border-right: var(--b);
+	background: var(--bg);
+	display: grid;
+	grid-template-columns: repeat(6, 1fr);
+	max-width: 1800px;
+	margin: 0 auto;
+	width: 100%;
+}
+
+.stat {
+	padding: 18px 22px 18px;
+	border-right: var(--b);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.stat:last-child {
+	border-right: none;
+}
+
+.stat .label {
+	font-size: 11.5px;
+	color: var(--fg-3);
+	letter-spacing: 0;
+	font-weight: 450;
+}
+
+.stat .value {
+	font-size: 24px;
+	font-weight: 500;
+	letter-spacing: -0.025em;
+	line-height: 1;
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+
+.stat .value-small {
+	font-size: 18px;
+}
+
+.stat .value .dim {
+	color: var(--fg-4);
+	font-weight: 400;
+	font-size: 16px;
+}
+
+.stat .note {
+	font-size: 11.5px;
+	color: var(--fg-3);
+	font-variant-numeric: tabular-nums;
+}
+
+.stat .note .delta {
+	color: var(--completed);
+	font-variant-numeric: tabular-nums;
+}
+
+.stat .note .delta.down {
+	color: var(--failed);
+}
+
+.stat .running-pip {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--running);
+	margin-right: 6px;
+	vertical-align: 1px;
+	animation: breathe 1.6s ease-in-out infinite;
+}
+
+.spark {
+	display: flex;
+	align-items: end;
+	gap: 2px;
+	height: 14px;
+	margin-top: 2px;
+}
+
+.spark span {
+	width: 4px;
+	background: var(--fg-5);
+	border-radius: 1px;
+}
+
+.spark span.live {
+	background: var(--running);
+}
+
 /* ───── shell ───── */
 
 .shell {

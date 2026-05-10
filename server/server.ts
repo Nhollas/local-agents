@@ -4,6 +4,7 @@ import { createCodeHost } from "./code-hosts/create-code-host.ts";
 import { loadConfig } from "./config.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
+import { readLast24hStats } from "./db/stats-query.ts";
 import { env } from "./env.ts";
 import { createLogger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
@@ -69,6 +70,7 @@ const app = createApi({
 	runner,
 	repo,
 	queue: orchestrator,
+	readStats: (now) => readLast24hStats(db, now),
 	checkHealth,
 	logger,
 });

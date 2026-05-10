@@ -64,6 +64,23 @@ export type QueueSnapshot = {
 	queued: QueuedItem[];
 };
 
+export type Stats = {
+	asOf: string;
+	running: { active: number; max: number };
+	queued: { count: number };
+	last24h: {
+		completed: number;
+		completedDelta: number;
+		failed: number;
+		successRate: number;
+		spendUsd: number;
+		spendDeltaUsd: number;
+		p50DurationMs: number;
+		p95DurationMs: number;
+		durationSparkline: number[];
+	};
+};
+
 type RunEventBase = {
 	id: string;
 	seq: number;
