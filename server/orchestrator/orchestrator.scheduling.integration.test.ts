@@ -4,6 +4,28 @@ import { hangingAgent, jiraIssueKey, REPO } from "../test-support/fixtures.ts";
 import { seedRun } from "../test-support/test-db.ts";
 import { createTestOrchestrator } from "../test-support/test-orchestrator.ts";
 
+const baseRunRow = {
+	branch: null,
+	workspaceDir: null,
+	issueUrl: null,
+	costUsd: null,
+	tokensInput: null,
+	tokensOutput: null,
+	prUrl: null,
+	prNumber: null,
+	prRepo: null,
+	prKind: null,
+};
+
+function dispatchedRunRow(issueNum: number) {
+	return {
+		...baseRunRow,
+		branch: `agent/issue-${issueNum}`,
+		workspaceDir: expect.any(String),
+		issueUrl: `https://tracker.example.test/browse/${jiraIssueKey(issueNum)}`,
+	};
+}
+
 describe("Orchestrator scheduling", () => {
 	it("transitions pending → running on dispatch", async () => {
 		await using ctx = await createTestOrchestrator({
@@ -19,7 +41,7 @@ describe("Orchestrator scheduling", () => {
 		expect(allRuns).toEqual([
 			{
 				id: expect.any(String),
-				agentName: "issue-1",
+				...dispatchedRunRow(1),
 				status: "running",
 				error: null,
 				repo: REPO,
@@ -57,7 +79,7 @@ describe("Orchestrator scheduling", () => {
 		expect(allRuns).toEqual([
 			{
 				id: expect.any(String),
-				agentName: "issue-1",
+				...dispatchedRunRow(1),
 				status: "running",
 				error: null,
 				repo: REPO,
@@ -176,7 +198,7 @@ describe("Orchestrator scheduling", () => {
 
 		seedRun(db, {
 			id: "stale-run",
-			agentName: "issue-99",
+			...baseRunRow,
 			status: "running",
 			issueKey: jiraIssueKey(99),
 			issueTitle: "Stale issue",
@@ -197,7 +219,7 @@ describe("Orchestrator scheduling", () => {
 		expect(allRuns).toEqual([
 			{
 				id: "stale-run",
-				agentName: "issue-99",
+				...baseRunRow,
 				status: "failed",
 				error: "Stale run from previous session",
 				repo: REPO,
@@ -209,7 +231,7 @@ describe("Orchestrator scheduling", () => {
 			},
 			{
 				id: expect.any(String),
-				agentName: "issue-1",
+				...dispatchedRunRow(1),
 				status: "running",
 				error: null,
 				repo: REPO,

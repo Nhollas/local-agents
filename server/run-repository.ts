@@ -1,24 +1,39 @@
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import type { Db } from "./db/db.ts";
 import {
+	type PrKind,
 	type RunEventType,
 	type RunStatus,
 	runEvents,
 	runStepOutputs,
+	runSteps,
 	runs,
 } from "./db/schema.ts";
 import type { IssueKey, RepoSlug, RunId } from "./types/brands.ts";
 
+export type RunPr = {
+	repo: string;
+	number: number;
+	url: string;
+	kind: PrKind;
+};
+
 type RunBase = {
 	id: RunId;
-	agentName: string;
 	repo: RepoSlug;
+	branch: string | null;
+	workspaceDir: string | null;
 	issueKey: IssueKey | null;
 	issueTitle: string | null;
+	issueUrl: string | null;
 	startedAt: string;
+	costUsd: number | null;
+	tokensInput: number | null;
+	tokensOutput: number | null;
+	pr: RunPr | null;
 };
 
 export type RunningRun = RunBase & { status: "running" };
@@ -38,13 +53,21 @@ export type Run = RunningRun | CompletedRun | FailedRun;
 
 export type RunEvent = typeof runEvents.$inferSelect;
 
+export type RunStep = typeof runSteps.$inferSelect;
+
+export type StepUsage = {
+	costUsd: number;
+	tokensInput: number;
+	tokensOutput: number;
+};
+
 export type RunRepository = {
 	insertRun(run: {
 		id: RunId;
-		agentName: string;
 		repo: RepoSlug;
 		issueKey: IssueKey;
 		issueTitle: string;
+		issueUrl: string | null;
 		startedAt: string;
 	}): void;
 	completeRun(
@@ -55,6 +78,10 @@ export type RunRepository = {
 		runId: RunId,
 		params: { error: string; completedAt: string; durationMs?: number },
 	): void;
+	setRunBranch(runId: RunId, branch: string): void;
+	setRunWorkspaceDir(runId: RunId, workspaceDir: string): void;
+	setRunPr(runId: RunId, pr: RunPr): void;
+	addRunUsage(runId: RunId, usage: StepUsage): void;
 	insertEvent(event: {
 		runId: RunId;
 		type: RunEventType;
@@ -64,11 +91,31 @@ export type RunRepository = {
 	getRunningSnapshot(): { id: RunId; issueKey: IssueKey; repo: RepoSlug }[];
 	getRunById(id: RunId): Run | undefined;
 	getRuns(filters: {
-		agent?: string | undefined;
 		status?: RunStatus | undefined;
+		repo?: RepoSlug | undefined;
 		limit: number;
 	}): Run[];
 	getRunEvents(runId: RunId): RunEvent[];
+	insertSteps(
+		runId: RunId,
+		steps: ReadonlyArray<{ index: number; name: string }>,
+	): void;
+	startStep(
+		runId: RunId,
+		stepIndex: number,
+		params: { startedAt: string },
+	): void;
+	completeStep(
+		runId: RunId,
+		stepIndex: number,
+		params: { completedAt: string; durationMs: number },
+	): void;
+	failStep(
+		runId: RunId,
+		stepIndex: number,
+		params: { completedAt: string; durationMs: number; error: string },
+	): void;
+	getRunSteps(runId: RunId): RunStep[];
 	writeStepOutput(runId: RunId, stepName: string, value: unknown): void;
 };
 
@@ -99,6 +146,37 @@ export function createRunRepository(db: Db): RunRepository {
 				.run();
 		},
 
+		setRunBranch(runId, branch) {
+			db.update(runs).set({ branch }).where(eq(runs.id, runId)).run();
+		},
+
+		setRunWorkspaceDir(runId, workspaceDir) {
+			db.update(runs).set({ workspaceDir }).where(eq(runs.id, runId)).run();
+		},
+
+		setRunPr(runId, pr) {
+			db.update(runs)
+				.set({
+					prRepo: pr.repo,
+					prNumber: pr.number,
+					prUrl: pr.url,
+					prKind: pr.kind,
+				})
+				.where(eq(runs.id, runId))
+				.run();
+		},
+
+		addRunUsage(runId, usage) {
+			db.update(runs)
+				.set({
+					costUsd: sql`COALESCE(${runs.costUsd}, 0) + ${usage.costUsd}`,
+					tokensInput: sql`COALESCE(${runs.tokensInput}, 0) + ${usage.tokensInput}`,
+					tokensOutput: sql`COALESCE(${runs.tokensOutput}, 0) + ${usage.tokensOutput}`,
+				})
+				.where(eq(runs.id, runId))
+				.run();
+		},
+
 		insertEvent(event) {
 			db.insert(runEvents)
 				.values({ id: randomUUID(), ...event })
@@ -124,8 +202,8 @@ export function createRunRepository(db: Db): RunRepository {
 
 		getRuns(filters) {
 			const conditions = [];
-			if (filters.agent) conditions.push(eq(runs.agentName, filters.agent));
 			if (filters.status) conditions.push(eq(runs.status, filters.status));
+			if (filters.repo) conditions.push(eq(runs.repo, filters.repo));
 
 			const query = db
 				.select()
@@ -149,6 +227,59 @@ export function createRunRepository(db: Db): RunRepository {
 				.all();
 		},
 
+		insertSteps(runId, steps) {
+			if (steps.length === 0) return;
+			db.insert(runSteps)
+				.values(
+					steps.map((s) => ({
+						runId,
+						index: s.index,
+						name: s.name,
+						state: "pending" as const,
+					})),
+				)
+				.run();
+		},
+
+		startStep(runId, stepIndex, params) {
+			db.update(runSteps)
+				.set({ state: "running", startedAt: params.startedAt })
+				.where(and(eq(runSteps.runId, runId), eq(runSteps.index, stepIndex)))
+				.run();
+		},
+
+		completeStep(runId, stepIndex, params) {
+			db.update(runSteps)
+				.set({
+					state: "completed",
+					completedAt: params.completedAt,
+					durationMs: params.durationMs,
+				})
+				.where(and(eq(runSteps.runId, runId), eq(runSteps.index, stepIndex)))
+				.run();
+		},
+
+		failStep(runId, stepIndex, params) {
+			db.update(runSteps)
+				.set({
+					state: "failed",
+					completedAt: params.completedAt,
+					durationMs: params.durationMs,
+					error: params.error,
+				})
+				.where(and(eq(runSteps.runId, runId), eq(runSteps.index, stepIndex)))
+				.run();
+		},
+
+		getRunSteps(runId) {
+			return db
+				.select()
+				.from(runSteps)
+				.where(eq(runSteps.runId, runId))
+				.orderBy(asc(runSteps.index))
+				.all();
+		},
+
 		writeStepOutput(runId, stepName, value) {
 			const createdAt = new Date().toISOString();
 			db.insert(runStepOutputs)
@@ -165,13 +296,32 @@ export function createRunRepository(db: Db): RunRepository {
 type RunRow = typeof runs.$inferSelect;
 
 function rowToRun(row: RunRow): Run {
+	const pr =
+		row.prRepo != null &&
+		row.prNumber != null &&
+		row.prUrl != null &&
+		row.prKind != null
+			? {
+					repo: row.prRepo,
+					number: row.prNumber,
+					url: row.prUrl,
+					kind: row.prKind,
+				}
+			: null;
+
 	const base: RunBase = {
 		id: row.id,
-		agentName: row.agentName,
 		repo: row.repo,
+		branch: row.branch,
+		workspaceDir: row.workspaceDir,
 		issueKey: row.issueKey,
 		issueTitle: row.issueTitle,
+		issueUrl: row.issueUrl,
 		startedAt: row.startedAt,
+		costUsd: row.costUsd,
+		tokensInput: row.tokensInput,
+		tokensOutput: row.tokensOutput,
+		pr,
 	};
 
 	switch (row.status) {

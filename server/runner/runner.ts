@@ -19,10 +19,10 @@ export type RunContext = {
 };
 
 export type AgentJob = {
-	name: string;
 	repo: RepoSlug;
 	issueKey: IssueKey;
 	issueTitle: string;
+	issueUrl: string | null;
 	handler: (ctx: RunContext) => Promise<RunResult>;
 };
 
@@ -62,7 +62,6 @@ export function createRunner(config: RunnerConfig): Runner {
 
 	function emitEvent(
 		id: RunId,
-		agentName: string,
 		event: EventPayload,
 		createdAt = new Date().toISOString(),
 	): void {
@@ -70,7 +69,6 @@ export function createRunner(config: RunnerConfig): Runner {
 		const fullEvent = {
 			...event,
 			runId: id,
-			agentName,
 			createdAt,
 		} as RunEvent;
 		repo.insertEvent({
@@ -105,16 +103,15 @@ export function createRunner(config: RunnerConfig): Runner {
 
 		repo.insertRun({
 			id,
-			agentName: job.name,
 			repo: job.repo,
 			issueKey: job.issueKey,
 			issueTitle: job.issueTitle,
+			issueUrl: job.issueUrl,
 			startedAt,
 		});
 
 		emitEvent(
 			id,
-			job.name,
 			{
 				type: "run:started",
 				data: { issueKey: job.issueKey, issueTitle: job.issueTitle },
@@ -126,14 +123,14 @@ export function createRunner(config: RunnerConfig): Runner {
 			const executionStart = Date.now();
 
 			const emitToolUse = (tool: string, target: string) => {
-				emitEvent(id, job.name, {
+				emitEvent(id, {
 					type: "run:tool_use",
 					data: { tool, target },
 				});
 			};
 
 			const emitStepEvent: RunContext["emitStepEvent"] = (event) => {
-				emitEvent(id, job.name, event);
+				emitEvent(id, event);
 			};
 
 			const abortPromise = new Promise<RunResult>((resolve) => {
@@ -163,7 +160,6 @@ export function createRunner(config: RunnerConfig): Runner {
 
 				emitEvent(
 					id,
-					job.name,
 					{ type: "run:completed", data: { durationMs: result.durationMs } },
 					completedAt,
 				);
@@ -176,7 +172,6 @@ export function createRunner(config: RunnerConfig): Runner {
 
 				emitEvent(
 					id,
-					job.name,
 					{
 						type: "run:failed",
 						data: { error: result.error, durationMs: result.durationMs },

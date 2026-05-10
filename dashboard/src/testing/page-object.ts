@@ -1,93 +1,44 @@
 import { expect } from "vitest";
-import type { BrowserPage } from "vitest/browser";
+import type { page as Page } from "vitest/browser";
 
-export function dashboardPageObject(page: BrowserPage) {
+type PageType = typeof Page;
+
+export function dashboardPageObject(page: PageType) {
 	const self = {
-		// --- Locators ---
+		getRunTitle: () => page.getByRole("heading", { level: 1 }),
+		getStatusTag: () => page.getByTestId("status-tag"),
+		getStepCell: (index: number) => page.getByTestId(`step-${index}`),
+		getMeta: () => page.getByTestId("run-meta"),
+		getPlaceholder: () => page.getByTestId("placeholder"),
 
-		getHeading: () => page.getByRole("heading", { name: "Agent Dashboard" }),
-		getConnectionStatus: () => page.getByRole("status"),
-		getEmptyState: () => page.getByText(/no agent activity yet/i),
-		getAgentSection: (name: string) => page.getByRole("region", { name }),
-		getRunButton: (runId: string) =>
-			page.getByRole("button", { name: `View run ${runId}` }),
-		getKillButton: (runId: string) =>
-			page.getByRole("button", { name: `Kill run ${runId}` }),
-		getBackButton: () => page.getByRole("button", { name: /back to feed/i }),
-		getRunDetailHeading: () => page.getByRole("heading", { level: 2 }),
-		getErrorAlert: () => page.getByRole("alert"),
-		getEventList: () => page.getByRole("list", { name: /events/i }),
-		getLoadingIndicator: () =>
-			page.getByRole("status", { name: "" }).getByText(/loading/i),
-
-		// --- Assertions ---
-
-		expectConnected: async () => {
-			await expect
-				.element(self.getConnectionStatus())
-				.toHaveTextContent("Connected");
+		expectTitle: async (title: string) => {
+			await expect.element(self.getRunTitle()).toHaveTextContent(title);
 		},
 
-		expectDisconnected: async () => {
-			await expect
-				.element(self.getConnectionStatus())
-				.toHaveTextContent("Disconnected");
+		expectStatusTag: async (label: string) => {
+			await expect.element(self.getStatusTag()).toHaveTextContent(label);
 		},
 
-		expectEmpty: async () => {
-			await expect.element(self.getEmptyState()).toBeVisible();
+		expectStepState: async (
+			index: number,
+			expected: { name: string; klass: "" | "now" | "done" | "failed" },
+		) => {
+			const cell = self.getStepCell(index);
+			await expect.element(cell).toHaveTextContent(expected.name);
+			if (expected.klass) {
+				await expect
+					.element(cell)
+					.toHaveClass(new RegExp(`\\b${expected.klass}\\b`));
+			}
 		},
 
-		expectAgentVisible: async (name: string) => {
-			await expect.element(self.getAgentSection(name)).toBeVisible();
+		expectMetaContains: async (text: string | RegExp) => {
+			await expect.element(self.getMeta()).toHaveTextContent(text);
 		},
 
-		expectRunVisible: async (runId: string) => {
-			await expect.element(self.getRunButton(runId)).toBeVisible();
-		},
-
-		expectRunCount: async (agentName: string, count: number) => {
-			await expect
-				.element(self.getAgentSection(agentName))
-				.toHaveTextContent(new RegExp(`${count} run\\(s\\)`));
-		},
-
-		expectLoading: async () => {
-			await expect.element(self.getLoadingIndicator()).toBeVisible();
-		},
-
-		expectRunDetails: async (agentName: string) => {
-			await expect.element(self.getRunDetailHeading()).toBeVisible();
-			await expect
-				.element(self.getRunDetailHeading())
-				.toHaveTextContent(agentName);
-		},
-
-		expectError: async (message: string) => {
-			await expect.element(self.getErrorAlert()).toBeVisible();
-			await expect.element(self.getErrorAlert()).toHaveTextContent(message);
-		},
-
-		expectEvents: async (count: number) => {
-			await expect.element(self.getEventList()).toBeVisible();
-			const items = self.getEventList().getByRole("listitem");
-			await expect.element(items.nth(count - 1)).toBeVisible();
-		},
-
-		// --- Actions ---
-
-		selectRun: async (runId: string) => {
-			await self.getRunButton(runId).click();
-		},
-
-		killRun: async (runId: string) => {
-			await self.getKillButton(runId).click();
-		},
-
-		goBack: async () => {
-			await self.getBackButton().click();
+		expectPlaceholder: async (text: string | RegExp) => {
+			await expect.element(self.getPlaceholder()).toHaveTextContent(text);
 		},
 	};
-
 	return Object.assign(page, self);
 }

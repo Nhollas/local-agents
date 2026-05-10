@@ -12,9 +12,14 @@ import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { logAgentMessage } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 
+type StepRunRepository = Pick<
+	RunRepository,
+	"writeStepOutput" | "startStep" | "completeStep" | "failStep" | "addRunUsage"
+>;
+
 type RunWorkflowStepsParams = {
 	ctx: RunContext;
-	runRepo: Pick<RunRepository, "writeStepOutput">;
+	runRepo: StepRunRepository;
 	agent: AgentInvoker;
 	workflow: RepoWorkflow;
 	issue: Issue;
@@ -40,7 +45,7 @@ export async function runWorkflowSteps({
 	let previousSessionId: string | undefined;
 	canonicalLog.set({ steps_total: steps.length, steps_completed: 0 });
 
-	for (const [index, step] of steps.entries()) {
+	for (const [zeroBasedIndex, step] of steps.entries()) {
 		const stepResumeSessionId = step.resume_previous
 			? previousSessionId
 			: undefined;
@@ -51,7 +56,7 @@ export async function runWorkflowSteps({
 			outputs,
 			agent,
 			step,
-			stepIndex: index,
+			stepIndex: zeroBasedIndex + 1,
 			totalSteps: steps.length,
 			issue,
 			branch,
@@ -69,7 +74,7 @@ export async function runWorkflowSteps({
 
 type RunWorkflowStepParams = {
 	ctx: RunContext;
-	runRepo: Pick<RunRepository, "writeStepOutput">;
+	runRepo: StepRunRepository;
 	outputs: Record<string, unknown>;
 	agent: AgentInvoker;
 	step: WorkflowStep;
@@ -98,12 +103,18 @@ async function runWorkflowStep({
 	model,
 	resumeSessionId,
 }: RunWorkflowStepParams): Promise<string | undefined> {
-	const startedAt = Date.now();
+	const startedAtMs = Date.now();
+	const startedAt = new Date(startedAtMs).toISOString();
 	let currentSessionId = resumeSessionId;
+	runRepo.startStep(ctx.runId, stepIndex, { startedAt });
 	ctx.emitStepEvent({
 		type: "step.started",
 		data: { name: step.name, index: stepIndex, total: totalSteps },
 	});
+
+	let stepCostUsd = 0;
+	let stepTokensInput = 0;
+	let stepTokensOutput = 0;
 
 	try {
 		const renderedPrompt = renderPrompt(markTrustedShellBlocks(step.prompt), {
@@ -134,6 +145,11 @@ async function runWorkflowStep({
 			if (msg.type === "result") {
 				currentSessionId = msg.session_id;
 				recordAgentResult(msg);
+				stepCostUsd += msg.total_cost_usd;
+				for (const usage of Object.values(msg.modelUsage)) {
+					stepTokensInput += usage.inputTokens;
+					stepTokensOutput += usage.outputTokens;
+				}
 				if (msg.subtype === "success") {
 					if (outputFormat) {
 						outputs[step.name] = msg.structured_output;
@@ -150,7 +166,17 @@ async function runWorkflowStep({
 			}
 		}
 
-		const durationMs = Date.now() - startedAt;
+		const completedAtMs = Date.now();
+		const durationMs = completedAtMs - startedAtMs;
+		runRepo.completeStep(ctx.runId, stepIndex, {
+			completedAt: new Date(completedAtMs).toISOString(),
+			durationMs,
+		});
+		runRepo.addRunUsage(ctx.runId, {
+			costUsd: stepCostUsd,
+			tokensInput: stepTokensInput,
+			tokensOutput: stepTokensOutput,
+		});
 		canonicalLog.increment("steps_completed");
 		canonicalLog.incrementMap("step_durations_ms", step.name, durationMs);
 		ctx.emitStepEvent({
@@ -160,6 +186,17 @@ async function runWorkflowStep({
 		return currentSessionId;
 	} catch (err) {
 		const error = err instanceof Error ? err.message : String(err);
+		const completedAtMs = Date.now();
+		runRepo.failStep(ctx.runId, stepIndex, {
+			completedAt: new Date(completedAtMs).toISOString(),
+			durationMs: completedAtMs - startedAtMs,
+			error,
+		});
+		runRepo.addRunUsage(ctx.runId, {
+			costUsd: stepCostUsd,
+			tokensInput: stepTokensInput,
+			tokensOutput: stepTokensOutput,
+		});
 		canonicalLog.set({
 			failed_step: { name: step.name, index: stepIndex, error },
 		});

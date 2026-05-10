@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../test-support/test-api.ts";
-import { seedEvent, seedRun } from "../test-support/test-db.ts";
+import { seedRun, seedStep } from "../test-support/test-db.ts";
 import { issueKey, repoSlug } from "../types/brands.ts";
+
+const baseRunWire = {
+	branch: null,
+	workspaceDir: null,
+	issueUrl: null,
+	costUsd: null,
+	tokensInput: null,
+	tokensOutput: null,
+	pr: null,
+};
 
 describe("GET /runs", () => {
 	it("returns empty array when no runs exist", async () => {
@@ -26,7 +36,6 @@ describe("GET /runs", () => {
 		expect(body).toEqual([
 			{
 				id: "newest",
-				agentName: "test-agent",
 				status: "completed",
 				error: null,
 				repo: "test-owner/test-repo",
@@ -35,10 +44,10 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-03T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
+				...baseRunWire,
 			},
 			{
 				id: "middle",
-				agentName: "test-agent",
 				status: "completed",
 				error: null,
 				repo: "test-owner/test-repo",
@@ -47,10 +56,10 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-02T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
+				...baseRunWire,
 			},
 			{
 				id: "oldest",
-				agentName: "test-agent",
 				status: "completed",
 				error: null,
 				repo: "test-owner/test-repo",
@@ -59,39 +68,40 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
+				...baseRunWire,
 			},
 		]);
 	});
 
-	it("filters by agent name", async () => {
+	it("filters by repo", async () => {
 		const { app, db } = createTestApi();
 		seedRun(db, {
 			id: "a",
-			agentName: "agent-alpha",
+			repo: "acme/api",
 			startedAt: "2025-01-01T00:00:00Z",
 		});
 		seedRun(db, {
 			id: "b",
-			agentName: "agent-beta",
+			repo: "widgets/dashboard",
 			startedAt: "2025-01-02T00:00:00Z",
 		});
 
-		const res = await app.request("/runs?agent=agent-alpha");
+		const res = await app.request("/runs?repo=acme/api");
 		const body = await res.json();
 
 		expect(res.status).toBe(200);
 		expect(body).toEqual([
 			{
 				id: "a",
-				agentName: "agent-alpha",
 				status: "completed",
 				error: null,
-				repo: "test-owner/test-repo",
+				repo: "acme/api",
 				issueKey: null,
 				issueTitle: null,
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
+				...baseRunWire,
 			},
 		]);
 	});
@@ -121,7 +131,6 @@ describe("GET /runs", () => {
 		expect(body).toEqual([
 			{
 				id: "running-1",
-				agentName: "test-agent",
 				status: "running",
 				error: null,
 				repo: "test-owner/test-repo",
@@ -130,6 +139,7 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: null,
 				durationMs: null,
+				...baseRunWire,
 			},
 		]);
 	});
@@ -152,7 +162,6 @@ describe("GET /runs", () => {
 		expect(body).toEqual([
 			{
 				id: "fail-1",
-				agentName: "test-agent",
 				status: "failed",
 				error: "agent timed out",
 				repo: "test-owner/test-repo",
@@ -161,6 +170,7 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-03T00:00:00Z",
 				completedAt: "2025-01-03T00:00:02Z",
 				durationMs: 1500,
+				...baseRunWire,
 			},
 		]);
 	});
@@ -178,7 +188,6 @@ describe("GET /runs", () => {
 		expect(body).toEqual([
 			{
 				id: "r3",
-				agentName: "test-agent",
 				status: "completed",
 				error: null,
 				repo: "test-owner/test-repo",
@@ -187,33 +196,47 @@ describe("GET /runs", () => {
 				startedAt: "2025-01-03T00:00:00Z",
 				completedAt: expect.any(String),
 				durationMs: 0,
+				...baseRunWire,
 			},
 		]);
 	});
 });
 
 describe("GET /runs/:id", () => {
-	it("returns run with its events ordered by createdAt", async () => {
+	it("returns the run with its ordered step list", async () => {
 		const { app, db } = createTestApi();
 		seedRun(db, {
 			id: "run-1",
-			agentName: "my-agent",
-			status: "completed",
-			startedAt: "2025-01-01T00:00:00Z",
+			status: "running",
+			repo: "acme/api",
+			issueKey: "acme/api#1284",
+			issueTitle: "npm install hangs on linux runners",
+			issueUrl: "https://acme.atlassian.net/browse/ACME-1284",
+			branch: "fix/ACME-1284-npm-install-hang",
+			workspaceDir: "/tmp/lag/9f3b2e1",
+			costUsd: 0.034,
+			tokensInput: 9800,
+			tokensOutput: 2600,
+			startedAt: "2026-05-09T14:27:56Z",
 		});
-		seedEvent(db, {
-			id: "evt-1",
+		seedStep(db, {
 			runId: "run-1",
-			type: "run:started",
-			createdAt: "2025-01-01T00:00:00Z",
-			data: { issueKey: "test/repo#1" },
+			index: 1,
+			name: "implement",
+			state: "running",
+			startedAt: "2026-05-09T14:28:19Z",
 		});
-		seedEvent(db, {
-			id: "evt-2",
+		seedStep(db, {
 			runId: "run-1",
-			type: "run:completed",
-			createdAt: "2025-01-01T00:01:00Z",
-			data: { durationMs: 5000 },
+			index: 2,
+			name: "review",
+			state: "pending",
+		});
+		seedStep(db, {
+			runId: "run-1",
+			index: 3,
+			name: "summarise",
+			state: "pending",
 		});
 
 		const res = await app.request("/runs/run-1");
@@ -221,33 +244,65 @@ describe("GET /runs/:id", () => {
 
 		expect(res.status).toBe(200);
 		expect(body).toEqual({
-			id: "run-1",
-			agentName: "my-agent",
-			status: "completed",
-			error: null,
-			repo: "test-owner/test-repo",
-			issueKey: null,
-			issueTitle: null,
-			startedAt: "2025-01-01T00:00:00Z",
-			completedAt: expect.any(String),
-			durationMs: 0,
-			events: [
+			run: {
+				id: "run-1",
+				status: "running",
+				error: null,
+				repo: "acme/api",
+				branch: "fix/ACME-1284-npm-install-hang",
+				workspaceDir: "/tmp/lag/9f3b2e1",
+				issueKey: "acme/api#1284",
+				issueTitle: "npm install hangs on linux runners",
+				issueUrl: "https://acme.atlassian.net/browse/ACME-1284",
+				startedAt: "2026-05-09T14:27:56Z",
+				completedAt: null,
+				durationMs: null,
+				costUsd: 0.034,
+				tokensInput: 9800,
+				tokensOutput: 2600,
+				pr: null,
+			},
+			steps: [
 				{
-					id: "evt-1",
-					runId: "run-1",
-					type: "run:started",
-					data: { issueKey: "test/repo#1" },
-					createdAt: "2025-01-01T00:00:00Z",
+					index: 1,
+					name: "implement",
+					state: "running",
+					startedAt: "2026-05-09T14:28:19Z",
+					completedAt: null,
+					durationMs: null,
+					error: null,
 				},
 				{
-					id: "evt-2",
-					runId: "run-1",
-					type: "run:completed",
-					data: { durationMs: 5000 },
-					createdAt: "2025-01-01T00:01:00Z",
+					index: 2,
+					name: "review",
+					state: "pending",
+					startedAt: null,
+					completedAt: null,
+					durationMs: null,
+					error: null,
+				},
+				{
+					index: 3,
+					name: "summarise",
+					state: "pending",
+					startedAt: null,
+					completedAt: null,
+					durationMs: null,
+					error: null,
 				},
 			],
 		});
+	});
+
+	it("returns an empty step list when no steps have been recorded", async () => {
+		const { app, db } = createTestApi();
+		seedRun(db, { id: "run-empty", status: "running" });
+
+		const res = await app.request("/runs/run-empty");
+		const body = await res.json();
+
+		expect(res.status).toBe(200);
+		expect(body.steps).toEqual([]);
 	});
 
 	it("returns 404 for unknown run", async () => {
@@ -270,10 +325,10 @@ describe("POST /runs/:id/kill", () => {
 	it("kills a running job and returns success", async () => {
 		const { app, runner } = createTestApi();
 		const { runId } = runner.enqueue({
-			name: "long-job",
 			repo: repoSlug("test/repo"),
 			issueKey: issueKey("test/repo#1"),
 			issueTitle: "Long running job",
+			issueUrl: null,
 			handler: () => new Promise(() => {}),
 		});
 
