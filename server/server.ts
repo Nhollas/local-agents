@@ -68,6 +68,7 @@ const checkHealth: HealthCheck = () => {
 const app = createApi({
 	runner,
 	repo,
+	queue: orchestrator,
 	checkHealth,
 	logger,
 });

@@ -1,4 +1,12 @@
-import type { Run, RunDetail, RunEvent, Step } from "../lib/types.ts";
+import type {
+	ActiveRun,
+	QueuedItem,
+	QueueSnapshot,
+	Run,
+	RunDetail,
+	RunEvent,
+	Step,
+} from "../lib/types.ts";
 
 export function createRun(overrides: Partial<Run> = {}): Run {
 	return {
@@ -56,6 +64,35 @@ type EventInput = {
 		createdAt?: string;
 	};
 }[RunEvent["kind"]];
+
+export function createActiveRun(overrides: Partial<ActiveRun> = {}): ActiveRun {
+	return {
+		...createRun(overrides),
+		currentStep: overrides.currentStep ?? null,
+		progressRatio: overrides.progressRatio ?? 0,
+	};
+}
+
+export function createQueuedItem(
+	overrides: Partial<QueuedItem> = {},
+): QueuedItem {
+	return {
+		issueKey: "ACME-1285",
+		issueTitle: "queued issue",
+		repo: "acme/api",
+		pendingSince: "2026-05-09T14:31:42Z",
+		...overrides,
+	};
+}
+
+export function createQueueSnapshot(
+	overrides: Partial<QueueSnapshot> = {},
+): QueueSnapshot {
+	return {
+		active: overrides.active ?? [],
+		queued: overrides.queued ?? [],
+	};
+}
 
 export function createEvent(event: EventInput): RunEvent {
 	const seq = event.seq ?? nextSeq++;

@@ -45,6 +45,25 @@ export type RunDetail = {
 	steps: Step[];
 };
 
+export type CurrentStep = { name: string; index: number; total: number };
+
+export type ActiveRun = Run & {
+	currentStep: CurrentStep | null;
+	progressRatio: number;
+};
+
+export type QueuedItem = {
+	issueKey: string;
+	issueTitle: string;
+	repo: string;
+	pendingSince: string;
+};
+
+export type QueueSnapshot = {
+	active: ActiveRun[];
+	queued: QueuedItem[];
+};
+
 type RunEventBase = {
 	id: string;
 	seq: number;
