@@ -8,6 +8,41 @@ export function formatTime(iso: string): string {
 	return `${hh}:${mm}:${ss}`;
 }
 
+export function formatHourMinute(iso: string): string {
+	const d = new Date(iso);
+	const hh = String(d.getHours()).padStart(2, "0");
+	const mm = String(d.getMinutes()).padStart(2, "0");
+	return `${hh}:${mm}`;
+}
+
+export function formatCompactCost(usd: number | null): string {
+	if (usd == null) return "$0.00";
+	return `$${usd.toFixed(2)}`;
+}
+
+const DAY_FORMATTER = new Intl.DateTimeFormat(undefined, {
+	month: "short",
+	day: "numeric",
+});
+
+export function localDayLabel(iso: string, now: Date): string {
+	const d = new Date(iso);
+	const startOfToday = new Date(
+		now.getFullYear(),
+		now.getMonth(),
+		now.getDate(),
+	).getTime();
+	const startOfRunDay = new Date(
+		d.getFullYear(),
+		d.getMonth(),
+		d.getDate(),
+	).getTime();
+
+	if (startOfRunDay >= startOfToday) return "Today";
+	if (startOfRunDay >= startOfToday - 86_400_000) return "Yesterday";
+	return DAY_FORMATTER.format(d);
+}
+
 export function formatElapsed(ms: number): string {
 	const totalSeconds = Math.floor(ms / 1000);
 	const minutes = Math.floor(totalSeconds / 60);

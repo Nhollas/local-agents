@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { Db } from "./db/db.ts";
 import {
@@ -39,6 +39,8 @@ type RunBase = {
 	pr: RunPr | null;
 };
 
+export type RunFailedStep = { index: number; name: string };
+
 export type RunningRun = RunBase & { status: "running" };
 export type CompletedRun = RunBase & {
 	status: "completed";
@@ -50,6 +52,7 @@ export type FailedRun = RunBase & {
 	completedAt: string;
 	durationMs: number | null;
 	error: string;
+	failedStep: RunFailedStep | null;
 };
 
 export type Run = RunningRun | CompletedRun | FailedRun;
@@ -238,7 +241,12 @@ export function createRunRepository(db: Db): RunRepository {
 
 		getRunById(id) {
 			const row = db.select().from(runs).where(eq(runs.id, id)).get();
-			return row ? rowToRun(row) : undefined;
+			if (!row) return undefined;
+			const failedStep =
+				row.status === "failed"
+					? (findFailedSteps(db, [row.id]).get(row.id) ?? null)
+					: null;
+			return rowToRun(row, failedStep);
 		},
 
 		getRuns(filters) {
@@ -256,7 +264,18 @@ export function createRunRepository(db: Db): RunRepository {
 				conditions.length > 0
 					? query.where(and(...conditions)).all()
 					: query.all();
-			return rows.map(rowToRun);
+
+			const failedIds = rows
+				.filter((r) => r.status === "failed")
+				.map((r) => r.id);
+			const failedSteps =
+				failedIds.length === 0 ? new Map() : findFailedSteps(db, failedIds);
+			return rows.map((row) =>
+				rowToRun(
+					row,
+					row.status === "failed" ? (failedSteps.get(row.id) ?? null) : null,
+				),
+			);
 		},
 
 		getRunEvents(runId) {
@@ -377,7 +396,20 @@ export function createRunRepository(db: Db): RunRepository {
 type RunRow = typeof runs.$inferSelect;
 type RunEventRow = typeof runEvents.$inferSelect;
 
-function rowToRun(row: RunRow): Run {
+function findFailedSteps(db: Db, ids: RunId[]): Map<RunId, RunFailedStep> {
+	const rows = db
+		.select({
+			runId: runSteps.runId,
+			index: runSteps.index,
+			name: runSteps.name,
+		})
+		.from(runSteps)
+		.where(and(inArray(runSteps.runId, ids), eq(runSteps.state, "failed")))
+		.all();
+	return new Map(rows.map((r) => [r.runId, { index: r.index, name: r.name }]));
+}
+
+function rowToRun(row: RunRow, failedStep: RunFailedStep | null): Run {
 	const pr =
 		row.prRepo != null &&
 		row.prNumber != null &&
@@ -433,6 +465,7 @@ function rowToRun(row: RunRow): Run {
 				completedAt: row.completedAt,
 				durationMs: row.durationMs,
 				error: row.error,
+				failedStep,
 			};
 	}
 }

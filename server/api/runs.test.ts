@@ -11,6 +11,7 @@ const baseRunWire = {
 	tokensInput: null,
 	tokensOutput: null,
 	pr: null,
+	failedStep: null,
 };
 
 describe("GET /runs", () => {
@@ -175,6 +176,38 @@ describe("GET /runs", () => {
 		]);
 	});
 
+	it("populates failedStep with the failed step name + index", async () => {
+		const { app, db } = createTestApi();
+		seedRun(db, {
+			id: "fail-step-1",
+			status: "failed",
+			startedAt: "2025-01-03T00:00:00Z",
+			completedAt: "2025-01-03T00:00:02Z",
+			durationMs: 1500,
+			error: "no commits made",
+		});
+		seedStep(db, {
+			runId: "fail-step-1",
+			index: 1,
+			name: "implement",
+			state: "failed",
+			error: "no commits made",
+		});
+		seedStep(db, {
+			runId: "fail-step-1",
+			index: 2,
+			name: "review",
+			state: "pending",
+		});
+
+		const res = await app.request("/runs?status=failed");
+		const body = (await res.json()) as Array<{
+			failedStep: { index: number; name: string } | null;
+		}>;
+
+		expect(body[0]?.failedStep).toEqual({ index: 1, name: "implement" });
+	});
+
 	it("respects limit parameter", async () => {
 		const { app, db } = createTestApi();
 		seedRun(db, { id: "r1", startedAt: "2025-01-01T00:00:00Z" });
@@ -261,6 +294,7 @@ describe("GET /runs/:id", () => {
 				tokensInput: 9800,
 				tokensOutput: 2600,
 				pr: null,
+				failedStep: null,
 			},
 			steps: [
 				{

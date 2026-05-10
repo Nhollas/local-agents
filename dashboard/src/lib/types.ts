@@ -11,6 +11,8 @@ export type RunPr = {
 	kind: PrKind;
 };
 
+export type RunFailedStep = { index: number; name: string };
+
 export type Run = {
 	id: string;
 	status: RunStatus;
@@ -28,6 +30,7 @@ export type Run = {
 	tokensOutput: number | null;
 	pr: RunPr | null;
 	error: string | null;
+	failedStep: RunFailedStep | null;
 };
 
 export type Step = {
