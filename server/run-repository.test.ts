@@ -40,7 +40,46 @@ describe("run repository row projection", () => {
 			tokensInput: null,
 			tokensOutput: null,
 			pr: null,
+			failedStep: null,
 		});
+	});
+
+	it("populates failedStep from the runSteps row marked failed", () => {
+		const db = createTestDb();
+		const repo = createRunRepository(db);
+		db.insert(runs)
+			.values({
+				id: runId("failed-2"),
+				status: "failed",
+				repo: repoSlug("acme/widgets"),
+				issueKey: issueKey("acme/widgets#2"),
+				issueTitle: "boom",
+				startedAt: "2025-01-01T00:00:00Z",
+				completedAt: "2025-01-01T00:00:02Z",
+				durationMs: 2000,
+				error: "no commits made",
+			})
+			.run();
+		repo.insertSteps(runId("failed-2"), [
+			{ index: 1, name: "implement" },
+			{ index: 2, name: "review" },
+		]);
+		repo.failStep(runId("failed-2"), 1, {
+			completedAt: "2025-01-01T00:00:02Z",
+			durationMs: 2000,
+			error: "no commits made",
+		});
+
+		const run = repo.getRunById(runId("failed-2"));
+		expect(run?.status).toBe("failed");
+		if (run?.status !== "failed") throw new Error("expected failed run");
+		expect(run.failedStep).toEqual({ index: 1, name: "implement" });
+
+		const list = repo.getRuns({ limit: 10 });
+		const fromList = list.find((r) => r.id === "failed-2");
+		expect(fromList?.status).toBe("failed");
+		if (fromList?.status !== "failed") throw new Error("expected failed run");
+		expect(fromList.failedStep).toEqual({ index: 1, name: "implement" });
 	});
 });
 

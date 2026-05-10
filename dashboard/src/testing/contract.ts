@@ -27,6 +27,7 @@ export function createRun(overrides: Partial<Run> = {}): Run {
 		tokensOutput: null,
 		pr: null,
 		error: null,
+		failedStep: null,
 		...overrides,
 	};
 }

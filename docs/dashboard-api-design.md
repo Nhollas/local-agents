@@ -66,6 +66,7 @@ type Run = {
   pr: { repo: string; number: number; url: string; kind: "opened" | "commented" } | null;
 
   error: string | null;              // failure summary for `failed`
+  failedStep: { index: number; name: string } | null;   // the failed step's metadata for `failed`
 };
 ```
 
@@ -228,7 +229,7 @@ All endpoints use RFC 7807 problem-details (already in `server/api/problem-detai
 
 | Endpoint | Status | When |
 |---|---|---|
-| `GET /runs` | 400 | Invalid filter value (e.g. unknown `status`). |
+| `GET /runs` | 422 | Invalid filter value (e.g. unknown `status`). Validation failures use the project-wide 422 convention; field errors are returned in the `errors` extension. |
 | `GET /runs/:id` | 404 | Run id not found. |
 | `GET /runs/:id/events` | 404 | Run id not found. |
 | `GET /runs/:id/events` | 400 | `since` cursor refers to an unknown event id. |
@@ -262,7 +263,8 @@ All endpoints use RFC 7807 problem-details (already in `server/api/problem-detai
     "tokensInput": 9800,
     "tokensOutput": 2600,
     "pr": null,
-    "error": null
+    "error": null,
+    "failedStep": null
   },
   "steps": [
     { "index": 1, "name": "implement", "state": "running", "startedAt": "2026-05-09T14:28:19Z", "completedAt": null,                   "durationMs": null, "error": null },
@@ -317,7 +319,7 @@ When the run is live, the FE seeds the SSE `Last-Event-ID` from the most recent 
       "issueKey": "ACME-1284", "issueTitle": "npm install hangs on linux runners", "issueUrl": null,
       "startedAt": "2026-05-09T14:27:56Z", "completedAt": null, "durationMs": null,
       "costUsd": 0.034, "tokensInput": 9800, "tokensOutput": 2600,
-      "pr": null, "error": null,
+      "pr": null, "error": null, "failedStep": null,
       "currentStep": { "name": "implement", "index": 1, "total": 3 },
       "progressRatio": 0.17
     }

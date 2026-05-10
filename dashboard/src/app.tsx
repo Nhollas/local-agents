@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { OverviewStrip } from "./components/overview-strip.tsx";
 import { QueueColumn } from "./components/queue-column.tsx";
+import { RecentRunsColumn } from "./components/recent-runs-column.tsx";
 import { RunBanner } from "./components/run-banner.tsx";
 import { Transcript } from "./components/transcript.tsx";
 import { WorkflowStripe } from "./components/workflow-stripe.tsx";
@@ -24,6 +25,7 @@ export function App() {
 				<section className="center">
 					<CenterContent runId={runId} />
 				</section>
+				<RecentRunsColumn />
 			</main>
 		</>
 	);

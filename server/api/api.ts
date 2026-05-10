@@ -231,6 +231,7 @@ type RunWire = {
 	tokensOutput: number | null;
 	pr: Run["pr"];
 	error: string | null;
+	failedStep: { index: number; name: string } | null;
 };
 
 type StepWire = Omit<RunStepRow, "runId">;
@@ -284,7 +285,7 @@ async function writeFrame(
 }
 
 function runToWire(run: Run): RunWire {
-	const base: Omit<RunWire, "completedAt" | "durationMs" | "error"> = {
+	const base: RunWire = {
 		id: run.id,
 		status: run.status,
 		repo: run.repo,
@@ -298,16 +299,19 @@ function runToWire(run: Run): RunWire {
 		tokensInput: run.tokensInput,
 		tokensOutput: run.tokensOutput,
 		pr: run.pr,
+		completedAt: null,
+		durationMs: null,
+		error: null,
+		failedStep: null,
 	};
 	switch (run.status) {
 		case "running":
-			return { ...base, completedAt: null, durationMs: null, error: null };
+			return base;
 		case "completed":
 			return {
 				...base,
 				completedAt: run.completedAt,
 				durationMs: run.durationMs,
-				error: null,
 			};
 		case "failed":
 			return {
@@ -315,6 +319,7 @@ function runToWire(run: Run): RunWire {
 				completedAt: run.completedAt,
 				durationMs: run.durationMs,
 				error: run.error,
+				failedStep: run.failedStep,
 			};
 	}
 }

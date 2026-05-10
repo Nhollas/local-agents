@@ -1,6 +1,7 @@
 import { HttpResponse, http } from "msw";
 import type {
 	QueueSnapshot,
+	Run,
 	RunDetail,
 	RunEvent,
 	Stats,
@@ -45,6 +46,10 @@ export function statsHandler(stats: Stats) {
 	return http.get("/stats", () => HttpResponse.json(stats));
 }
 
+export function recentRunsHandler(runs: Run[]) {
+	return http.get("/runs", () => HttpResponse.json(runs));
+}
+
 function eventsStreamHandler() {
 	return http.get(
 		"/events",
@@ -67,9 +72,11 @@ function eventsStreamHandler() {
 
 const defaultQueueHandler = queueHandler({ active: [], queued: [] });
 const defaultStatsHandler = statsHandler(createStats());
+const defaultRecentRunsHandler = recentRunsHandler([]);
 
 export const handlers = [
 	eventsStreamHandler(),
 	defaultQueueHandler,
 	defaultStatsHandler,
+	defaultRecentRunsHandler,
 ];
