@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RunEventData, RunEventKind, ToolBashData } from "../db/schema.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
-import type { RunRepository } from "../run-repository.ts";
+import type { RunFinalizeFailure, RunRepository } from "../run-repository.ts";
 import {
 	type IssueKey,
 	type RepoSlug,
@@ -41,7 +41,12 @@ export type AgentJob = {
 
 export type RunResult =
 	| { status: "completed"; durationMs: number }
-	| { status: "failed"; error: string; durationMs: number };
+	| {
+			status: "failed";
+			error: string;
+			durationMs: number;
+			finalizeFailure?: RunFinalizeFailure;
+	  };
 
 export type RunHandle = {
 	runId: RunId;
@@ -189,6 +194,9 @@ export function createRunner(config: RunnerConfig): Runner {
 					error: result.error,
 					completedAt,
 					durationMs: result.durationMs,
+					...(result.finalizeFailure != null && {
+						finalizeFailure: result.finalizeFailure,
+					}),
 				});
 
 				emitFor(

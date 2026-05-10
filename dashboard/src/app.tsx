@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
+import { ErrorBoundary } from "./components/error-boundary.tsx";
 import { OverviewStrip } from "./components/overview-strip.tsx";
 import { QueueColumn } from "./components/queue-column.tsx";
 import { RecentRunsColumn } from "./components/recent-runs-column.tsx";
@@ -6,10 +7,14 @@ import { RunBanner } from "./components/run-banner.tsx";
 import { Transcript } from "./components/transcript.tsx";
 import { WorkflowStripe } from "./components/workflow-stripe.tsx";
 import { useRunDetail } from "./hooks/use-run-detail.ts";
+import { useRunEventInvalidator } from "./hooks/use-run-event-invalidator.ts";
 import { useRunEvents } from "./hooks/use-run-events.ts";
+import { useRunRoute } from "./hooks/use-run-route.ts";
+import type { Step } from "./lib/types.ts";
 
 export function App() {
-	const runId = readRunIdFromUrl();
+	useRunEventInvalidator();
+	const { runId, navigate } = useRunRoute();
 
 	return (
 		<>
@@ -21,33 +26,46 @@ export function App() {
 			</header>
 			<OverviewStrip />
 			<main className="shell">
-				<QueueColumn activeRunId={runId} />
+				<QueueColumn activeRunId={runId} onSelectRun={navigate} />
 				<section className="center">
 					<CenterContent runId={runId} />
 				</section>
-				<RecentRunsColumn />
+				<RecentRunsColumn onSelectRun={navigate} />
 			</main>
 		</>
 	);
 }
 
 function CenterContent({ runId }: { runId: string | null }) {
-	const detail = useRunDetail(runId);
-	const events = useRunEvents(runId);
-
 	if (runId == null) return <Placeholder>No run selected.</Placeholder>;
-	if (detail.isLoading) return <Placeholder>Loading…</Placeholder>;
-	if (detail.error) return <Placeholder>{detail.error.message}</Placeholder>;
-	if (!detail.data) return null;
+	return (
+		<ErrorBoundary
+			key={runId}
+			fallback={(error) => <Placeholder>{error.message}</Placeholder>}
+		>
+			<Suspense fallback={<Placeholder>Loading…</Placeholder>}>
+				<RunDetailView runId={runId} />
+			</Suspense>
+		</ErrorBoundary>
+	);
+}
 
-	const eventsList = events.status === "ready" ? events.events : [];
+function RunDetailView({ runId }: { runId: string }) {
+	const { data } = useRunDetail(runId);
 	return (
 		<>
-			<RunBanner run={detail.data.run} />
-			<WorkflowStripe steps={detail.data.steps} />
-			<Transcript events={eventsList} steps={detail.data.steps} />
+			<RunBanner run={data.run} />
+			<WorkflowStripe steps={data.steps} />
+			<Suspense fallback={<Placeholder>Loading transcript…</Placeholder>}>
+				<TranscriptView runId={runId} steps={data.steps} />
+			</Suspense>
 		</>
 	);
+}
+
+function TranscriptView({ runId, steps }: { runId: string; steps: Step[] }) {
+	const events = useRunEvents(runId);
+	return <Transcript events={events} steps={steps} />;
 }
 
 function Placeholder({ children }: { children: ReactNode }) {
@@ -56,10 +74,4 @@ function Placeholder({ children }: { children: ReactNode }) {
 			{children}
 		</div>
 	);
-}
-
-function readRunIdFromUrl(): string | null {
-	if (typeof window === "undefined") return null;
-	const params = new URLSearchParams(window.location.search);
-	return params.get("runId");
 }

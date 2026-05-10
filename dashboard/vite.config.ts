@@ -11,6 +11,8 @@ export default defineConfig({
 			"/events": "http://localhost:3000",
 			"/health": "http://localhost:3000",
 			"/runs": "http://localhost:3000",
+			"/stats": "http://localhost:3000",
+			"/queue": "http://localhost:3000",
 		},
 	},
 	build: {

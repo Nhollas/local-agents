@@ -1,6 +1,6 @@
+import { useNowEverySecond } from "../hooks/use-tick.ts";
 import { killRun } from "../lib/api.ts";
 import {
-	elapsedSinceMs,
 	formatCost,
 	formatElapsed,
 	formatTime,
@@ -13,7 +13,9 @@ type Props = {
 };
 
 export function RunBanner({ run }: Props) {
-	const elapsedMs = run.durationMs ?? elapsedSinceMs(run.startedAt);
+	const now = useNowEverySecond(run.status === "running");
+	const elapsedMs =
+		run.durationMs ?? Math.max(0, now - new Date(run.startedAt).getTime());
 	const tokens = (run.tokensInput ?? 0) + (run.tokensOutput ?? 0);
 
 	return (
@@ -22,10 +24,10 @@ export function RunBanner({ run }: Props) {
 				<div>
 					<h1 className="run-title">{run.issueTitle ?? run.id}</h1>
 					<div className="run-meta" data-testid="run-meta">
-						{run.issueKey && (
+						{run.issueKey != null && (
 							<span>
 								<span className="label">Issue</span>
-								{run.issueUrl ? (
+								{run.issueUrl != null ? (
 									<a href={run.issueUrl}>
 										<span className="key">{run.issueKey}</span>
 									</a>
@@ -38,7 +40,7 @@ export function RunBanner({ run }: Props) {
 							<span className="label">Repo</span>
 							{run.repo}
 						</span>
-						{run.branch && (
+						{run.branch != null && (
 							<span>
 								<span className="label">Branch</span>
 								<span className="mono">{run.branch}</span>
@@ -57,7 +59,7 @@ export function RunBanner({ run }: Props) {
 							{formatCost(run.costUsd)}{" "}
 							<span className="dim">· {formatTokens(tokens)}</span>
 						</span>
-						{run.workspaceDir && (
+						{run.workspaceDir != null && (
 							<span>
 								<span className="label">Workspace</span>
 								<span className="id">{run.workspaceDir}</span>

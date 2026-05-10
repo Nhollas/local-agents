@@ -1,5 +1,6 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
+import type { FinalizeFailurePhase } from "../db/schema.ts";
 import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type {
@@ -48,13 +49,11 @@ type RunLifecycleDeps = {
 	model: string;
 };
 
-type FailurePhase =
-	| "branch_resolver"
-	| "setup"
-	| "step"
-	| "push"
-	| "change_request"
-	| "tracker_transition";
+type FailurePhase = "branch_resolver" | "setup" | "step" | FinalizeFailurePhase;
+
+type FinalizeOutcome =
+	| { ok: true }
+	| { ok: false; phase: FinalizeFailurePhase; error: string };
 
 function recordFailure(phase: FailurePhase, error: string): void {
 	canonicalLog.set({ failure_phase: phase, failure_error: error });
@@ -188,12 +187,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							};
 						}
 
-						canonicalLog.set({ status: result.status });
-
-						const succeeded =
-							result.status === "completed" &&
-							branch !== undefined &&
-							(await finalizeSuccess(
+						if (result.status === "completed" && branch !== undefined) {
+							const finalize = await finalizeSuccess(
 								ctx,
 								repo,
 								issue,
@@ -202,11 +197,35 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								branch,
 								baseBranch,
 								outputs,
-							));
+							);
+							if (!finalize.ok) {
+								ctx.emit({
+									kind: "system",
+									stepName: null,
+									data: {
+										message: `finalize failed: ${finalize.phase}`,
+										command: null,
+										path: null,
+										exitCode: null,
+									},
+								});
+								result = {
+									status: "failed",
+									error: `${finalize.phase}: ${finalize.error}`,
+									durationMs: result.durationMs,
+									finalizeFailure: {
+										phase: finalize.phase,
+										error: finalize.error,
+									},
+								};
+							}
+						}
+
+						canonicalLog.set({ status: result.status });
 
 						// Keep the workspace on any failure so the run can be inspected;
 						// only fully successful runs (agent + push + change-request) clean up.
-						if (succeeded) {
+						if (result.status === "completed") {
 							await removeWorkspace(ws.path);
 						} else if (!ctx.signal.aborted) {
 							await markIssueFailed(repo, issue);
@@ -228,13 +247,12 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		branch: string,
 		baseBranch: string,
 		outputs: Record<string, unknown>,
-	): Promise<boolean> {
+	): Promise<FinalizeOutcome> {
 		// Pinned order per ADR 0001: push → change-request → tracker.
 		try {
 			await pushBranch(wsPath, branch);
 		} catch (err) {
-			recordFailure("push", err instanceof Error ? err.message : String(err));
-			return false;
+			return finalizeFailure("push", err);
 		}
 
 		const { title, body } = renderChangeRequest({
@@ -269,11 +287,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 				},
 			});
 		} catch (err) {
-			recordFailure(
-				"change_request",
-				err instanceof Error ? err.message : String(err),
-			);
-			return false;
+			return finalizeFailure("change_request", err);
 		}
 
 		try {
@@ -284,13 +298,18 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 				"awaiting_review",
 			);
 		} catch (err) {
-			recordFailure(
-				"tracker_transition",
-				err instanceof Error ? err.message : String(err),
-			);
-			return false;
+			return finalizeFailure("tracker_transition", err);
 		}
-		return true;
+		return { ok: true };
+	}
+
+	function finalizeFailure(
+		phase: FinalizeFailurePhase,
+		err: unknown,
+	): FinalizeOutcome {
+		const error = err instanceof Error ? err.message : String(err);
+		recordFailure(phase, error);
+		return { ok: false, phase, error };
 	}
 
 	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {

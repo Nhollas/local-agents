@@ -29,6 +29,10 @@ export const runs = sqliteTable("runs", {
 	prNumber: integer("pr_number"),
 	prRepo: text("pr_repo"),
 	prKind: text("pr_kind").$type<PrKind>(),
+	finalizeFailurePhase: text(
+		"finalize_failure_phase",
+	).$type<FinalizeFailurePhase>(),
+	finalizeFailureError: text("finalize_failure_error"),
 });
 
 export const runSteps = sqliteTable(
@@ -79,6 +83,10 @@ export const runStepOutputs = sqliteTable(
 export type RunStatus = "running" | "completed" | "failed";
 export type RunStepState = "pending" | "running" | "completed" | "failed";
 export type PrKind = "opened" | "commented";
+export type FinalizeFailurePhase =
+	| "push"
+	| "change_request"
+	| "tracker_transition";
 
 export type RunEventKind =
 	| "run:started"

@@ -28,6 +28,7 @@ export function createRun(overrides: Partial<Run> = {}): Run {
 		pr: null,
 		error: null,
 		failedStep: null,
+		finalizeFailure: null,
 		...overrides,
 	};
 }

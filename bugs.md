@@ -1,0 +1,2 @@
+- I noticed that our Run UI appears to only update when a new event comes through that is not nice. Considering we are literally rendering runtime down to seconds so this is literally stopping at like 10secs then jumping to 16secs as another event has come through. This is so bad that actually our left pannel UI showing the active runs the time lapsed doesn't even update unless you refresh the page or click to another run.
+- I noticed that when clicking to another run it seems like our entire UI re-renders.

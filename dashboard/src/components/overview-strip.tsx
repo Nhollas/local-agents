@@ -1,10 +1,11 @@
+import { memo } from "react";
 import { useStats } from "../hooks/use-stats.ts";
 import type { Stats } from "../lib/types.ts";
 
 const SPARK_HEIGHT_PX = 14;
 const SPARK_MIN_PX = 2;
 
-export function OverviewStrip() {
+export const OverviewStrip = memo(function OverviewStrip() {
 	const { data } = useStats();
 
 	const running = data?.running ?? { active: 0, max: 0 };
@@ -14,7 +15,14 @@ export function OverviewStrip() {
 
 	return (
 		<section className="overview" data-testid="overview">
-			<Stat label="Running" labelPip>
+			<Stat
+				label={
+					<>
+						<span className="running-pip" />
+						Running
+					</>
+				}
+			>
 				<Value primary={String(running.active)} dim={` / ${running.max}`} />
 				<Note>{`${slotsFree} slots free`}</Note>
 			</Stat>
@@ -58,23 +66,18 @@ export function OverviewStrip() {
 			</Stat>
 		</section>
 	);
-}
+});
 
 function Stat({
 	label,
-	labelPip,
 	children,
 }: {
-	label: string;
-	labelPip?: boolean;
+	label: React.ReactNode;
 	children: React.ReactNode;
 }) {
 	return (
 		<div className="stat">
-			<div className="label">
-				{labelPip && <span className="running-pip" />}
-				{label}
-			</div>
+			<div className="label">{label}</div>
 			{children}
 		</div>
 	);

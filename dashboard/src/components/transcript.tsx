@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
 	formatStepDuration,
 	formatStepNumber,
@@ -12,7 +13,7 @@ type Props = {
 };
 
 export function Transcript({ events, steps }: Props) {
-	const groups = groupByStep(events, steps);
+	const groups = useMemo(() => groupByStep(events, steps), [events, steps]);
 	return (
 		<div className="transcript" data-testid="transcript">
 			{groups.map((group) => {
@@ -42,6 +43,7 @@ function groupByStep(events: RunEvent[], steps: Step[]): Group[] {
 
 	let lastTouchedBucket: RunEvent[] | null = null;
 	for (const event of events) {
+		if (isLifecycleEvent(event)) continue;
 		if (event.stepName == null) {
 			if (lastTouchedBucket == null) looseLeading.push(event);
 			else lastTouchedBucket.push(event);
@@ -239,5 +241,19 @@ function renderRowBody(event: RunEvent) {
 			const _exhaustive: never = event;
 			return _exhaustive;
 		}
+	}
+}
+
+function isLifecycleEvent(event: RunEvent): boolean {
+	switch (event.kind) {
+		case "step:started":
+		case "step:completed":
+		case "step:failed":
+		case "run:started":
+		case "run:completed":
+		case "run:failed":
+			return true;
+		default:
+			return false;
 	}
 }

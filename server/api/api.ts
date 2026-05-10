@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import type { FinalizeFailurePhase } from "../db/schema.ts";
 import type { Last24hStats } from "../db/stats-query.ts";
 import { eventBus, type RunEvent } from "../event-bus.ts";
 import type { Logger } from "../logger.ts";
@@ -232,6 +233,7 @@ type RunWire = {
 	pr: Run["pr"];
 	error: string | null;
 	failedStep: { index: number; name: string } | null;
+	finalizeFailure: { phase: FinalizeFailurePhase; error: string } | null;
 };
 
 type StepWire = Omit<RunStepRow, "runId">;
@@ -303,6 +305,7 @@ function runToWire(run: Run): RunWire {
 		durationMs: null,
 		error: null,
 		failedStep: null,
+		finalizeFailure: null,
 	};
 	switch (run.status) {
 		case "running":
@@ -320,6 +323,7 @@ function runToWire(run: Run): RunWire {
 				durationMs: run.durationMs,
 				error: run.error,
 				failedStep: run.failedStep,
+				finalizeFailure: run.finalizeFailure,
 			};
 	}
 }

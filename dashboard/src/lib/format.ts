@@ -50,10 +50,6 @@ export function formatElapsed(ms: number): string {
 	return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function elapsedSinceMs(startedAt: string): number {
-	return Math.max(0, Date.now() - new Date(startedAt).getTime());
-}
-
 export function formatStepDuration(ms: number | null): string {
 	if (ms == null) return "—";
 	const totalSeconds = Math.floor(ms / 1000);

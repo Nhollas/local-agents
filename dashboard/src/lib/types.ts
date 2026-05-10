@@ -13,6 +13,16 @@ export type RunPr = {
 
 export type RunFailedStep = { index: number; name: string };
 
+export type FinalizeFailurePhase =
+	| "push"
+	| "change_request"
+	| "tracker_transition";
+
+export type RunFinalizeFailure = {
+	phase: FinalizeFailurePhase;
+	error: string;
+};
+
 export type Run = {
 	id: string;
 	status: RunStatus;
@@ -31,6 +41,7 @@ export type Run = {
 	pr: RunPr | null;
 	error: string | null;
 	failedStep: RunFailedStep | null;
+	finalizeFailure: RunFinalizeFailure | null;
 };
 
 export type Step = {
@@ -169,4 +180,42 @@ export type RunEvent =
 			};
 	  });
 
-export type RunEventKind = RunEvent["kind"];
+type RunEventKind = RunEvent["kind"];
+
+export const RUN_EVENT_KINDS = [
+	"run:started",
+	"run:completed",
+	"run:failed",
+	"step:started",
+	"step:completed",
+	"step:failed",
+	"agent:say",
+	"tool:read",
+	"tool:edit",
+	"tool:grep",
+	"tool:bash",
+	"tool:other",
+	"system",
+] as const satisfies readonly RunEventKind[];
+
+export const LIFECYCLE_EVENT_KINDS = [
+	"run:started",
+	"run:completed",
+	"run:failed",
+	"step:started",
+	"step:completed",
+	"step:failed",
+] as const satisfies readonly RunEventKind[];
+
+export const RUN_TERMINAL_EVENT_KINDS = [
+	"run:completed",
+	"run:failed",
+] as const satisfies readonly RunEventKind[];
+
+type _RunEventKindsAreExhaustive = [
+	Exclude<RunEventKind, (typeof RUN_EVENT_KINDS)[number]>,
+] extends [never]
+	? true
+	: never;
+const _runEventKindsExhaustive: _RunEventKindsAreExhaustive = true;
+void _runEventKindsExhaustive;

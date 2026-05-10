@@ -26,6 +26,8 @@ const baseRunRow = {
 	prNumber: null,
 	prRepo: null,
 	prKind: null,
+	finalizeFailurePhase: null,
+	finalizeFailureError: null,
 };
 
 describe("Orchestrator startup recovery", () => {

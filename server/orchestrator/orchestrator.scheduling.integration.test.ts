@@ -15,6 +15,8 @@ const baseRunRow = {
 	prNumber: null,
 	prRepo: null,
 	prKind: null,
+	finalizeFailurePhase: null,
+	finalizeFailureError: null,
 };
 
 function dispatchedRunRow(issueNum: number) {
