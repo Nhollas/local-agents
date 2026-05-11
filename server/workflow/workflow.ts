@@ -18,6 +18,7 @@ const workflowStepSchema = z
 		resume_previous: z.boolean().optional().default(false),
 		output_schema: jsonSchemaDocument.optional(),
 		model: modelIdSchema,
+		allowed_tools: z.array(z.string().min(1)).min(1).optional(),
 	})
 	.strict();
 

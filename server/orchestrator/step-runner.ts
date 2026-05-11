@@ -138,6 +138,7 @@ async function runWorkflowStep({
 			signal: ctx.signal,
 			...(resumeSessionId && { resumeSessionId }),
 			...(outputFormat && { outputFormat }),
+			...(step.allowed_tools && { allowedTools: step.allowed_tools }),
 		})) {
 			if (msg.type === "assistant") {
 				emitAgentMessageEvents(msg, { ctx, stepName: step.name, cwd });

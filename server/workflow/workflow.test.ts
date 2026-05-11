@@ -306,6 +306,42 @@ ${validChangeRequest}`;
 		]);
 	});
 
+	it("accepts a step with an allowed_tools list", () => {
+		const yaml = `
+branch: my-branch
+steps:
+  - name: summarise
+    prompt: Summarise the issue
+    model: claude-haiku-4-5
+    allowed_tools: [Read, Glob, Grep]
+${validChangeRequest}`;
+
+		const result = parseRepoWorkflow(yaml);
+
+		expect(result.steps).toEqual([
+			{
+				name: "summarise",
+				prompt: "Summarise the issue",
+				resume_previous: false,
+				model: "claude-haiku-4-5",
+				allowed_tools: ["Read", "Glob", "Grep"],
+			},
+		]);
+	});
+
+	it("rejects a step with an empty allowed_tools list", () => {
+		const yaml = `
+branch: my-branch
+steps:
+  - name: summarise
+    prompt: Summarise
+    model: claude-haiku-4-5
+    allowed_tools: []
+${validChangeRequest}`;
+
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
+	});
+
 	it("rejects a step missing model", () => {
 		const yaml = `
 branch: my-branch

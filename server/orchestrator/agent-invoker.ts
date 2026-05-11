@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { buildCanonicalLogHooks } from "./agent-hooks.ts";
 
 export type AgentMessage =
 	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never;
@@ -15,13 +16,14 @@ export type AgentInvokeOptions = {
 	resumeSessionId?: string;
 	signal: AbortSignal;
 	outputFormat?: OutputFormat;
+	allowedTools?: readonly string[];
 };
 
 export type AgentInvoker = {
 	invoke(opts: AgentInvokeOptions): AsyncIterable<AgentMessage>;
 };
 
-export const ALLOWED_TOOLS = [
+export const DEFAULT_ALLOWED_TOOLS = [
 	"Read",
 	"Write",
 	"Edit",
@@ -33,14 +35,22 @@ export const ALLOWED_TOOLS = [
 
 export function claudeSdkAgentInvoker(): AgentInvoker {
 	return {
-		invoke({ prompt, cwd, model, resumeSessionId, outputFormat, signal }) {
+		invoke({
+			prompt,
+			cwd,
+			model,
+			resumeSessionId,
+			outputFormat,
+			signal,
+			allowedTools,
+		}) {
 			return query({
 				prompt,
 				options: {
 					cwd,
 					model,
 					abortController: abortControllerFromSignal(signal),
-					allowedTools: [...ALLOWED_TOOLS],
+					allowedTools: [...(allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
 					permissionMode: "dontAsk" as const,
 					settingSources: ["project"],
 					systemPrompt: {
@@ -48,6 +58,7 @@ export function claudeSdkAgentInvoker(): AgentInvoker {
 						preset: "claude_code",
 						excludeDynamicSections: true,
 					},
+					hooks: buildCanonicalLogHooks(),
 					...(resumeSessionId && { resume: resumeSessionId }),
 					...(outputFormat && { outputFormat }),
 				},

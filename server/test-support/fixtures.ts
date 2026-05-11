@@ -3,7 +3,7 @@ import {
 	type AgentInvokeOptions,
 	type AgentInvoker,
 	type AgentMessage,
-	ALLOWED_TOOLS,
+	DEFAULT_ALLOWED_TOOLS,
 } from "../orchestrator/agent-invoker.ts";
 import { repoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
@@ -19,7 +19,7 @@ export function adaptRunAgent(runAgent: TestRunAgent): AgentInvoker {
 				options: {
 					cwd,
 					model,
-					allowedTools: [...ALLOWED_TOOLS],
+					allowedTools: [...DEFAULT_ALLOWED_TOOLS],
 					permissionMode: "dontAsk" as const,
 					...(resumeSessionId && { resume: resumeSessionId }),
 				},

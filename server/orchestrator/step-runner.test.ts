@@ -707,6 +707,44 @@ describe("runWorkflowSteps", () => {
 		);
 	});
 
+	it("forwards a step's allowed_tools to the agent when present", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(() => yieldAssistant("sess"));
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{
+					name: "summarise",
+					prompt: "summarise",
+					resume_previous: false,
+					model: "claude-haiku-4-5",
+					allowed_tools: ["Read", "Glob", "Grep"],
+				},
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		await runWorkflowSteps({
+			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
+			agent,
+			workflow,
+			issue,
+			cwd: "/work",
+			branch: "agent/issue-1",
+			baseBranch: "main",
+		});
+
+		expect(agent.calls[0]?.allowedTools).toEqual(["Read", "Glob", "Grep"]);
+		expect(agent.calls[1]?.allowedTools).toBeUndefined();
+	});
+
 	it("passes each step's declared model to the agent", async () => {
 		const recorder = createCtx();
 		const agent = createAgent(() => yieldAssistant("sess"));
