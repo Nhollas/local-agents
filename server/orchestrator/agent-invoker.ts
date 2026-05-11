@@ -28,6 +28,7 @@ export const ALLOWED_TOOLS = [
 	"Bash",
 	"Glob",
 	"Grep",
+	"Task",
 ] as const;
 
 export function claudeSdkAgentInvoker(): AgentInvoker {
@@ -41,6 +42,12 @@ export function claudeSdkAgentInvoker(): AgentInvoker {
 					abortController: abortControllerFromSignal(signal),
 					allowedTools: [...ALLOWED_TOOLS],
 					permissionMode: "dontAsk" as const,
+					settingSources: ["project"],
+					systemPrompt: {
+						type: "preset",
+						preset: "claude_code",
+						excludeDynamicSections: true,
+					},
 					...(resumeSessionId && { resume: resumeSessionId }),
 					...(outputFormat && { outputFormat }),
 				},

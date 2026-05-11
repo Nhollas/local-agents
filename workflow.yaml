@@ -45,19 +45,17 @@ steps:
       {{ issue.description }}
       </issue>
 
-      <repo_layout>
-      !`ls -1`
-      </repo_layout>
-
       <recent_commits>
       !`git log -n 10 --oneline`
       </recent_commits>
 
       # Approach
 
-      1. **Orient.** Read what this repo provides for orientation — agent
-         instructions, READMEs, contributing/standards docs, ADRs. Follow
-         what they say about conventions, testing, docs, and commits.
+      1. **Orient until you can predict the change.** Use what's already
+         in your context first. Pull in READMEs, ADRs, or surrounding
+         code only until you have enough confidence to make the change
+         correctly. Stop reading when you can name the files you'll
+         touch and the approach you'll take.
 
       2. **Investigate before editing.** Locate the existing
          implementation and tests for the area you'll change. Read the
@@ -69,9 +67,8 @@ steps:
          defensive checks, or configurability only when the issue calls
          for them.
 
-      4. **Verify with the project's checks** before committing.
-         Discover the commands from the repo. Run independent commands
-         in parallel.
+      4. **Verify with the project's checks** before committing. Discover 
+        the commands from the repo.
 
       # Stopping
 
@@ -108,9 +105,11 @@ steps:
 
       # Approach
 
-      1. **Orient.** Read what this repo provides for orientation — agent
-         instructions, READMEs, contributing/standards docs, ADRs. Review
-         against the project's conventions, not generic best practice.
+      1. **Orient until you can judge the change.** Use what's already
+         in your context first. Pull in conventions docs, ADRs, or
+         surrounding code only until you have enough confidence to tell
+         whether the diff fits the project. Stop reading when you can
+         defend a verdict.
 
       2. **Read changed files in their surrounding context.** The diff
          shows what changed; read the surrounding code to judge whether
@@ -144,6 +143,7 @@ steps:
       If the branch needs no changes, make none.
 
   - name: summarise
+    model: claude-haiku-4-5
     prompt: |
       <task>
       Write a reviewer-facing summary of the change on branch

@@ -1,4 +1,4 @@
-import { access, realpath } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTestWorkspaceRoot } from "../test-support/test-workspace.ts";
@@ -8,6 +8,7 @@ import {
 	expandMarkedShellBlocks,
 	markTrustedShellBlocks,
 	SHELL_BLOCK_MARKER,
+	SHELL_BLOCK_SPILL_DIR,
 } from "./prompt-preprocessor.ts";
 import { renderPrompt } from "./workflow.ts";
 
@@ -158,7 +159,7 @@ describe("shell block preprocessing", () => {
 
 		await expect(
 			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/exceeded max output/);
+		).rejects.toThrow(/exceeded hard output ceiling/);
 	});
 
 	it("fails when shell stderr exceeds the buffer cap", async () => {
@@ -170,7 +171,35 @@ describe("shell block preprocessing", () => {
 
 		await expect(
 			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/exceeded max output/);
+		).rejects.toThrow(/exceeded hard output ceiling/);
+	});
+
+	it("spills oversized output to disk and inlines a head + tail preview", async () => {
+		await using workspace = await createTestWorkspaceRoot();
+
+		const marked = markTrustedShellBlocks(
+			"!`yes hello | head -c 80000; printf END`",
+		);
+
+		const result = await expandMarkedShellBlocks(marked, {
+			cwd: workspace.root,
+			stepName: "review",
+		});
+
+		const spillPath = join(
+			workspace.root,
+			SHELL_BLOCK_SPILL_DIR,
+			"review-1.txt",
+		);
+		const spillContents = await readFile(spillPath, "utf8");
+
+		expect(spillContents.length).toBe(80003);
+		expect(spillContents.endsWith("END")).toBe(true);
+		expect(result).toMatch(
+			/\.\.\. \[truncated \d+ bytes; full output at \.agent\/shell-outputs\/review-1\.txt\] \.\.\./,
+		);
+		expect(result.endsWith("END")).toBe(true);
+		expect(result.length).toBeLessThan(spillContents.length);
 	});
 
 	it("keeps literal unmarked shell-looking text in the final prompt", async () => {
