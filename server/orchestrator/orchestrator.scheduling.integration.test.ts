@@ -23,8 +23,6 @@ const baseRunRow = {
 function dispatchedRunRow(issueNum: number) {
 	return {
 		...baseRunRow,
-		branch: `agent/issue-${issueNum}`,
-		workspaceDir: expect.any(String),
 		issueUrl: `https://tracker.example.test/browse/${jiraIssueKey(issueNum)}`,
 		repoUrl: `https://code-host.example.test/${REPO}`,
 	};
@@ -35,9 +33,8 @@ describe("Orchestrator scheduling", () => {
 		await using ctx = await createTestOrchestrator({
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, db, workspace, tracker } = ctx;
+		const { orchestrator, db, tracker } = ctx;
 		tracker.addIssue("pending", { number: 1, repo: REPO });
-		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
 		await orchestrator.tick();
 
@@ -67,14 +64,13 @@ describe("Orchestrator scheduling", () => {
 			configOverrides: { max_concurrent: 1 },
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, db, workspace, tracker } = ctx;
+		const { orchestrator, db, tracker } = ctx;
 		for (const num of [1, 2, 3]) {
 			tracker.addIssue("pending", {
 				number: num,
 				repo: REPO,
 				createdAt: `2025-01-0${num}T00:00:00.000+0000`,
 			});
-			await workspace.preCreateWorkspace(jiraIssueKey(num));
 		}
 
 		await orchestrator.tick();
@@ -102,7 +98,7 @@ describe("Orchestrator scheduling", () => {
 			configOverrides: { max_concurrent: 2 },
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, db, workspace, tracker } = ctx;
+		const { orchestrator, db, tracker } = ctx;
 		tracker.addIssue("pending", {
 			number: 99,
 			repo: REPO,
@@ -118,9 +114,6 @@ describe("Orchestrator scheduling", () => {
 			repo: REPO,
 			createdAt: "2025-01-02T00:00:00.000+0000",
 		});
-		for (const num of [42, 77, 99]) {
-			await workspace.preCreateWorkspace(jiraIssueKey(num));
-		}
 
 		await orchestrator.tick();
 
@@ -136,9 +129,8 @@ describe("Orchestrator scheduling", () => {
 			maxConcurrency: 5,
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, db, workspace, tracker } = ctx;
+		const { orchestrator, db, tracker } = ctx;
 		tracker.addIssue("pending", { number: 1, repo: REPO });
-		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
 		await orchestrator.tick();
 		const before = db.select().from(runs).all();
@@ -149,22 +141,25 @@ describe("Orchestrator scheduling", () => {
 		expect(after).toEqual(before);
 	});
 
-	it("rolls back tracker (running → pending) when lifecycle.dispatch throws (workspace clone fails)", async () => {
+	it("records a failed run and marks the issue failed when clone fails inside the lifecycle", async () => {
 		await using ctx = await createTestOrchestrator();
-		const { orchestrator, db, runner, tracker, codeHost } = ctx;
+		const { orchestrator, db, runner, tracker, codeHost, repo: runRepo } = ctx;
 		tracker.addIssue("pending", { number: 1, repo: REPO });
-		// No preCreateWorkspace + bad cloneUrl ⇒ ensureWorkspace's `git clone` fails.
 		codeHost.setCloneUrl(REPO, "/nonexistent/repo.git");
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();
 		await orchestrator.settled();
 
-		expect(db.select().from(runs).all()).toHaveLength(0);
+		const allRuns = db.select().from(runs).all();
+		expect(allRuns).toHaveLength(1);
+		const [run] = runRepo.getRuns({ limit: 1 });
+		if (run?.status !== "failed") throw new Error("expected failed run");
+		expect(run.error).toMatch(/git clone|does not appear to be a git/);
 		expect(tracker.transitions).toEqual([
 			{ repo: REPO, number: 1, from: "pending", to: "running" },
-			{ repo: REPO, number: 1, from: "running", to: "pending" },
 		]);
+		expect(tracker.markedFailed).toEqual([{ repo: REPO, number: 1 }]);
 	});
 
 	it("start() polls on the configured interval and stop() halts it", async () => {
@@ -191,14 +186,14 @@ describe("Orchestrator scheduling", () => {
 	});
 
 	it("start() runs recovery before the first tick dispatches pending issues", async () => {
-		// Real timers because dispatch awaits real fs I/O in ensureWorkspace; fake
+		// Real timers because dispatch awaits real fs I/O in createWorkspace; fake
 		// timers don't drain the libuv thread pool. Polling interval is set very
 		// long so the first-tick assertion observes only the startup sequence.
 		await using ctx = await createTestOrchestrator({
 			configOverrides: { polling_interval_ms: 60_000 },
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, db, workspace, tracker } = ctx;
+		const { orchestrator, db, tracker } = ctx;
 
 		seedRun(db, {
 			id: "stale-run",
@@ -209,11 +204,14 @@ describe("Orchestrator scheduling", () => {
 			startedAt: "2025-01-01T00:00:00Z",
 		});
 		tracker.addIssue("pending", { number: 1, repo: REPO });
-		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
 		orchestrator.start();
 		await vi.waitFor(() => {
-			expect(db.select().from(runs).all()).toHaveLength(2);
+			const rows = db.select().from(runs).all();
+			expect(rows).toHaveLength(2);
+			const dispatched = rows.find((r) => r.id !== "stale-run");
+			expect(dispatched?.workspaceDir).toEqual(expect.any(String));
+			expect(dispatched?.branch).toEqual(expect.any(String));
 		});
 
 		// Recovery happened first: stale run failed and tracker fetched "running".
@@ -236,6 +234,8 @@ describe("Orchestrator scheduling", () => {
 			{
 				id: expect.any(String),
 				...dispatchedRunRow(1),
+				workspaceDir: expect.any(String),
+				branch: `agent/issue-1`,
 				status: "running",
 				error: null,
 				repo: REPO,
@@ -256,7 +256,7 @@ describe("Orchestrator scheduling", () => {
 		await using ctx = await createTestOrchestrator({
 			configOverrides: { polling_interval_ms: 1000 },
 		});
-		const { orchestrator, db, tracker } = ctx;
+		const { orchestrator, tracker } = ctx;
 		tracker.addIssue("pending", { number: 1, repo: REPO });
 		tracker.failNextTransition();
 
@@ -264,11 +264,11 @@ describe("Orchestrator scheduling", () => {
 		await vi.advanceTimersByTimeAsync(0);
 		await vi.advanceTimersByTimeAsync(1000);
 
-		// Recovery + at least two ticks fired despite the dispatch-time throw.
+		// First tick's pending→running transition is rejected; the loop keeps
+		// polling so a subsequent tick retries.
 		expect(
 			tracker.fetchCalls.filter((s) => s === "pending").length,
 		).toBeGreaterThanOrEqual(2);
-		expect(db.select().from(runs).all()).toHaveLength(0);
 
 		orchestrator.stop();
 		vi.useRealTimers();

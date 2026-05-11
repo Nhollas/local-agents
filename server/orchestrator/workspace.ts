@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, rm } from "node:fs/promises";
+import { access, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Issue } from "../trackers/types.ts";
@@ -16,23 +16,19 @@ export function sanitizeKey(key: string): string {
 	return key.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-export async function ensureWorkspace(
+export async function createWorkspace(
 	issue: Issue,
 	workspaceRoot: string,
 	cloneUrl: string,
-): Promise<{ path: string; created: boolean }> {
-	const dirName = sanitizeKey(issue.key);
+	runId: string,
+): Promise<string> {
+	const dirName = `${sanitizeKey(issue.key)}-${runId}`;
 	const wsPath = join(workspaceRoot, dirName);
-
-	try {
-		await access(wsPath);
-		return { path: wsPath, created: false };
-	} catch {}
 
 	await mkdir(wsPath, { recursive: true });
 	await exec("git", ["clone", cloneUrl, "."], { cwd: wsPath });
 
-	return { path: wsPath, created: true };
+	return wsPath;
 }
 
 export async function ensureBranch(
@@ -60,6 +56,35 @@ export async function removeWorkspace(wsPath: string): Promise<void> {
 		maxRetries: 5,
 		retryDelay: 25,
 	});
+}
+
+// Delete workspace directories older than `maxAgeMs`. Workspaces are kept on
+// failure for forensics, so without a sweep they'd accumulate indefinitely.
+export async function sweepWorkspaces(
+	workspaceRoot: string,
+	maxAgeMs: number,
+	now: number = Date.now(),
+): Promise<{ removed: string[] }> {
+	let entries: string[];
+	try {
+		entries = await readdir(workspaceRoot);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			return { removed: [] };
+		}
+		throw err;
+	}
+
+	const removed: string[] = [];
+	for (const entry of entries) {
+		const path = join(workspaceRoot, entry);
+		const info = await stat(path).catch(() => null);
+		if (!info?.isDirectory()) continue;
+		if (now - info.mtimeMs < maxAgeMs) continue;
+		await removeWorkspace(path);
+		removed.push(path);
+	}
+	return { removed };
 }
 
 const SETUP_SCRIPT_PATH = ".agent/setup.sh";

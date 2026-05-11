@@ -103,7 +103,11 @@ function FailureTag({ run }: { run: Run }) {
 			: finalize != null
 				? `${finalize.phase} · ${finalize.error}`
 				: `failed · ${error}`;
-	return <span className="err">{text}</span>;
+	return (
+		<span className="err" title={text}>
+			{text}
+		</span>
+	);
 }
 
 function PrLink({ pr }: { pr: RunPr }) {

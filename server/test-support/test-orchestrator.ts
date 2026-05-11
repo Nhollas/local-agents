@@ -7,9 +7,9 @@ import { createCodeHostStub } from "./code-host-stub.ts";
 import {
 	adaptRunAgent,
 	createTestWorkflow,
-	type LegacyRunAgent,
 	noopAgent,
 	REPO,
+	type TestRunAgent,
 } from "./fixtures.ts";
 import { createTestConfig } from "./test-config.ts";
 import { createTestDb } from "./test-db.ts";
@@ -18,7 +18,7 @@ import { createTestWorkspaceRoot } from "./test-workspace.ts";
 import { createTrackerStub } from "./tracker-stub.ts";
 
 type CreateTestOrchestratorOptions = {
-	runAgent?: LegacyRunAgent;
+	runAgent?: TestRunAgent;
 	agent?: AgentInvoker;
 	configOverrides?: Parameters<typeof createTestConfig>[0];
 	workflow?: RepoWorkflow;
@@ -38,6 +38,9 @@ export async function createTestOrchestrator(
 
 	const tracker = createTrackerStub();
 	const codeHost = createCodeHostStub();
+
+	const defaultBare = await workspace.setupRepoRemote(REPO);
+	codeHost.setCloneUrl(REPO, defaultBare);
 
 	const agent = options.agent ?? adaptRunAgent(options.runAgent ?? noopAgent);
 

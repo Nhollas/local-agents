@@ -9,11 +9,9 @@ import { repoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 
 type QueryParams = Parameters<typeof query>[0];
-export type LegacyRunAgent = (
-	params: QueryParams,
-) => AsyncIterable<AgentMessage>;
+export type TestRunAgent = (params: QueryParams) => AsyncIterable<AgentMessage>;
 
-export function adaptRunAgent(runAgent: LegacyRunAgent): AgentInvoker {
+export function adaptRunAgent(runAgent: TestRunAgent): AgentInvoker {
 	return {
 		invoke({ prompt, cwd, model, resumeSessionId }: AgentInvokeOptions) {
 			return runAgent({

@@ -8,7 +8,7 @@ describe("Orchestrator holding queue", () => {
 			configOverrides: { max_concurrent: 1 },
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, workspace, tracker } = ctx;
+		const { orchestrator, tracker } = ctx;
 
 		tracker.addIssue("pending", {
 			number: 1,
@@ -22,8 +22,6 @@ describe("Orchestrator holding queue", () => {
 			title: "issue two",
 			createdAt: "2025-01-02T00:00:00.000+0000",
 		});
-		await workspace.preCreateWorkspace(jiraIssueKey(1));
-		await workspace.preCreateWorkspace(jiraIssueKey(2));
 
 		await orchestrator.tick();
 
