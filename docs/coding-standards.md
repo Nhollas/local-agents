@@ -1,6 +1,6 @@
 # Coding Standards
 
-Canonical rules for code in this repo. `CLAUDE.md` summarises; this doc is the source of truth.
+Canonical rules for code in this repo.
 
 ## Sections
 

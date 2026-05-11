@@ -7,6 +7,7 @@ import {
 	sqliteTable,
 	text,
 } from "drizzle-orm/sqlite-core";
+import type { RunEventData, RunEventKind } from "../event-schema.ts";
 import type { IssueKey, RepoSlug, RunId } from "../types/brands.ts";
 
 export const runs = sqliteTable("runs", {
@@ -88,83 +89,3 @@ export type FinalizeFailurePhase =
 	| "push"
 	| "change_request"
 	| "tracker_transition";
-
-export type RunEventKind =
-	| "run:started"
-	| "run:completed"
-	| "run:failed"
-	| "step:started"
-	| "step:completed"
-	| "step:failed"
-	| "agent:say"
-	| "tool:read"
-	| "tool:edit"
-	| "tool:grep"
-	| "tool:bash"
-	| "tool:other"
-	| "system";
-
-export type RunStartedData = {
-	issueKey: string | null;
-	issueTitle: string | null;
-};
-export type RunCompletedData = {
-	durationMs: number;
-	costUsd: number;
-	tokens: { in: number; out: number };
-};
-export type RunFailedData = { error: string; durationMs: number };
-
-export type StepStartedData = { name: string; index: number; total: number };
-export type StepCompletedData = {
-	name: string;
-	index: number;
-	durationMs: number;
-};
-export type StepFailedData = {
-	name: string;
-	index: number;
-	error: string;
-	durationMs: number;
-};
-
-export type AgentSayData = { text: string };
-
-export type ToolReadData = { path: string; lines: number };
-export type ToolEditData = {
-	path: string;
-	added: number;
-	removed: number;
-	summary: string;
-};
-export type ToolGrepData = { pattern: string; path: string; matches: number };
-export type ToolBashState = "running" | "exited" | "aborted";
-export type ToolBashData = {
-	command: string;
-	cwd: string | null;
-	state: ToolBashState;
-	exitCode: number | null;
-};
-export type ToolOtherData = { tool: string; summary: string };
-
-export type SystemData = {
-	message: string;
-	command: string | null;
-	path: string | null;
-	exitCode: number | null;
-};
-
-export type RunEventData =
-	| RunStartedData
-	| RunCompletedData
-	| RunFailedData
-	| StepStartedData
-	| StepCompletedData
-	| StepFailedData
-	| AgentSayData
-	| ToolReadData
-	| ToolEditData
-	| ToolGrepData
-	| ToolBashData
-	| ToolOtherData
-	| SystemData;

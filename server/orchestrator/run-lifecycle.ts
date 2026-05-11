@@ -46,7 +46,6 @@ type RunLifecycleDeps = {
 	runShell: RunShell;
 	logger: Logger;
 	workspaceRoot: string;
-	model: string;
 };
 
 type FailurePhase =
@@ -75,7 +74,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		runShell,
 		logger,
 		workspaceRoot,
-		model,
 	} = deps;
 
 	async function dispatch(req: RunRequest): Promise<RunHandle> {
@@ -148,7 +146,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								issue,
 								agent,
 								cwd: wsPath,
-								model,
 								signal: ctx.signal,
 							});
 							canonicalLog.set({
@@ -195,7 +192,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								branch,
 								baseBranch,
 								cwd: wsPath,
-								model,
 							});
 
 							result = {

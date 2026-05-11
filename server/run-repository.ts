@@ -6,16 +6,20 @@ import type { Db } from "./db/db.ts";
 import {
 	type FinalizeFailurePhase,
 	type PrKind,
-	type RunEventData,
-	type RunEventKind,
 	type RunStatus,
 	runEvents,
 	runStepOutputs,
 	runSteps,
 	runs,
-	type ToolBashData,
 } from "./db/schema.ts";
-import type { RunEvent } from "./event-bus.ts";
+import {
+	type RunEvent,
+	type RunEventData,
+	type RunEventKind,
+	runEventSchema,
+	type ToolBashData,
+	toolBashDataSchema,
+} from "./event-schema.ts";
 import type { IssueKey, RepoSlug, RunId } from "./types/brands.ts";
 
 export type RunPr = {
@@ -228,7 +232,10 @@ export function createRunRepository(db: Db): RunRepository {
 				.where(eq(runEvents.id, eventId))
 				.get();
 			if (!row || row.kind !== "tool:bash") return undefined;
-			const merged: ToolBashData = { ...(row.data as ToolBashData), ...patch };
+			const merged: ToolBashData = {
+				...toolBashDataSchema.parse(row.data),
+				...patch,
+			};
 			db.update(runEvents)
 				.set({ data: merged })
 				.where(eq(runEvents.id, eventId))
@@ -341,8 +348,11 @@ export function createRunRepository(db: Db): RunRepository {
 				.from(runEvents)
 				.where(and(eq(runEvents.runId, runId), eq(runEvents.kind, "tool:bash")))
 				.all()
-				.filter((row) => (row.data as ToolBashData).state === "running")
-				.map(rowToEvent);
+				.map(rowToEvent)
+				.filter(
+					(event): event is Extract<RunEvent, { kind: "tool:bash" }> =>
+						event.kind === "tool:bash" && event.data.state === "running",
+				);
 		},
 
 		insertSteps(runId, steps) {
@@ -497,13 +507,5 @@ function rowToRun(row: RunRow, failedStep: RunFailedStep | null): Run {
 }
 
 function rowToEvent(row: RunEventRow): RunEvent {
-	return {
-		id: row.id,
-		seq: row.seq as number,
-		runId: row.runId,
-		kind: row.kind,
-		stepName: row.stepName,
-		data: row.data,
-		createdAt: row.createdAt,
-	} as RunEvent;
+	return runEventSchema.parse(row);
 }

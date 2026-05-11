@@ -53,7 +53,6 @@ describe("resolveBranch", () => {
 			issue,
 			agent,
 			cwd: "/work",
-			model: "test-model",
 			signal: new AbortController().signal,
 		});
 
@@ -74,11 +73,11 @@ describe("resolveBranch", () => {
 			workflowBranch: {
 				prompt: "Propose a name for {{ issue.key }}",
 				schema: branchSchema,
+				model: "claude-haiku-4-5",
 			},
 			issue,
 			agent,
 			cwd: "/work",
-			model: "test-model",
 			signal: new AbortController().signal,
 		});
 
@@ -87,7 +86,7 @@ describe("resolveBranch", () => {
 		expect(agent.calls[0]).toMatchObject({
 			prompt: "Propose a name for acme/widgets#1",
 			cwd: "/work",
-			model: "test-model",
+			model: "claude-haiku-4-5",
 			outputFormat: {
 				type: "json_schema",
 				schema: branchSchema,
@@ -106,11 +105,14 @@ describe("resolveBranch", () => {
 
 		await expect(
 			resolveBranch({
-				workflowBranch: { prompt: "Propose", schema: branchSchema },
+				workflowBranch: {
+					prompt: "Propose",
+					schema: branchSchema,
+					model: "claude-haiku-4-5",
+				},
 				issue,
 				agent,
 				cwd: "/work",
-				model: "test-model",
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/no `name` field/);
@@ -125,11 +127,14 @@ describe("resolveBranch", () => {
 
 		await expect(
 			resolveBranch({
-				workflowBranch: { prompt: "Propose", schema: branchSchema },
+				workflowBranch: {
+					prompt: "Propose",
+					schema: branchSchema,
+					model: "claude-haiku-4-5",
+				},
 				issue,
 				agent,
 				cwd: "/work",
-				model: "test-model",
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/stream ended without a result message/);
@@ -149,11 +154,11 @@ describe("resolveBranch", () => {
 				workflowBranch: {
 					prompt: "Propose",
 					schema: branchSchema,
+					model: "claude-haiku-4-5",
 				},
 				issue,
 				agent,
 				cwd: "/work",
-				model: "test-model",
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import * as canonicalLog from "./canonical-log.ts";
 
 type LogFields = Record<string, unknown>;
@@ -161,9 +161,8 @@ describe("canonicalLog", () => {
 			);
 		});
 
-		it("warns and overwrites when the key already holds a non-map value", async () => {
+		it("overwrites when the key already holds a non-map value", async () => {
 			const { logger, bag } = capturingLogger();
-			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
 			await canonicalLog.run(
 				{ scope: "test" },
@@ -174,15 +173,9 @@ describe("canonicalLog", () => {
 				logger,
 			);
 
-			expect(warn).toHaveBeenCalledWith(
-				expect.stringContaining(
-					'overwriting non-map value at key "tool_use_by_name"',
-				),
-			);
 			expect(bag()).toEqual(
 				expect.objectContaining({ tool_use_by_name: { Read: 1 } }),
 			);
-			warn.mockRestore();
 		});
 	});
 

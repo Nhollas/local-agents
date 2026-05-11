@@ -1,4 +1,4 @@
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 import { createRun, createRunDetail, createStep } from "./testing/contract.ts";
 import { test } from "./testing/fixture.tsx";
 import {
@@ -47,18 +47,23 @@ describe("dashboard centre column", () => {
 
 		const page = await dashboardPage.mountAt("run_9f3b2e1c");
 
-		await page.expectTitle("npm install hangs on linux runners");
-		await page.expectStatusTag("Running");
-		await page.expectMetaContains("ACME-1284");
-		await page.expectMetaContains("acme/api");
-		await page.expectMetaContains("fix/ACME-1284-npm-install-hang");
-		await page.expectMetaContains("$0.034");
-		await page.expectMetaContains("12.4k tok");
-		await page.expectMetaContains("/tmp/lag/9f3b2e1");
+		await expect
+			.element(page.getRunTitle())
+			.toHaveTextContent("npm install hangs on linux runners");
+		await expect.element(page.getStatusTag()).toHaveTextContent("Running");
+		await expect.element(page.getMeta()).toHaveTextContent("ACME-1284");
+		await expect.element(page.getMeta()).toHaveTextContent("acme/api");
+		await expect
+			.element(page.getMeta())
+			.toHaveTextContent("fix/ACME-1284-npm-install-hang");
+		await expect.element(page.getMeta()).toHaveTextContent("$0.034");
+		await expect.element(page.getMeta()).toHaveTextContent("12.4k tok");
+		await expect.element(page.getMeta()).toHaveTextContent("/tmp/lag/9f3b2e1");
 
-		await page.expectStepState(1, { name: "implement", klass: "now" });
-		await page.expectStepState(2, { name: "review", klass: "" });
-		await page.expectStepState(3, { name: "summarise", klass: "" });
+		await expect.element(page.getStepCell(1)).toHaveTextContent("implement");
+		await expect.element(page.getStepCell(1)).toHaveClass(/\bnow\b/);
+		await expect.element(page.getStepCell(2)).toHaveTextContent("review");
+		await expect.element(page.getStepCell(3)).toHaveTextContent("summarise");
 	});
 
 	test("renders done/failed cells for terminal states", async ({
@@ -98,16 +103,20 @@ describe("dashboard centre column", () => {
 
 		const page = await dashboardPage.mountAt("run-failed");
 
-		await page.expectStatusTag("Failed");
-		await page.expectStepState(1, { name: "implement", klass: "done" });
-		await page.expectStepState(2, { name: "review", klass: "failed" });
+		await expect.element(page.getStatusTag()).toHaveTextContent("Failed");
+		await expect.element(page.getStepCell(1)).toHaveTextContent("implement");
+		await expect.element(page.getStepCell(1)).toHaveClass(/\bdone\b/);
+		await expect.element(page.getStepCell(2)).toHaveTextContent("review");
+		await expect.element(page.getStepCell(2)).toHaveClass(/\bfailed\b/);
 	});
 
 	test("shows the empty placeholder when no run is selected", async ({
 		dashboardPage,
 	}) => {
 		const page = await dashboardPage.mountAt(null);
-		await page.expectPlaceholder(/no run selected/i);
+		await expect
+			.element(page.getPlaceholder())
+			.toHaveTextContent(/no run selected/i);
 	});
 
 	test("shows the error placeholder when the run is unknown", async ({
@@ -118,6 +127,8 @@ describe("dashboard centre column", () => {
 			runDetailNotFoundHandler("missing"),
 		);
 		const page = await dashboardPage.mountAt("missing");
-		await page.expectPlaceholder(/404|failed/i);
+		await expect
+			.element(page.getPlaceholder())
+			.toHaveTextContent(/404|failed/i);
 	});
 });

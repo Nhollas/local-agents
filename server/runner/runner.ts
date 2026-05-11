@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { RunEventData, RunEventKind, ToolBashData } from "../db/schema.ts";
-import { eventBus, type RunEvent } from "../event-bus.ts";
+import { eventBus } from "../event-bus.ts";
+import type { RunEvent, RunEventKind, ToolBashData } from "../event-schema.ts";
 import type { RunFinalizeFailure, RunRepository } from "../run-repository.ts";
 import {
 	type IssueKey,
@@ -12,18 +12,17 @@ import { createJobQueue, type JobQueue } from "./queue.ts";
 
 export const ABORT_ERROR = "Run killed by user";
 
-export type EmitInput<K extends RunEventKind = RunEventKind> = {
-	kind: K;
-	stepName: string | null;
-	data: Extract<RunEvent, { kind: K }>["data"];
-};
+export type EmitInput = {
+	[K in RunEventKind]: {
+		kind: K;
+		stepName: string | null;
+		data: Extract<RunEvent, { kind: K }>["data"];
+	};
+}[RunEventKind];
 
 export type RunContext = {
 	runId: RunId;
-	emit<K extends RunEventKind>(
-		input: EmitInput<K>,
-		createdAt?: string,
-	): Extract<RunEvent, { kind: K }>;
+	emit(input: EmitInput, createdAt?: string): RunEvent;
 	updateToolBashState(
 		eventId: string,
 		patch: Partial<Pick<ToolBashData, "state" | "exitCode">>,
@@ -75,18 +74,18 @@ export function createRunner(config: RunnerConfig): Runner {
 	const queue = createJobQueue({ maxConcurrency });
 	const activeRuns = new Map<RunId, AbortController>();
 
-	function emitFor<K extends RunEventKind>(
+	function emitFor(
 		id: RunId,
-		input: EmitInput<K>,
+		input: EmitInput,
 		createdAt = new Date().toISOString(),
-	): Extract<RunEvent, { kind: K }> {
+	): RunEvent {
 		const event = repo.insertEvent({
 			runId: id,
 			kind: input.kind,
 			stepName: input.stepName,
-			data: input.data as RunEventData,
+			data: input.data,
 			createdAt,
-		}) as Extract<RunEvent, { kind: K }>;
+		});
 		eventBus.emit(event);
 		return event;
 	}

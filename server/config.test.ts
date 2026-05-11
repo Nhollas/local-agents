@@ -24,7 +24,6 @@ function writeConfig(contents: string): TestConfigFile {
 const fullDefaults = `defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
-  model: claude-sonnet-4-6
   workspace_root: /tmp/workspaces
 `;
 

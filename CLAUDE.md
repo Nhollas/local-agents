@@ -5,7 +5,7 @@ Pre-launch and unstable. There are no real users, no production data, and no com
 ## Before writing code
 
 - Read existing code in the area you're changing. Follow the patterns already there.
-- Read `docs/coding-standards.md`.
+- Read `docs/coding-standards.md` and `docs/testing-standards.md`.
 - For architecture context, see `docs/architecture.md`. For decision history, see `docs/adr/`.
 
 ## Before considering work complete

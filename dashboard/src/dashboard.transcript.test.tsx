@@ -79,10 +79,16 @@ describe("dashboard transcript", () => {
 
 		const page = await dashboardPage.mountAt(RUN_ID);
 
-		await page.expectTranscriptContains("branch resolved");
-		await page.expectTranscriptContains("reading repo layout");
-		await page.expectTranscriptContains("scripts/install.sh");
-		await page.expectTranscriptContains("pnpm test");
+		await expect
+			.element(page.getTranscript())
+			.toHaveTextContent("branch resolved");
+		await expect
+			.element(page.getTranscript())
+			.toHaveTextContent("reading repo layout");
+		await expect
+			.element(page.getTranscript())
+			.toHaveTextContent("scripts/install.sh");
+		await expect.element(page.getTranscript()).toHaveTextContent("pnpm test");
 		await expect.element(page.getStepDivider(1)).toHaveTextContent("implement");
 		await expect.element(page.getBashCursor()).toBeInTheDocument();
 	});

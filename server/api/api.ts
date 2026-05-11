@@ -4,7 +4,8 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { FinalizeFailurePhase } from "../db/schema.ts";
 import type { Last24hStats } from "../db/stats-query.ts";
-import { eventBus, type RunEvent } from "../event-bus.ts";
+import { eventBus } from "../event-bus.ts";
+import type { RunEvent } from "../event-schema.ts";
 import type { Logger } from "../logger.ts";
 import type { Orchestrator } from "../orchestrator/orchestrator.ts";
 import type {
