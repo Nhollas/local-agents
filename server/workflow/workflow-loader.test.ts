@@ -9,6 +9,7 @@ branch: "agent/issue-{{ issue.number }}"
 steps:
   - name: implement
     prompt: "Fix the issue"
+    model: claude-sonnet-4-6
 change_request:
   title: "PR for {{ issue.key }}"
   body: "Closes {{ issue.key }}"
@@ -40,7 +41,12 @@ describe("loadWorkflow", () => {
 		expect(workflow).toEqual({
 			branch: "agent/issue-{{ issue.number }}",
 			steps: [
-				{ name: "implement", prompt: "Fix the issue", resume_previous: false },
+				{
+					name: "implement",
+					prompt: "Fix the issue",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 			],
 			change_request: {
 				title: "PR for {{ issue.key }}",
@@ -67,6 +73,7 @@ branch: agent
 steps:
   - name: implement
     prompt: "Use {{ steps.missing.output.title }}"
+    model: claude-sonnet-4-6
 change_request:
   title: "PR"
   body: "Closes"
@@ -86,12 +93,14 @@ branch: agent
 steps:
   - name: summarise
     prompt: "Write a summary"
+    model: claude-sonnet-4-6
     output_schema:
       type: object
       properties:
         title: { type: string }
   - name: implement
     prompt: "Use {{ steps.summarise.output.title }}"
+    model: claude-sonnet-4-6
 change_request:
   title: "PR: {{ steps.summarise.output.title }}"
   body: "Closes"

@@ -107,7 +107,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		runShell,
 		logger,
 		workspaceRoot: defaults.workspace_root,
-		model: defaults.model,
 	});
 
 	function trackPostRun(done: Promise<unknown>): void {

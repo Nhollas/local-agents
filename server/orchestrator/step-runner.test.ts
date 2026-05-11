@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as canonicalLog from "../canonical-log.ts";
-import type { RunEvent } from "../event-bus.ts";
+import type { RunEvent } from "../event-schema.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput, RunContext } from "../runner/runner.ts";
 import {
@@ -148,7 +148,14 @@ describe("runWorkflowSteps", () => {
 		const agent = createAgent(() => yieldAssistant("sess"));
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			steps: [{ name: "implement", prompt: "do it", resume_previous: false }],
+			steps: [
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+			],
 			change_request: baseChangeRequest,
 		};
 
@@ -161,7 +168,6 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
-			model: "test-model",
 		});
 
 		expect(agent.calls[0]?.outputFormat).toBeUndefined();
@@ -188,6 +194,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "Summarise",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
 			],
@@ -203,7 +210,6 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
-			model: "test-model",
 		});
 
 		expect(agent.calls[0]?.outputFormat).toEqual({
@@ -243,9 +249,15 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "Summarise",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
-				{ name: "after", prompt: "after", resume_previous: false },
+				{
+					name: "after",
+					prompt: "after",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 			],
 			change_request: baseChangeRequest,
 		};
@@ -260,7 +272,6 @@ describe("runWorkflowSteps", () => {
 				cwd: "/work",
 				branch: "agent/issue-1",
 				baseBranch: "main",
-				model: "test-model",
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);
 
@@ -296,7 +307,14 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			steps: [{ name: "implement", prompt: "do it", resume_previous: false }],
+			steps: [
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+			],
 			change_request: baseChangeRequest,
 		};
 
@@ -309,7 +327,6 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
-			model: "test-model",
 		});
 
 		expect(recorder.stepOutputs).toEqual([]);
@@ -337,6 +354,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "Working on {{ branch }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 			change_request: baseChangeRequest,
@@ -351,7 +369,6 @@ describe("runWorkflowSteps", () => {
 			branch: "feat/proposed",
 			cwd: "/work",
 			baseBranch: "main",
-			model: "test-model",
 		});
 
 		expect(agent.calls[0]?.prompt).toBe("Working on feat/proposed");
@@ -375,12 +392,14 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "Summarise",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
 				{
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 			change_request: baseChangeRequest,
@@ -395,7 +414,6 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
-			model: "test-model",
 		});
 
 		expect(agent.calls.map((c) => c.prompt)).toEqual([
@@ -410,8 +428,18 @@ describe("runWorkflowSteps", () => {
 		const workflow: RepoWorkflow = {
 			branch: "b",
 			steps: [
-				{ name: "implement", prompt: "do it", resume_previous: false },
-				{ name: "summarise", prompt: "summarise", resume_previous: false },
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+				{
+					name: "summarise",
+					prompt: "summarise",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 			],
 			change_request: baseChangeRequest,
 		};
@@ -429,7 +457,6 @@ describe("runWorkflowSteps", () => {
 					cwd: "/work",
 					branch: "agent/issue-1",
 					baseBranch: "main",
-					model: "test-model",
 				}),
 			logger,
 		);
@@ -459,6 +486,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "summarise",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
 			],
@@ -478,7 +506,6 @@ describe("runWorkflowSteps", () => {
 					cwd: "/work",
 					branch: "agent/issue-1",
 					baseBranch: "main",
-					model: "test-model",
 				}),
 			logger,
 		);
@@ -499,8 +526,18 @@ describe("runWorkflowSteps", () => {
 		const workflow: RepoWorkflow = {
 			branch: "b",
 			steps: [
-				{ name: "implement", prompt: "do it", resume_previous: false },
-				{ name: "after", prompt: "after", resume_previous: false },
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+				{
+					name: "after",
+					prompt: "after",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 			],
 			change_request: baseChangeRequest,
 		};
@@ -519,7 +556,6 @@ describe("runWorkflowSteps", () => {
 						cwd: "/work",
 						branch: "agent/issue-1",
 						baseBranch: "main",
-						model: "test-model",
 					}),
 				logger,
 			),
@@ -557,7 +593,12 @@ describe("runWorkflowSteps", () => {
 		const workflow: RepoWorkflow = {
 			branch: "b",
 			steps: [
-				{ name: "implement", prompt: "do it", resume_previous: false },
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 				{
 					name: "summarise",
 					prompt: "summarise",
@@ -581,7 +622,6 @@ describe("runWorkflowSteps", () => {
 					cwd: "/work",
 					branch: "agent/issue-1",
 					baseBranch: "main",
-					model: "claude-sonnet-4-6",
 				}),
 			logger,
 		);
@@ -628,7 +668,14 @@ describe("runWorkflowSteps", () => {
 		});
 		const workflow: RepoWorkflow = {
 			branch: "b",
-			steps: [{ name: "implement", prompt: "do it", resume_previous: false }],
+			steps: [
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+			],
 			change_request: baseChangeRequest,
 		};
 
@@ -646,7 +693,6 @@ describe("runWorkflowSteps", () => {
 						cwd: "/work",
 						branch: "agent/issue-1",
 						baseBranch: "main",
-						model: "claude-sonnet-4-6",
 					}),
 				logger,
 			),
@@ -661,13 +707,18 @@ describe("runWorkflowSteps", () => {
 		);
 	});
 
-	it("uses the per-step model when set, otherwise the default model", async () => {
+	it("passes each step's declared model to the agent", async () => {
 		const recorder = createCtx();
 		const agent = createAgent(() => yieldAssistant("sess"));
 		const workflow: RepoWorkflow = {
 			branch: "b",
 			steps: [
-				{ name: "implement", prompt: "do it", resume_previous: false },
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 				{
 					name: "review",
 					prompt: "review it",
@@ -687,7 +738,6 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
-			model: "claude-sonnet-4-6",
 		});
 
 		expect(agent.calls.map((c) => c.model)).toEqual([

@@ -6,7 +6,12 @@ function workflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
 	return {
 		branch: "agent/issue-{{ issue.number }}",
 		steps: [
-			{ name: "implement", prompt: "Fix the issue", resume_previous: false },
+			{
+				name: "implement",
+				prompt: "Fix the issue",
+				resume_previous: false,
+				model: "claude-sonnet-4-6",
+			},
 		],
 		change_request: {
 			title: "PR for {{ issue.key }}",
@@ -28,6 +33,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Use {{ steps.missing.output.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -44,11 +50,13 @@ describe("validateOutputReferences", () => {
 					name: "first",
 					prompt: "Read {{ steps.second.output.note }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 				{
 					name: "second",
 					prompt: "Write a note",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: { note: { type: "string" } },
@@ -69,6 +77,7 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write a summary",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: { title: { type: "string" } },
@@ -78,6 +87,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -92,11 +102,13 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Fix it",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 				{
 					name: "summarise",
 					prompt: "Summarise the fix",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: { title: { type: "string" } },
@@ -132,6 +144,7 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: { title: { type: "string" } },
@@ -141,6 +154,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.missing }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -157,6 +171,7 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: { title: { type: "string" } },
@@ -166,6 +181,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -180,6 +196,7 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: {
@@ -194,6 +211,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.summary.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -208,6 +226,7 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: {
@@ -222,6 +241,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.summary.bogus }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -234,11 +254,17 @@ describe("validateOutputReferences", () => {
 	it("rejects a reference to a step without an output_schema", () => {
 		const wf = workflow({
 			steps: [
-				{ name: "plan", prompt: "Plan it", resume_previous: false },
+				{
+					name: "plan",
+					prompt: "Plan it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 				{
 					name: "implement",
 					prompt: "Use {{ steps.plan.output.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -255,6 +281,7 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: {
 						type: "object",
 						properties: { title: { type: "string" } },
@@ -264,6 +291,7 @@ describe("validateOutputReferences", () => {
 					name: "implement",
 					prompt: "Whole: {{ steps.summarise.output }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});
@@ -285,12 +313,14 @@ describe("validateOutputReferences", () => {
 					name: "summarise",
 					prompt: "Write",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 					output_schema: { type: "object", ...fragment },
 				},
 				{
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.title }}",
 					resume_previous: false,
+					model: "claude-sonnet-4-6",
 				},
 			],
 		});

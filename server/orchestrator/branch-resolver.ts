@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
 import type { WorkflowBranch } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
@@ -5,12 +6,13 @@ import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { trackAgentToolUseBag } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 
+const branchOutputSchema = z.object({ name: z.string().min(1) });
+
 type ResolveBranchParams = {
 	workflowBranch: WorkflowBranch;
 	issue: Issue;
 	agent: AgentInvoker;
 	cwd: string;
-	model: string;
 	signal: AbortSignal;
 };
 
@@ -19,7 +21,6 @@ export async function resolveBranch({
 	issue,
 	agent,
 	cwd,
-	model,
 	signal,
 }: ResolveBranchParams): Promise<string> {
 	if (typeof workflowBranch === "string") {
@@ -35,7 +36,7 @@ export async function resolveBranch({
 	for await (const msg of agent.invoke({
 		prompt,
 		cwd,
-		model,
+		model: workflowBranch.model,
 		signal,
 		outputFormat,
 	})) {
@@ -46,13 +47,13 @@ export async function resolveBranch({
 		if (msg.type !== "result") continue;
 		recordAgentResult(msg);
 		if (msg.subtype === "success") {
-			const value = msg.structured_output as { name?: unknown };
-			if (typeof value?.name !== "string" || value.name.length === 0) {
+			const parsed = branchOutputSchema.safeParse(msg.structured_output);
+			if (!parsed.success) {
 				throw new Error(
 					"branch agent returned no `name` field in structured output",
 				);
 			}
-			return value.name;
+			return parsed.data.name;
 		}
 		throw new Error(msg.subtype);
 	}

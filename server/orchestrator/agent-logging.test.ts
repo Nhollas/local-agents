@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as canonicalLog from "../canonical-log.ts";
-import type { RunEvent } from "../event-bus.ts";
+import type { RunEvent } from "../event-schema.ts";
 import type { EmitInput, RunContext } from "../runner/runner.ts";
 import {
 	type AgentMessage,

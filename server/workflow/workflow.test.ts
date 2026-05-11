@@ -69,6 +69,7 @@ branch: "agent/issue-{{ issue.number }}"
 steps:
   - name: implement
     prompt: Fix this issue
+    model: claude-sonnet-4-6
 ${validChangeRequest}`;
 
 		const result = parseRepoWorkflow(yaml);
@@ -76,7 +77,12 @@ ${validChangeRequest}`;
 		expect(result).toEqual({
 			branch: "agent/issue-{{ issue.number }}",
 			steps: [
-				{ name: "implement", prompt: "Fix this issue", resume_previous: false },
+				{
+					name: "implement",
+					prompt: "Fix this issue",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
 			],
 			change_request: {
 				title: "PR for {{ issue.key }}",
@@ -91,19 +97,27 @@ branch: "agent/issue-{{ issue.number }}"
 steps:
   - name: plan
     prompt: Write a plan
+    model: claude-sonnet-4-6
   - name: implement
     prompt: Implement the plan
     resume_previous: true
+    model: claude-sonnet-4-6
 ${validChangeRequest}`;
 
 		const result = parseRepoWorkflow(yaml);
 
 		expect(result.steps).toEqual([
-			{ name: "plan", prompt: "Write a plan", resume_previous: false },
+			{
+				name: "plan",
+				prompt: "Write a plan",
+				resume_previous: false,
+				model: "claude-sonnet-4-6",
+			},
 			{
 				name: "implement",
 				prompt: "Implement the plan",
 				resume_previous: true,
+				model: "claude-sonnet-4-6",
 			},
 		]);
 	});
@@ -194,6 +208,7 @@ ${validChangeRequest}`;
 		const yaml = `
 branch:
   prompt: "Propose a name for {{ issue.key }}"
+  model: claude-haiku-4-5
   schema:
     type: object
     properties:
@@ -204,12 +219,14 @@ branch:
 steps:
   - name: implement
     prompt: Fix it
+    model: claude-sonnet-4-6
 ${validChangeRequest}`;
 
 		const result = parseRepoWorkflow(yaml);
 
 		expect(result.branch).toEqual({
 			prompt: "Propose a name for {{ issue.key }}",
+			model: "claude-haiku-4-5",
 			schema: {
 				type: "object",
 				properties: { name: { type: "string", pattern: "^feat/" } },
@@ -263,6 +280,7 @@ branch: my-branch
 steps:
   - name: summarise
     prompt: Summarise the issue
+    model: claude-sonnet-4-6
     output_schema:
       type: object
       properties:
@@ -278,6 +296,7 @@ ${validChangeRequest}`;
 				name: "summarise",
 				prompt: "Summarise the issue",
 				resume_previous: false,
+				model: "claude-sonnet-4-6",
 				output_schema: {
 					type: "object",
 					properties: { title: { type: "string" } },
@@ -287,18 +306,15 @@ ${validChangeRequest}`;
 		]);
 	});
 
-	it("accepts a step with a model override", () => {
+	it("rejects a step missing model", () => {
 		const yaml = `
 branch: my-branch
 steps:
   - name: review
     prompt: Review it
-    model: claude-opus-4-7
 ${validChangeRequest}`;
 
-		const result = parseRepoWorkflow(yaml);
-
-		expect(result.steps[0]?.model).toBe("claude-opus-4-7");
+		expect(() => parseRepoWorkflow(yaml)).toThrow();
 	});
 
 	it("throws on invalid YAML", () => {

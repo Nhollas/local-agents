@@ -6,7 +6,11 @@ import {
 	useMemo,
 	useRef,
 } from "react";
-import { RUN_EVENT_KINDS, type RunEvent } from "../lib/types.ts";
+import {
+	RUN_EVENT_KINDS,
+	type RunEvent,
+	runEventSchema,
+} from "../lib/types.ts";
 
 type RunEventListener = (event: RunEvent) => void;
 
@@ -66,9 +70,12 @@ export function useEventStream(): RunEventStream {
 const EventStreamContext = createContext<RunEventStream | null>(null);
 
 function parse(raw: string): RunEvent | null {
+	let json: unknown;
 	try {
-		return JSON.parse(raw) as RunEvent;
+		json = JSON.parse(raw);
 	} catch {
 		return null;
 	}
+	const result = runEventSchema.safeParse(json);
+	return result.success ? result.data : null;
 }

@@ -17,7 +17,7 @@ const workflowStepSchema = z
 		prompt: z.string(),
 		resume_previous: z.boolean().optional().default(false),
 		output_schema: jsonSchemaDocument.optional(),
-		model: modelIdSchema.optional(),
+		model: modelIdSchema,
 	})
 	.strict();
 
@@ -36,6 +36,7 @@ const branchAgentSchema = z
 	.object({
 		prompt: z.string().min(1),
 		schema: jsonSchemaDocument,
+		model: modelIdSchema,
 	})
 	.strict();
 

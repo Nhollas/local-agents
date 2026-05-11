@@ -26,7 +26,6 @@ type RunWorkflowStepsParams = {
 	branch: string;
 	baseBranch: string;
 	cwd: string;
-	model: string;
 };
 
 export async function runWorkflowSteps({
@@ -38,7 +37,6 @@ export async function runWorkflowSteps({
 	branch,
 	baseBranch,
 	cwd,
-	model,
 }: RunWorkflowStepsParams): Promise<Record<string, unknown>> {
 	const { steps } = workflow;
 	const outputs: Record<string, unknown> = {};
@@ -62,7 +60,7 @@ export async function runWorkflowSteps({
 			branch,
 			baseBranch,
 			cwd,
-			model: step.model ?? model,
+			model: step.model,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
 		});
 
