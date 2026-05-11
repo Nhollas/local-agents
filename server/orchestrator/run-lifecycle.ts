@@ -121,7 +121,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							const error = err instanceof Error ? err.message : String(err);
 							recordFailure("workspace", error);
 							canonicalLog.set({ status: "failed" });
-							if (!ctx.signal.aborted) await markIssueFailed(repo, issue);
+							await markIssueFailed(repo, issue);
 							return {
 								status: "failed",
 								error,
@@ -252,7 +252,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						// only fully successful runs (agent + push + change-request) clean up.
 						if (result.status === "completed") {
 							await removeWorkspace(wsPath);
-						} else if (!ctx.signal.aborted) {
+						} else {
 							await markIssueFailed(repo, issue);
 						}
 
