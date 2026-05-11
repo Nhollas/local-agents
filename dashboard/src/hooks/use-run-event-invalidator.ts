@@ -16,6 +16,7 @@ export function useRunEventInvalidator(): void {
 			if (!LIFECYCLE_KINDS.has(event.kind)) return;
 			queryClient.invalidateQueries({ queryKey: ["queue"] });
 			queryClient.invalidateQueries({ queryKey: ["stats"] });
+			queryClient.invalidateQueries({ queryKey: ["runs", event.runId] });
 			if (TERMINAL_KINDS.has(event.kind)) {
 				queryClient.invalidateQueries({ queryKey: ["recent-runs"] });
 			}

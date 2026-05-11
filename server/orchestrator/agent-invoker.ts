@@ -32,12 +32,13 @@ export const ALLOWED_TOOLS = [
 
 export function claudeSdkAgentInvoker(): AgentInvoker {
 	return {
-		invoke({ prompt, cwd, model, resumeSessionId, outputFormat }) {
+		invoke({ prompt, cwd, model, resumeSessionId, outputFormat, signal }) {
 			return query({
 				prompt,
 				options: {
 					cwd,
 					model,
+					abortController: abortControllerFromSignal(signal),
 					allowedTools: [...ALLOWED_TOOLS],
 					permissionMode: "dontAsk" as const,
 					...(resumeSessionId && { resume: resumeSessionId }),
@@ -46,4 +47,14 @@ export function claudeSdkAgentInvoker(): AgentInvoker {
 			});
 		},
 	};
+}
+
+function abortControllerFromSignal(signal: AbortSignal): AbortController {
+	const controller = new AbortController();
+	if (signal.aborted) controller.abort(signal.reason);
+	else
+		signal.addEventListener("abort", () => controller.abort(signal.reason), {
+			once: true,
+		});
+	return controller;
 }

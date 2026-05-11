@@ -85,7 +85,7 @@ export function RunBanner({ run }: Props) {
 								void killRun(run.id);
 							}}
 						>
-							Kill <span className="key">K</span>
+							Kill
 						</button>
 					)}
 				</div>
