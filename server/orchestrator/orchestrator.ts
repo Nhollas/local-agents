@@ -10,7 +10,9 @@ import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { type AgentInvoker, claudeSdkAgentInvoker } from "./agent-invoker.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import { createRunLifecycle } from "./run-lifecycle.ts";
-import { type RunShell, realRunShell } from "./workspace.ts";
+import { type RunShell, realRunShell, sweepWorkspaces } from "./workspace.ts";
+
+const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type OrchestratorConfig = {
 	runRepo: RunRepository;
@@ -310,6 +312,17 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			logger.info(
 				{ interval: defaults.polling_interval_ms },
 				"orchestrator.starting",
+			);
+			sweepWorkspaces(defaults.workspace_root, WORKSPACE_TTL_MS).then(
+				(swept) => {
+					if (swept.removed.length > 0) {
+						logger.info(
+							{ count: swept.removed.length },
+							"orchestrator.workspaces_swept",
+						);
+					}
+				},
+				(err) => logger.warn({ err }, "orchestrator.workspace_sweep_failed"),
 			);
 			void (async () => {
 				try {

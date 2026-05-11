@@ -10,9 +10,8 @@ describe("Orchestrator multi-repo scheduling", () => {
 			maxConcurrency: 5,
 			runAgent: hangingAgent,
 		});
-		const { orchestrator, workspace, tracker } = ctx;
+		const { orchestrator, tracker } = ctx;
 		tracker.addIssue("pending", { number: 1, repo: REPO });
-		await workspace.preCreateWorkspace(jiraIssueKey(1));
 
 		await Promise.all([orchestrator.tick(), orchestrator.tick()]);
 
@@ -27,7 +26,8 @@ describe("Orchestrator multi-repo scheduling", () => {
 			maxConcurrency: 5,
 			configOverrides: { max_concurrent: 5 },
 		});
-		const { orchestrator, db, runner, workspace, tracker } = ctx;
+		const { orchestrator, db, runner, workspace, codeHost, tracker } = ctx;
+		codeHost.setCloneUrl(REPO2, await workspace.setupRepoRemote(REPO2));
 		tracker.addIssue("pending", {
 			number: 1,
 			repo: REPO,
@@ -38,8 +38,6 @@ describe("Orchestrator multi-repo scheduling", () => {
 			repo: REPO2,
 			createdAt: "2025-01-02T00:00:00.000+0000",
 		});
-		await workspace.preCreateWorkspace(jiraIssueKey(1));
-		await workspace.preCreateWorkspace(jiraIssueKey(2));
 
 		await orchestrator.tick();
 		await runner.queue.waitForIdle();

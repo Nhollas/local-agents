@@ -18,8 +18,8 @@ import { renderChangeRequest } from "./change-request-renderer.ts";
 import type { Clock } from "./clock.ts";
 import { runWorkflowSteps } from "./step-runner.ts";
 import {
+	createWorkspace,
 	ensureBranch,
-	ensureWorkspace,
 	pushBranch,
 	type RunShell,
 	removeWorkspace,
@@ -49,7 +49,12 @@ type RunLifecycleDeps = {
 	model: string;
 };
 
-type FailurePhase = "branch_resolver" | "setup" | "step" | FinalizeFailurePhase;
+type FailurePhase =
+	| "workspace"
+	| "branch_resolver"
+	| "setup"
+	| "step"
+	| FinalizeFailurePhase;
 
 type FinalizeOutcome =
 	| { ok: true }
@@ -78,7 +83,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 		const cloneUrl = codeHost.cloneUrl(repo);
 		const baseBranch = await codeHost.defaultBranch(repo);
-		const ws = await ensureWorkspace(issue, workspaceRoot, cloneUrl);
 
 		return runner.enqueue({
 			repo,
@@ -92,7 +96,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						scope: "run",
 						run_id: ctx.runId,
 						issue_key: issue.key,
-						workspace_reused: !ws.created,
 					},
 					async () => {
 						const startTime = clock.now();
@@ -101,18 +104,39 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						let outputs: Record<string, unknown> = {};
 						let phase: FailurePhase = "branch_resolver";
 
-						runRepo.setRunWorkspaceDir(ctx.runId, ws.path);
 						runRepo.insertSteps(
 							ctx.runId,
 							workflow.steps.map((s, i) => ({ index: i + 1, name: s.name })),
 						);
+
+						let wsPath: string;
+						try {
+							wsPath = await createWorkspace(
+								issue,
+								workspaceRoot,
+								cloneUrl,
+								ctx.runId,
+							);
+						} catch (err) {
+							const error = err instanceof Error ? err.message : String(err);
+							recordFailure("workspace", error);
+							canonicalLog.set({ status: "failed" });
+							if (!ctx.signal.aborted) await markIssueFailed(repo, issue);
+							return {
+								status: "failed",
+								error,
+								durationMs: clock.now() - startTime,
+							};
+						}
+
+						runRepo.setRunWorkspaceDir(ctx.runId, wsPath);
 						ctx.emit({
 							kind: "system",
 							stepName: null,
 							data: {
 								message: "workspace prepared",
 								command: null,
-								path: ws.path,
+								path: wsPath,
 								exitCode: null,
 							},
 						});
@@ -123,7 +147,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								workflowBranch: workflow.branch,
 								issue,
 								agent,
-								cwd: ws.path,
+								cwd: wsPath,
 								model,
 								signal: ctx.signal,
 							});
@@ -145,8 +169,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							});
 
 							phase = "setup";
-							await ensureBranch(ws.path, branch);
-							const repoSetupRan = await runRepoSetup(ws.path, runShell);
+							await ensureBranch(wsPath, branch);
+							const repoSetupRan = await runRepoSetup(wsPath, runShell);
 							canonicalLog.set({ repo_setup_ran: repoSetupRan });
 							if (repoSetupRan) {
 								ctx.emit({
@@ -155,7 +179,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 									data: {
 										message: "repo setup ran",
 										command: ".agent/setup.sh",
-										path: ws.path,
+										path: wsPath,
 										exitCode: 0,
 									},
 								});
@@ -170,7 +194,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								issue,
 								branch,
 								baseBranch,
-								cwd: ws.path,
+								cwd: wsPath,
 								model,
 							});
 
@@ -194,7 +218,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								repo,
 								issue,
 								workflow,
-								ws.path,
+								wsPath,
 								branch,
 								baseBranch,
 								outputs,
@@ -227,7 +251,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						// Keep the workspace on any failure so the run can be inspected;
 						// only fully successful runs (agent + push + change-request) clean up.
 						if (result.status === "completed") {
-							await removeWorkspace(ws.path);
+							await removeWorkspace(wsPath);
 						} else if (!ctx.signal.aborted) {
 							await markIssueFailed(repo, issue);
 						}
@@ -308,7 +332,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		phase: FinalizeFailurePhase,
 		err: unknown,
 	): FinalizeOutcome {
-		const error = err instanceof Error ? err.message : String(err);
+		const error = formatExecError(err);
 		recordFailure(phase, error);
 		return { ok: false, phase, error };
 	}
@@ -318,10 +342,24 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			canonicalLog.append("warnings", {
 				kind: "mark_failed_failed",
 				issue: `${repo}#${issue.number}`,
-				error: err instanceof Error ? err.message : String(err),
+				error: formatExecError(err),
 			});
 		});
 	}
 
 	return { dispatch };
+}
+
+// Node's child_process errors keep the rich detail (stderr/stdout) on the error
+// object rather than in `err.message` — message is just "Command failed: …".
+// Surface stderr/stdout so failure diagnostics survive logging.
+function formatExecError(err: unknown): string {
+	if (!(err instanceof Error)) return String(err);
+	const e = err as Error & { stderr?: unknown; stdout?: unknown };
+	const stderr = typeof e.stderr === "string" ? e.stderr.trim() : "";
+	const stdout = typeof e.stdout === "string" ? e.stdout.trim() : "";
+	const parts = [e.message];
+	if (stderr) parts.push(`stderr:\n${stderr}`);
+	if (stdout) parts.push(`stdout:\n${stdout}`);
+	return parts.join("\n");
 }

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { sanitizeKey } from "../orchestrator/workspace.ts";
+import type { RepoSlug } from "../types/brands.ts";
 
 const exec = promisify(execFile);
 
@@ -22,19 +23,11 @@ export async function seedBareRepoMain(barePath: string): Promise<void> {
 	await rm(seedDir, { recursive: true, force: true });
 }
 
-// brokenRemote: point origin at a missing path so `git push` fails — used to
-// exercise the lifecycle's push-failure path without needing real network.
-type PreCreateOptions = {
-	brokenRemote?: boolean;
-};
-
 type TestWorkspace = {
 	root: string;
-	preCreateWorkspace(
-		issueKey: string,
-		options?: PreCreateOptions,
-	): Promise<string>;
-	bareRemotePath(issueKey: string): string;
+	/** Seed a bare remote for `repo` and return its on-disk path (the clone URL). */
+	setupRepoRemote(repo: RepoSlug): Promise<string>;
+	bareRemotePath(repo: RepoSlug): string;
 	[Symbol.asyncDispose](): Promise<void>;
 };
 
@@ -46,40 +39,22 @@ export async function createTestWorkspaceRoot(): Promise<TestWorkspace> {
 	const remotesRoot = join(root, "__remotes__");
 	await mkdir(remotesRoot, { recursive: true });
 
-	function bareRemotePath(issueKey: string): string {
-		return join(remotesRoot, `${sanitizeKey(issueKey)}.git`);
+	function bareRemotePath(repo: RepoSlug): string {
+		return join(remotesRoot, `${sanitizeKey(repo)}.git`);
 	}
+
+	const seeded = new Set<RepoSlug>();
 
 	return {
 		root,
 		bareRemotePath,
-		async preCreateWorkspace(
-			issueKey: string,
-			options: PreCreateOptions = {},
-		): Promise<string> {
-			const wsPath = join(root, sanitizeKey(issueKey));
-			await mkdir(wsPath, { recursive: true });
-
-			const bare = bareRemotePath(issueKey);
-			await exec("git", ["init", "--bare", "--initial-branch=main", bare]);
-
-			await exec("git", ["init", "--initial-branch=main"], { cwd: wsPath });
-			await exec("git", ["config", "user.email", "test@example.test"], {
-				cwd: wsPath,
-			});
-			await exec("git", ["config", "user.name", "Test"], { cwd: wsPath });
-			await exec("git", ["commit", "--allow-empty", "-m", "seed"], {
-				cwd: wsPath,
-			});
-
-			const remoteUrl = options.brokenRemote
-				? join(root, "__nonexistent__", `${sanitizeKey(issueKey)}.git`)
-				: bare;
-			await exec("git", ["remote", "add", "origin", remoteUrl], {
-				cwd: wsPath,
-			});
-
-			return wsPath;
+		async setupRepoRemote(repo: RepoSlug): Promise<string> {
+			const bare = bareRemotePath(repo);
+			if (!seeded.has(repo)) {
+				await seedBareRepoMain(bare);
+				seeded.add(repo);
+			}
+			return bare;
 		},
 		async [Symbol.asyncDispose]() {
 			// maxRetries tolerates a tail of git i/o from a killed agent's
