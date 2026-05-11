@@ -124,7 +124,10 @@ async function runWorkflowStep({
 			base_branch: baseBranch,
 			outputs,
 		});
-		const prompt = await expandMarkedShellBlocks(renderedPrompt, { cwd });
+		const prompt = await expandMarkedShellBlocks(renderedPrompt, {
+			cwd,
+			stepName: step.name,
+		});
 
 		const outputFormat: OutputFormat | undefined = step.output_schema
 			? { type: "json_schema", schema: step.output_schema }
