@@ -59,7 +59,7 @@ export default defineConfig({
 		],
 		env: {
 			LOG_LEVEL: "silent",
-			CONFIG_PATH: "./config.yaml",
+			CONFIG_PATH: "./config.example.yaml",
 		},
 	},
 });

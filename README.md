@@ -12,13 +12,14 @@ A polling orchestrator watches Jira for triggered issues, resolves the target re
 ```bash
 pnpm install
 cp .env.example .env
+cp config.example.yaml config.yaml
 ```
 
 Fill in `JIRA_EMAIL`, `JIRA_API_TOKEN`, and either `GITHUB_TOKEN` or `GITLAB_TOKEN` to match the configured code host.
 
 The Agent SDK uses your existing Claude Code login automatically. Make sure you're logged into Claude Code with an active subscription.
 
-Edit `config.yaml` to point at your Jira project and the user or organisation scopes the orchestrator is allowed to clone from. Create `workflow.yaml` in the local-agents working directory to define branch naming, the steps the agent runs, and the change-request template. See [docs/configuration.md](docs/configuration.md) for the full schemas, and [`examples/`](examples) for ready-to-copy starting points.
+Edit `config.yaml` (gitignored — local to your machine) to point at your Jira project and the user or organisation scopes the orchestrator is allowed to clone from. Create `workflow.yaml` in the local-agents working directory to define branch naming, the steps the agent runs, and the change-request template. See [docs/configuration.md](docs/configuration.md) for the full schemas, and [`examples/`](examples) for ready-to-copy starting points.
 
 ## Running
 

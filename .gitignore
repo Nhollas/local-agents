@@ -9,6 +9,9 @@ dist/
 .env.*
 !.env.example
 
+# Local config (use config.example.yaml as the tracked template)
+config.yaml
+
 # Agent data
 .data/
 
