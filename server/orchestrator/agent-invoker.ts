@@ -1,5 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { buildCanonicalLogHooks } from "./agent-hooks.ts";
+import type { RunId } from "../types/brands.ts";
+import { buildAgentHooks } from "./agent-hooks.ts";
+import { createRunLogWriter } from "./run-log-file.ts";
 
 export type AgentMessage =
 	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never;
@@ -13,6 +15,7 @@ export type AgentInvokeOptions = {
 	prompt: string;
 	cwd: string;
 	model: string;
+	runId: RunId;
 	resumeSessionId?: string;
 	signal: AbortSignal;
 	outputFormat?: OutputFormat;
@@ -33,19 +36,25 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Task",
 ] as const;
 
-export function claudeSdkAgentInvoker(
-	env: Record<string, string>,
-): AgentInvoker {
+export function claudeSdkAgentInvoker({
+	env,
+	logDir,
+}: {
+	env: Record<string, string>;
+	logDir: string;
+}): AgentInvoker {
 	return {
 		invoke({
 			prompt,
 			cwd,
 			model,
+			runId,
 			resumeSessionId,
 			outputFormat,
 			signal,
 			allowedTools,
 		}) {
+			const runLogWriter = createRunLogWriter(logDir, runId);
 			return query({
 				prompt,
 				options: {
@@ -61,7 +70,7 @@ export function claudeSdkAgentInvoker(
 						preset: "claude_code",
 						excludeDynamicSections: true,
 					},
-					hooks: buildCanonicalLogHooks(),
+					hooks: buildAgentHooks(runLogWriter),
 					...(resumeSessionId && { resume: resumeSessionId }),
 					...(outputFormat && { outputFormat }),
 				},

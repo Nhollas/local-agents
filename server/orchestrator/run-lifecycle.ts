@@ -148,6 +148,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								issue,
 								agent,
 								cwd: wsPath,
+								runId: ctx.runId,
 								signal: ctx.signal,
 							});
 							canonicalLog.set({

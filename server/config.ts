@@ -44,6 +44,7 @@ const configSchema = z
 				polling_interval_ms: z.number().int().positive(),
 				max_concurrent: z.number().int().positive(),
 				workspace_root: z.string().min(1),
+				log_dir: z.string().min(1).default("./logs"),
 			})
 			.strict(),
 		agent: z

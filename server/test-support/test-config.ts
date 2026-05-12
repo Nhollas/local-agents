@@ -28,6 +28,7 @@ export function createTestConfig(
 			polling_interval_ms: 100,
 			max_concurrent: 2,
 			workspace_root: "/tmp/test-workspaces",
+			log_dir: "/tmp/test-logs",
 			...overrides,
 		},
 		agent: {
