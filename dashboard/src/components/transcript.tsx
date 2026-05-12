@@ -15,7 +15,11 @@ type Props = {
 export function Transcript({ events, steps }: Props) {
 	const groups = useMemo(() => groupByStep(events, steps), [events, steps]);
 	return (
-		<div className="transcript" data-testid="transcript">
+		<div
+			className="transcript"
+			data-testid="transcript"
+			onScroll={handleTranscriptScroll}
+		>
 			{groups.map((group) => {
 				if (group.kind === "step") {
 					return (
@@ -30,6 +34,10 @@ export function Transcript({ events, steps }: Props) {
 			})}
 		</div>
 	);
+}
+
+function handleTranscriptScroll(e: React.UIEvent<HTMLDivElement>) {
+	e.currentTarget.classList.toggle("scrolled", e.currentTarget.scrollTop > 0);
 }
 
 type StepGroup = { kind: "step"; step: Step; events: RunEvent[] };

@@ -57,7 +57,8 @@ body {
 
 body {
 	min-width: 1280px;
-	min-height: 100vh;
+	height: 100vh;
+	overflow: hidden;
 	background: var(--bg);
 	display: flex;
 	flex-direction: column;
@@ -293,6 +294,13 @@ header.app .meta-right {
 }
 
 /* ───── queue column ───── */
+
+.queue,
+.history,
+.transcript {
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-2) transparent;
+}
 
 .queue {
 	overflow-y: auto;
@@ -744,6 +752,11 @@ h1.run-title {
 	overflow-y: auto;
 	padding: 18px 28px 80px;
 	position: relative;
+	transition: box-shadow 0.15s ease-out;
+}
+
+.transcript.scrolled {
+	box-shadow: inset 0 6px 8px -6px rgba(0, 0, 0, 0.18);
 }
 
 .transcript > .group,
@@ -942,6 +955,21 @@ h1.run-title {
 
 .hrow:hover {
 	background: var(--bg-1);
+}
+
+.hrow.active {
+	background: var(--bg-1);
+	position: relative;
+}
+
+.hrow.active::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	background: var(--running);
 }
 
 .hrow-top {

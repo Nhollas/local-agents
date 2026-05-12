@@ -9,10 +9,12 @@ import {
 import type { Run, RunPr } from "../lib/types.ts";
 
 type Props = {
+	activeRunId: string | null;
 	onSelectRun: (runId: string) => void;
 };
 
 export const RecentRunsColumn = memo(function RecentRunsColumn({
+	activeRunId,
 	onSelectRun,
 }: Props) {
 	const { data } = useRecentRuns();
@@ -28,7 +30,12 @@ export const RecentRunsColumn = memo(function RecentRunsColumn({
 				<Fragment key={group.label}>
 					<div className="hgroup-head">{group.label}</div>
 					{group.runs.map((run) => (
-						<HistoryRow key={run.id} run={run} onSelect={onSelectRun} />
+						<HistoryRow
+							key={run.id}
+							run={run}
+							selected={run.id === activeRunId}
+							onSelect={onSelectRun}
+						/>
 					))}
 				</Fragment>
 			))}
@@ -38,9 +45,11 @@ export const RecentRunsColumn = memo(function RecentRunsColumn({
 
 function HistoryRow({
 	run,
+	selected,
 	onSelect,
 }: {
 	run: Run;
+	selected: boolean;
 	onSelect: (runId: string) => void;
 }) {
 	const select = () => {
@@ -49,7 +58,7 @@ function HistoryRow({
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: row contains a nested PR <a>, so the row itself can't be an <a>; role="link" + keyboard handler preserves accessibility.
 		<div
-			className="hrow"
+			className={`hrow${selected ? " active" : ""}`}
 			data-testid={`recent-run-${run.id}`}
 			role="link"
 			tabIndex={0}

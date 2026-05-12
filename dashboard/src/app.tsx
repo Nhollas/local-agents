@@ -38,7 +38,7 @@ export function App() {
 				<section className="center">
 					<CenterContent runId={runId} />
 				</section>
-				<RecentRunsColumn onSelectRun={navigate} />
+				<RecentRunsColumn activeRunId={runId} onSelectRun={navigate} />
 			</main>
 		</>
 	);
