@@ -97,7 +97,16 @@ export function jiraTrackerAdapter(
 		async transitionState(_repo, issueNum, _from, to): Promise<void> {
 			const key = jiraIssueKey(options.project, issueNum);
 			const targetStatus = options.statuses[to].toLowerCase();
-			const transitions = await client.listTransitions(key);
+			const assign =
+				to === "running"
+					? client
+							.getMyself()
+							.then((me) => client.assignIssue(key, me.accountId))
+					: Promise.resolve();
+			const [, transitions] = await Promise.all([
+				assign,
+				client.listTransitions(key),
+			]);
 			const transition = transitions.find(
 				(t) => t.to.name.toLowerCase() === targetStatus,
 			);

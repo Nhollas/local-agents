@@ -30,11 +30,17 @@ const jiraTransitionsSchema = z.object({
 	),
 });
 
+const jiraMyselfSchema = z.object({
+	accountId: z.string(),
+});
+
 export type JiraIssue = z.infer<typeof jiraIssueSchema>;
 
 export type JiraTransition = z.infer<
 	typeof jiraTransitionsSchema
 >["transitions"][number];
+
+type JiraMyself = z.infer<typeof jiraMyselfSchema>;
 
 export type JiraClient = {
 	getIssue(key: string): Promise<JiraIssue>;
@@ -48,6 +54,8 @@ export type JiraClient = {
 		key: string,
 		changes: { add?: string[]; remove?: string[] },
 	): Promise<void>;
+	getMyself(): Promise<JiraMyself>;
+	assignIssue(key: string, accountId: string): Promise<void>;
 };
 
 type JiraClientOptions = HttpClientOptions & {
@@ -67,6 +75,8 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 			Accept: "application/json",
 		},
 	});
+
+	let myselfCache: Promise<JiraMyself> | null = null;
 
 	return {
 		getIssue(key: string) {
@@ -121,6 +131,25 @@ export function createJiraClient(options: JiraClientOptions): JiraClient {
 			await request(`/issue/${encodeIssueKey(key)}`, {
 				method: "PUT",
 				body: { update: { labels: ops } },
+			});
+		},
+
+		getMyself() {
+			if (!myselfCache) {
+				myselfCache = request("/myself", { schema: jiraMyselfSchema }).catch(
+					(err) => {
+						myselfCache = null;
+						throw err;
+					},
+				);
+			}
+			return myselfCache;
+		},
+
+		assignIssue(key, accountId) {
+			return request(`/issue/${encodeIssueKey(key)}/assignee`, {
+				method: "PUT",
+				body: { accountId },
 			});
 		},
 	};

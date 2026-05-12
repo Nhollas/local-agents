@@ -105,4 +105,106 @@ describe("Jira client", () => {
 			expect(called).toBe(false);
 		});
 	});
+
+	describe("getMyself", () => {
+		it("GETs /myself and returns the accountId", async () => {
+			server.use(
+				http.get(`${JIRA_API}/myself`, () =>
+					HttpResponse.json({
+						accountId: "acct-123",
+						displayName: "Agent Runner",
+						emailAddress: "agent@example.test",
+					}),
+				),
+			);
+
+			const client = createJiraClient({
+				baseUrl: JIRA_BASE_URL,
+				email: "agent@example.test",
+				apiToken: "jira-token",
+				maxAttempts: 1,
+			});
+
+			const me = await client.getMyself();
+
+			expect(me).toEqual({ accountId: "acct-123" });
+		});
+
+		it("caches the result across repeat calls", async () => {
+			let calls = 0;
+			server.use(
+				http.get(`${JIRA_API}/myself`, () => {
+					calls += 1;
+					return HttpResponse.json({ accountId: "acct-123" });
+				}),
+			);
+
+			const client = createJiraClient({
+				baseUrl: JIRA_BASE_URL,
+				email: "agent@example.test",
+				apiToken: "jira-token",
+				maxAttempts: 1,
+			});
+
+			await client.getMyself();
+			await client.getMyself();
+
+			expect(calls).toBe(1);
+		});
+
+		it("re-fetches after a failed call", async () => {
+			let calls = 0;
+			server.use(
+				http.get(`${JIRA_API}/myself`, () => {
+					calls += 1;
+					if (calls === 1) return new HttpResponse(null, { status: 500 });
+					return HttpResponse.json({ accountId: "acct-123" });
+				}),
+			);
+
+			const client = createJiraClient({
+				baseUrl: JIRA_BASE_URL,
+				email: "agent@example.test",
+				apiToken: "jira-token",
+				maxAttempts: 1,
+			});
+
+			await expect(client.getMyself()).rejects.toThrow();
+			const me = await client.getMyself();
+
+			expect(me).toEqual({ accountId: "acct-123" });
+			expect(calls).toBe(2);
+		});
+	});
+
+	describe("assignIssue", () => {
+		it("PUTs the assignee accountId for the issue", async () => {
+			const captured: { key: string; body: unknown }[] = [];
+			server.use(
+				http.put(
+					`${JIRA_API}/issue/:key/assignee`,
+					async ({ request, params }) => {
+						captured.push({
+							key: String(params["key"]),
+							body: await request.json(),
+						});
+						return new HttpResponse(null, { status: 204 });
+					},
+				),
+			);
+
+			const client = createJiraClient({
+				baseUrl: JIRA_BASE_URL,
+				email: "agent@example.test",
+				apiToken: "jira-token",
+				maxAttempts: 1,
+			});
+
+			await client.assignIssue("PROJ-7", "acct-123");
+
+			expect(captured).toEqual([
+				{ key: "PROJ-7", body: { accountId: "acct-123" } },
+			]);
+		});
+	});
 });
