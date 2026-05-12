@@ -1,4 +1,5 @@
 import { resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
@@ -15,6 +16,12 @@ import { createRunLifecycle } from "./run-lifecycle.ts";
 import { type RunShell, realRunShell, sweepWorkspaces } from "./workspace.ts";
 
 const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// LA ships its own skills at `<repo-root>/skills/`. Resolve relative to this
+// source file so the path is tied to the install, not the launch CWD.
+const SKILLS_SOURCE_DIR = fileURLToPath(
+	new URL("../../skills/", import.meta.url),
+);
 
 type OrchestratorConfig = {
 	runRepo: RunRepository;
@@ -111,6 +118,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		runShell,
 		logger,
 		workspaceRoot: defaults.workspace_root,
+		skillsSourceDir: SKILLS_SOURCE_DIR,
 		agentEnv,
 	});
 

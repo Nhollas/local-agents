@@ -1,5 +1,13 @@
 import { execFile } from "node:child_process";
-import { access, chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import {
+	access,
+	chmod,
+	mkdir,
+	readFile,
+	rm,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +17,7 @@ import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import {
 	createWorkspace,
+	installSkills,
 	pushBranch,
 	realRunShell,
 	removeWorkspace,
@@ -367,5 +376,156 @@ describe("resolveWorkspaceEnvironment", () => {
 		await expect(
 			resolveWorkspaceEnvironment(ws.path, { PATH: "/bin" }),
 		).rejects.toThrow(/fnm is not available on PATH/);
+	});
+});
+
+async function makeSkillsSource(skills: Record<string, string>): Promise<{
+	path: string;
+	[Symbol.asyncDispose](): Promise<void>;
+}> {
+	const path = join(
+		tmpdir(),
+		`skills-src-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+	);
+	await mkdir(path, { recursive: true });
+	for (const [name, body] of Object.entries(skills)) {
+		await mkdir(join(path, name), { recursive: true });
+		await writeFile(join(path, name, "SKILL.md"), body);
+	}
+	return {
+		path,
+		async [Symbol.asyncDispose]() {
+			await rm(path, { recursive: true, force: true });
+		},
+	};
+}
+
+const TEST_RENDER_VARS = {
+	issue: createIssue(42),
+	branch: "feat/ABC-42-thing",
+	base_branch: "main",
+};
+
+describe("installSkills", () => {
+	it("copies each skill directory into <ws>/.claude/skills/", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			review: "review body",
+			implement: "implement body",
+		});
+
+		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		expect(result.installed.sort()).toEqual(["implement", "review"]);
+		expect(result.skipped).toEqual([]);
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
+		).resolves.toBe("review body");
+		await expect(
+			readFile(join(ws.path, ".claude/skills/implement/SKILL.md"), "utf8"),
+		).resolves.toBe("implement body");
+	});
+
+	it("skips skills the target repo already ships under the same name", async () => {
+		await using ws = await withWorkspace();
+		await mkdir(join(ws.path, ".claude/skills/review"), { recursive: true });
+		await writeFile(
+			join(ws.path, ".claude/skills/review/SKILL.md"),
+			"repo-provided review",
+		);
+		await using src = await makeSkillsSource({
+			review: "LA review",
+			implement: "LA implement",
+		});
+
+		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		expect(result.installed).toEqual(["implement"]);
+		expect(result.skipped).toEqual(["review"]);
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
+		).resolves.toBe("repo-provided review");
+	});
+
+	it("returns empty when the skills source directory is missing", async () => {
+		await using ws = await withWorkspace();
+		const missing = join(
+			tmpdir(),
+			`missing-skills-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		);
+
+		const result = await installSkills(ws.path, missing, TEST_RENDER_VARS);
+
+		expect(result).toEqual({ installed: [], skipped: [] });
+		await expect(access(join(ws.path, ".claude/skills"))).rejects.toThrow();
+	});
+
+	it("ignores non-directory entries in the source", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({ review: "review" });
+		await writeFile(join(src.path, "README.md"), "not a skill");
+
+		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		expect(result.installed).toEqual(["review"]);
+	});
+
+	it("renders {{ }} substitutions in .md files using the supplied vars", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			advisor:
+				"<commits>\n!`git log origin/{{ base_branch }}..HEAD --oneline`\n</commits>\n\nIssue: {{ issue.key }}, Branch: {{ branch }}.",
+		});
+
+		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		const rendered = await readFile(
+			join(ws.path, ".claude/skills/advisor/SKILL.md"),
+			"utf8",
+		);
+		expect(rendered).toContain("!`git log origin/main..HEAD --oneline`");
+		expect(rendered).toContain(
+			`Issue: ${TEST_RENDER_VARS.issue.key}, Branch: feat/ABC-42-thing.`,
+		);
+	});
+
+	it("renders sibling .md files inside a skill directory, not just SKILL.md", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			review: "main on {{ base_branch }}",
+		});
+		await writeFile(
+			join(src.path, "review", "details.md"),
+			"detail for {{ branch }}",
+		);
+
+		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
+		).resolves.toBe("main on main");
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/details.md"), "utf8"),
+		).resolves.toBe("detail for feat/ABC-42-thing");
+	});
+
+	it("leaves non-.md files untouched", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			advisor: "see {{ base_branch }}",
+		});
+		await writeFile(
+			join(src.path, "advisor", "fixture.txt"),
+			"literal {{ base_branch }} stays",
+		);
+
+		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		await expect(
+			readFile(join(ws.path, ".claude/skills/advisor/SKILL.md"), "utf8"),
+		).resolves.toBe("see main");
+		await expect(
+			readFile(join(ws.path, ".claude/skills/advisor/fixture.txt"), "utf8"),
+		).resolves.toBe("literal {{ base_branch }} stays");
 	});
 });

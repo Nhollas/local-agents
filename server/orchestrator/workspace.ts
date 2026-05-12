@@ -1,8 +1,18 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, readdir, rm, stat } from "node:fs/promises";
+import {
+	access,
+	cp,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Issue } from "../trackers/types.ts";
+import { renderPrompt } from "../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 
@@ -36,12 +46,7 @@ export async function resolveWorkspaceEnvironment(
 	wsPath: string,
 	baseEnv: Record<string, string>,
 ): Promise<Record<string, string>> {
-	const nvmrcPath = join(wsPath, ".nvmrc");
-	try {
-		await access(nvmrcPath);
-	} catch {
-		return baseEnv;
-	}
+	if (!(await pathExists(join(wsPath, ".nvmrc")))) return baseEnv;
 
 	const { stdout } = await exec("bash", ["-c", ACTIVATE_NODE_VERSION_SCRIPT], {
 		cwd: wsPath,
@@ -139,6 +144,89 @@ export async function sweepWorkspaces(
 	return { removed };
 }
 
+async function pathExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+	const info = await stat(path).catch(() => null);
+	return info?.isDirectory() === true;
+}
+
+const WORKSPACE_SKILLS_DIR = ".claude/skills";
+
+type SkillRenderVars = {
+	issue: Issue;
+	branch: string;
+	base_branch: string;
+};
+
+// Target-repo wins on name collision: a skill committed under `.claude/skills/<name>`
+// in the workspace overrides LA's bundled one. We only render `{{ var }}` in the
+// copied .md files — Claude Code's own `!`cmd`` blocks still fire at skill-load time.
+export async function installSkills(
+	wsPath: string,
+	skillsSourceDir: string,
+	vars: SkillRenderVars,
+): Promise<{ installed: string[]; skipped: string[] }> {
+	let entries: string[];
+	try {
+		entries = await readdir(skillsSourceDir);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			return { installed: [], skipped: [] };
+		}
+		throw err;
+	}
+
+	const destRoot = join(wsPath, WORKSPACE_SKILLS_DIR);
+	await mkdir(destRoot, { recursive: true });
+
+	const installed: string[] = [];
+	const skipped: string[] = [];
+
+	for (const name of entries) {
+		const source = join(skillsSourceDir, name);
+		if (!(await isDirectory(source))) continue;
+
+		const target = join(destRoot, name);
+		if (await pathExists(target)) {
+			skipped.push(name);
+			continue;
+		}
+		await cp(source, target, { recursive: true });
+		await renderMarkdownInPlace(target, vars);
+		installed.push(name);
+	}
+
+	return { installed, skipped };
+}
+
+async function renderMarkdownInPlace(
+	dir: string,
+	vars: SkillRenderVars,
+): Promise<void> {
+	const entries = await readdir(dir, { withFileTypes: true });
+	for (const entry of entries) {
+		const path = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			await renderMarkdownInPlace(path, vars);
+			continue;
+		}
+		if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+		const source = await readFile(path, "utf8");
+		const rendered = renderPrompt(source, vars);
+		if (rendered !== source) {
+			await writeFile(path, rendered);
+		}
+	}
+}
+
 const SETUP_SCRIPT_PATH = ".agent/setup.sh";
 
 export async function runRepoSetup(
@@ -146,13 +234,7 @@ export async function runRepoSetup(
 	runShell: RunShell,
 	env: Record<string, string>,
 ): Promise<boolean> {
-	const scriptPath = join(wsPath, SETUP_SCRIPT_PATH);
-	try {
-		await access(scriptPath);
-	} catch {
-		return false;
-	}
-
+	if (!(await pathExists(join(wsPath, SETUP_SCRIPT_PATH)))) return false;
 	await runShell(`bash ${SETUP_SCRIPT_PATH}`, wsPath, env);
 	return true;
 }
