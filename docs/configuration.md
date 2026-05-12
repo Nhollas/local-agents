@@ -102,6 +102,7 @@ Operational settings shared across all runs.
 | `max_concurrent`       | integer | Maximum number of runs in flight at once across all repos. |
 | `model`                | string  | Default Claude model ID for steps. Steps may override this individually. |
 | `workspace_root`       | string  | Filesystem path where per-issue workspaces are created. |
+| `log_dir`              | string  | Directory for per-run agent tool-call logs (`<log_dir>/<run-id>.log`). Resolved relative to the orchestrator's working directory. Defaults to `./logs`. |
 
 ### Environment
 

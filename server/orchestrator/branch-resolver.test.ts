@@ -5,7 +5,7 @@ import {
 	buildSuccessResult,
 } from "../test-support/agent-messages.ts";
 import type { Issue } from "../trackers/types.ts";
-import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
+import { issueKey, issueNumber, repoSlug, runId } from "../types/brands.ts";
 import type {
 	AgentInvokeOptions,
 	AgentInvoker,
@@ -53,6 +53,7 @@ describe("resolveBranch", () => {
 			issue,
 			agent,
 			cwd: "/work",
+			runId: runId("test-run"),
 			signal: new AbortController().signal,
 		});
 
@@ -78,6 +79,7 @@ describe("resolveBranch", () => {
 			issue,
 			agent,
 			cwd: "/work",
+			runId: runId("test-run"),
 			signal: new AbortController().signal,
 		});
 
@@ -113,6 +115,7 @@ describe("resolveBranch", () => {
 				issue,
 				agent,
 				cwd: "/work",
+				runId: runId("test-run"),
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/no `name` field/);
@@ -135,6 +138,7 @@ describe("resolveBranch", () => {
 				issue,
 				agent,
 				cwd: "/work",
+				runId: runId("test-run"),
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/stream ended without a result message/);
@@ -159,6 +163,7 @@ describe("resolveBranch", () => {
 				issue,
 				agent,
 				cwd: "/work",
+				runId: runId("test-run"),
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);

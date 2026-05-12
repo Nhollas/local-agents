@@ -1,3 +1,4 @@
+import { resolve as resolvePath } from "node:path";
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
@@ -81,7 +82,8 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	} = opts;
 	const { defaults } = config;
 	const agentEnv = resolveAgentEnvironment(config.agent.env);
-	const agent = opts.agent ?? claudeSdkAgentInvoker(agentEnv);
+	const logDir = resolvePath(process.cwd(), defaults.log_dir);
+	const agent = opts.agent ?? claudeSdkAgentInvoker({ env: agentEnv, logDir });
 
 	function logTransitionFailed(
 		repo: Issue["repo"],

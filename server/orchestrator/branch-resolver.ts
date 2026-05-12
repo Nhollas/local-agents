@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Issue } from "../trackers/types.ts";
+import type { RunId } from "../types/brands.ts";
 import type { WorkflowBranch } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
@@ -13,6 +14,7 @@ type ResolveBranchParams = {
 	issue: Issue;
 	agent: AgentInvoker;
 	cwd: string;
+	runId: RunId;
 	signal: AbortSignal;
 };
 
@@ -21,6 +23,7 @@ export async function resolveBranch({
 	issue,
 	agent,
 	cwd,
+	runId,
 	signal,
 }: ResolveBranchParams): Promise<string> {
 	if (typeof workflowBranch === "string") {
@@ -37,6 +40,7 @@ export async function resolveBranch({
 		prompt,
 		cwd,
 		model: workflowBranch.model,
+		runId,
 		signal,
 		outputFormat,
 	})) {

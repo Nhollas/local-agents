@@ -135,6 +135,7 @@ async function runWorkflowStep({
 			prompt,
 			cwd,
 			model,
+			runId: ctx.runId,
 			signal: ctx.signal,
 			...(resumeSessionId && { resumeSessionId }),
 			...(outputFormat && { outputFormat }),

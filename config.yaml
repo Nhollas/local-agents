@@ -1,19 +1,38 @@
 tracker:
   kind: jira
-  base_url: https://nhollas.atlassian.net/
-  project: KAN
+  base_url: https://comparethemarket.atlassian.net/
+  project: COOR
   trigger_label: local-agents
   statuses:
-    pending: "To Do"
+    pending: "Ready for Development"
     running: "In Progress"
     awaiting_review: "In Review"
 
 code_host:
-  kind: github
+  kind: gitlab
+  base_url: https://gitlab.com/
   scopes:
-    - Nhollas
+    - comparethemarket
 
 defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
   workspace_root: /tmp/local-agent-workspaces
+
+agent:
+  env:
+    include:
+      - HOME
+      - PATH
+      - SHELL
+      - TMPDIR
+      - USER
+      - LOGNAME
+      - LANG
+      - GITLAB_PACKAGES_TOKEN
+      - NODE_EXTRA_CA_CERTS
+      - SSL_CERT_FILE
+      - REQUESTS_CA_BUNDLE
+      - CURL_CA_BUNDLE
+    set:
+      CI: "true"
