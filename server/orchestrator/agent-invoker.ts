@@ -16,6 +16,7 @@ export type AgentInvokeOptions = {
 	cwd: string;
 	model: string;
 	runId: RunId;
+	env?: Record<string, string>;
 	resumeSessionId?: string;
 	signal: AbortSignal;
 	outputFormat?: OutputFormat;
@@ -49,6 +50,7 @@ export function claudeSdkAgentInvoker({
 			cwd,
 			model,
 			runId,
+			env: invocationEnv,
 			resumeSessionId,
 			outputFormat,
 			signal,
@@ -60,7 +62,7 @@ export function claudeSdkAgentInvoker({
 				options: {
 					cwd,
 					model,
-					env,
+					env: invocationEnv ?? env,
 					abortController: abortControllerFromSignal(signal),
 					allowedTools: [...(allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
 					permissionMode: "dontAsk" as const,

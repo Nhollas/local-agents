@@ -62,6 +62,18 @@ describe("shell block preprocessing", () => {
 		expect(result).toBe("one\ntwo");
 	});
 
+	it("runs marked shell blocks with the provided environment", async () => {
+		await using workspace = await createTestWorkspaceRoot();
+
+		const marked = markTrustedShellBlocks('!`printf "$TOOLCHAIN_BIN"`');
+		const result = await expandMarkedShellBlocks(marked, {
+			cwd: workspace.root,
+			env: { PATH: process.env["PATH"] ?? "", TOOLCHAIN_BIN: "node-24" },
+		});
+
+		expect(result).toBe("node-24");
+	});
+
 	it("does not execute shell-looking text injected through issue fields", async () => {
 		await using workspace = await createTestWorkspaceRoot();
 		const issue: Issue = {

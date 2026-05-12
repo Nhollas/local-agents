@@ -16,8 +16,56 @@ export const realRunShell: RunShell = async (script, cwd, env) => {
 	await exec("sh", ["-c", script], { cwd, env });
 };
 
+const ACTIVATE_NODE_VERSION_SCRIPT = `
+if [ -f .nvmrc ]; then
+  node_version="$(tr -d '[:space:]' < .nvmrc)"
+
+  if ! command -v fnm >/dev/null 2>&1; then
+    echo "Target repo declares .nvmrc but fnm is not available on PATH. Install fnm before running local-agents." >&2
+    exit 1
+  fi
+
+  eval "$(fnm env --shell bash)"
+  fnm use --install-if-missing "$node_version" >/dev/null
+fi
+
+env -0
+`.trim();
+
+export async function resolveWorkspaceEnvironment(
+	wsPath: string,
+	baseEnv: Record<string, string>,
+): Promise<Record<string, string>> {
+	const nvmrcPath = join(wsPath, ".nvmrc");
+	try {
+		await access(nvmrcPath);
+	} catch {
+		return baseEnv;
+	}
+
+	const { stdout } = await exec("bash", ["-c", ACTIVATE_NODE_VERSION_SCRIPT], {
+		cwd: wsPath,
+		env: baseEnv,
+	});
+
+	return parseNullDelimitedEnv(stdout);
+}
+
 export function sanitizeKey(key: string): string {
 	return key.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+function parseNullDelimitedEnv(stdout: string): Record<string, string> {
+	const env: Record<string, string> = {};
+
+	for (const entry of stdout.split("\0")) {
+		if (entry === "") continue;
+		const equalsIndex = entry.indexOf("=");
+		if (equalsIndex <= 0) continue;
+		env[entry.slice(0, equalsIndex)] = entry.slice(equalsIndex + 1);
+	}
+
+	return env;
 }
 
 export async function createWorkspace(

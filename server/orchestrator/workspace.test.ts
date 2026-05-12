@@ -12,6 +12,7 @@ import {
 	pushBranch,
 	realRunShell,
 	removeWorkspace,
+	resolveWorkspaceEnvironment,
 	runRepoSetup,
 	sweepWorkspaces,
 } from "./workspace.ts";
@@ -309,5 +310,62 @@ describe("runRepoSetup", () => {
 				{},
 			),
 		).rejects.toThrow(/setup.sh exit 1/);
+	});
+});
+
+describe("resolveWorkspaceEnvironment", () => {
+	it("returns the base env unchanged when the repo has no .nvmrc", async () => {
+		await using ws = await withWorkspace();
+		const baseEnv = { PATH: "/bin", TOKEN: "secret" };
+
+		const resolved = await resolveWorkspaceEnvironment(ws.path, baseEnv);
+
+		expect(resolved).toBe(baseEnv);
+	});
+
+	it("activates the .nvmrc version with fnm when available", async () => {
+		await using ws = await withWorkspace();
+		const fakeToolBin = join(ws.path, "tools", "bin");
+		const fakeNodeBin = join(ws.path, "node", "bin");
+		await mkdir(fakeToolBin, { recursive: true });
+		await mkdir(fakeNodeBin, { recursive: true });
+		await writeFile(join(ws.path, ".nvmrc"), "24.10.0\n");
+		const fnmPath = join(fakeToolBin, "fnm");
+		await writeFile(
+			fnmPath,
+			[
+				"#!/usr/bin/env bash",
+				'if [ "$1" = "env" ]; then',
+				"  cat <<'FNM_ENV'",
+				"fnm() {",
+				'  if [ "$1" = "use" ]; then',
+				`    export PATH="${fakeNodeBin}:$PATH"`,
+				"  fi",
+				"}",
+				"FNM_ENV",
+				"  exit 0",
+				"fi",
+				"exit 1",
+				"",
+			].join("\n"),
+		);
+		await chmod(fnmPath, 0o755);
+
+		const resolved = await resolveWorkspaceEnvironment(ws.path, {
+			PATH: `${fakeToolBin}:${process.env["PATH"] ?? ""}`,
+			TOKEN: "secret",
+		});
+
+		expect(resolved["PATH"]?.split(":")[0]).toBe(fakeNodeBin);
+		expect(resolved["TOKEN"]).toBe("secret");
+	});
+
+	it("fails clearly when .nvmrc is present but fnm is unavailable", async () => {
+		await using ws = await withWorkspace();
+		await writeFile(join(ws.path, ".nvmrc"), "24.10.0\n");
+
+		await expect(
+			resolveWorkspaceEnvironment(ws.path, { PATH: "/bin" }),
+		).rejects.toThrow(/fnm is not available on PATH/);
 	});
 });

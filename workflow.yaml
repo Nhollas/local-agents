@@ -15,15 +15,15 @@ branch:
     - `type`: one of `feat`, `fix`, `chore`, `docs`, `refactor`, `test`. Pick
       what best matches the work — `feat` for new behaviour, `fix` for bugs,
       `refactor` for non-behavioural restructuring, etc.
-    - `issue-key`: tracker key verbatim (e.g. `AINENG-2310`).
+    - `issue-key`: tracker key verbatim (e.g. `AIENG-2310`).
     - `short-desc`: kebab-case 2-5 word summary. Lowercase letters, digits,
       and hyphens only.
     </format>
 
     <examples>
-    - `feat/AINENG-2310-state-clear-command`
-    - `fix/AINENG-1180-token-refresh-race`
-    - `refactor/AINENG-905-extract-run-lifecycle`
+    - `feat/AIENG-2310-state-clear-command`
+    - `fix/AIENG-1180-token-refresh-race`
+    - `refactor/AIENG-905-extract-run-lifecycle`
     </examples>
   schema:
     type: object
@@ -159,8 +159,9 @@ steps:
 
       Produce:
 
-      - `title`: one line, under 70 characters, written as a Conventional
-        Commit-style summary (e.g. `feat: add state clear command`).
+      - `type`: one of `feat`, `fix`, `chore`, `docs`, `refactor`, `test`.
+      - `description`: one line, written as an imperative title-cased summary
+        without a trailing period (e.g. `Add state clear command`).
       - `body`: short markdown for the human reviewing the change request.
         Lead with the user-visible change and why, then implementation
         notes worth a reviewer's attention. Skip the commit-by-commit
@@ -168,12 +169,15 @@ steps:
     output_schema:
       type: object
       properties:
-        title: { type: string }
+        type:
+          type: string
+          enum: [feat, fix, chore, docs, refactor, test]
+        description: { type: string }
         body: { type: string }
-      required: [title, body]
+      required: [type, description, body]
 
 change_request:
-  title: "{{ steps.summarise.output.title }}"
+  title: "{{ steps.summarise.output.type }}: {{ issue.key }} - {{ steps.summarise.output.description }}"
   body: |
     Closes {{ issue.key }}: {{ issue.title }}.
 

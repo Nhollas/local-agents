@@ -23,6 +23,7 @@ import {
 	pushBranch,
 	type RunShell,
 	removeWorkspace,
+	resolveWorkspaceEnvironment,
 	runRepoSetup,
 } from "./workspace.ts";
 
@@ -170,10 +171,14 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 							phase = "setup";
 							await ensureBranch(wsPath, branch);
+							const workspaceEnv = await resolveWorkspaceEnvironment(
+								wsPath,
+								agentEnv,
+							);
 							const repoSetupRan = await runRepoSetup(
 								wsPath,
 								runShell,
-								agentEnv,
+								workspaceEnv,
 							);
 							canonicalLog.set({ repo_setup_ran: repoSetupRan });
 							if (repoSetupRan) {
@@ -199,6 +204,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								branch,
 								baseBranch,
 								cwd: wsPath,
+								env: workspaceEnv,
 							});
 
 							result = {

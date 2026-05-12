@@ -175,6 +175,38 @@ describe("runWorkflowSteps", () => {
 		expect(outputs).toEqual({});
 	});
 
+	it("passes the workspace environment to the agent", async () => {
+		const recorder = createCtx();
+		const agent = createAgent(() => yieldAssistant("sess"));
+		const env = { PATH: "/node-24/bin:/usr/bin", TOKEN: "secret" };
+		const workflow: RepoWorkflow = {
+			branch: "b",
+			steps: [
+				{
+					name: "implement",
+					prompt: "do it",
+					resume_previous: false,
+					model: "claude-sonnet-4-6",
+				},
+			],
+			change_request: baseChangeRequest,
+		};
+
+		await runWorkflowSteps({
+			ctx: recorder.ctx,
+			runRepo: recorder.runRepo,
+			agent,
+			workflow,
+			issue,
+			cwd: "/work",
+			branch: "agent/issue-1",
+			baseBranch: "main",
+			env,
+		});
+
+		expect(agent.calls[0]?.env).toEqual(env);
+	});
+
 	it("passes outputFormat, persists structured_output, and returns outputs", async () => {
 		const recorder = createCtx();
 		const structured = { title: "Hello", tags: ["a"] };
