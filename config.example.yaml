@@ -17,3 +17,13 @@ defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
   workspace_root: /tmp/local-agent-workspaces
+
+# HOME, PATH, SHELL, USER, LOGNAME, LANG, and TZ are always passed through
+# to the agent subprocess. Use agent.env.include for secrets the agent needs,
+# such as ANTHROPIC_API_KEY (only if you authenticate via API key instead of
+# `claude login`).
+#
+# agent:
+#   env:
+#     include:
+#       - ANTHROPIC_API_KEY
