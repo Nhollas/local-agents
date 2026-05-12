@@ -26,6 +26,7 @@ type RunWorkflowStepsParams = {
 	branch: string;
 	baseBranch: string;
 	cwd: string;
+	env?: Record<string, string>;
 };
 
 export async function runWorkflowSteps({
@@ -37,6 +38,7 @@ export async function runWorkflowSteps({
 	branch,
 	baseBranch,
 	cwd,
+	env = {},
 }: RunWorkflowStepsParams): Promise<Record<string, unknown>> {
 	const { steps } = workflow;
 	const outputs: Record<string, unknown> = {};
@@ -60,6 +62,7 @@ export async function runWorkflowSteps({
 			branch,
 			baseBranch,
 			cwd,
+			env,
 			model: step.model,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
 		});
@@ -82,6 +85,7 @@ type RunWorkflowStepParams = {
 	branch: string;
 	baseBranch: string;
 	cwd: string;
+	env: Record<string, string>;
 	model: string;
 	resumeSessionId?: string;
 };
@@ -98,6 +102,7 @@ async function runWorkflowStep({
 	branch,
 	baseBranch,
 	cwd,
+	env,
 	model,
 	resumeSessionId,
 }: RunWorkflowStepParams): Promise<string | undefined> {
@@ -125,6 +130,7 @@ async function runWorkflowStep({
 		const prompt = await expandMarkedShellBlocks(renderedPrompt, {
 			cwd,
 			stepName: step.name,
+			env,
 		});
 
 		const outputFormat: OutputFormat | undefined = step.output_schema
@@ -137,6 +143,7 @@ async function runWorkflowStep({
 			model,
 			runId: ctx.runId,
 			signal: ctx.signal,
+			env,
 			...(resumeSessionId && { resumeSessionId }),
 			...(outputFormat && { outputFormat }),
 			...(step.allowed_tools && { allowedTools: step.allowed_tools }),

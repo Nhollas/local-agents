@@ -11,6 +11,7 @@ export const SHELL_BLOCK_SPILL_DIR = join(".agent", "shell-outputs");
 
 type ExpandShellBlocksOptions = {
 	cwd: string;
+	env?: Record<string, string>;
 	timeoutMs?: number;
 	stepName?: string;
 };
@@ -57,11 +58,16 @@ const markedShellBlockPattern = /!`([^`]*)`/g;
 async function runShellBlock(
 	command: string,
 	_index: number,
-	{ cwd, timeoutMs = SHELL_EXPANSION_TIMEOUT_MS }: ExpandShellBlocksOptions,
+	{
+		cwd,
+		env,
+		timeoutMs = SHELL_EXPANSION_TIMEOUT_MS,
+	}: ExpandShellBlocksOptions,
 ): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const child = spawn("sh", ["-c", command], {
 			cwd,
+			env,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 		const { stdout: childStdout, stderr: childStderr } = child;

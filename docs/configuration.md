@@ -299,3 +299,5 @@ pnpm codegen
 ```
 
 If the script is missing, that step is skipped silently. If it exists and fails, the run fails before any step runs.
+
+For Node.js repos, the orchestrator treats `.nvmrc` as the repo's runtime declaration. When a cloned workspace contains `.nvmrc`, local-agents activates that version with `fnm`, then uses the resulting environment for repo setup, trusted prompt shell blocks, and agent steps. Repos written in other languages keep the configured agent environment unchanged and should express their toolchain needs in their own setup script.

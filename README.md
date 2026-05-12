@@ -15,6 +15,8 @@ cp .env.example .env
 cp config.example.yaml config.yaml
 ```
 
+Install [`fnm`](https://github.com/Schniz/fnm) and make sure it is available on `PATH`. local-agents uses it to activate target repositories' `.nvmrc` versions before running repo setup and agent steps.
+
 Fill in `JIRA_EMAIL`, `JIRA_API_TOKEN`, and either `GITHUB_TOKEN` or `GITLAB_TOKEN` to match the configured code host.
 
 The Agent SDK uses your existing Claude Code login automatically. Make sure you're logged into Claude Code with an active subscription.
@@ -58,6 +60,7 @@ The dashboard shows all agent runs in real-time:
 
 - Node.js >= 22.6.0
 - pnpm
+- fnm
 - Claude Code (logged in with active subscription)
 - `JIRA_EMAIL` and `JIRA_API_TOKEN`
 - `GITHUB_TOKEN` or `GITLAB_TOKEN`, depending on the configured code host
