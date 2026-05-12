@@ -296,6 +296,12 @@ describe("jiraTrackerAdapter", () => {
 
 		it("matches transition target status case-insensitively", async () => {
 			server.use(
+				http.get(`${JIRA_API}/myself`, () =>
+					HttpResponse.json({ accountId: "acct-123" }),
+				),
+				http.put(`${JIRA_API}/issue/:key/assignee`, () =>
+					HttpResponse.json(null, { status: 204 }),
+				),
 				http.get(`${JIRA_API}/issue/:key/transitions`, () =>
 					HttpResponse.json({
 						transitions: [
@@ -337,6 +343,134 @@ describe("jiraTrackerAdapter", () => {
 			await expect(
 				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
 			).resolves.toBeUndefined();
+		});
+
+		it("assigns the issue to the authenticated user before posting the transition", async () => {
+			const calls: Array<{ kind: string; key: string; body: unknown }> = [];
+			server.use(
+				http.get(`${JIRA_API}/myself`, () =>
+					HttpResponse.json({ accountId: "acct-123" }),
+				),
+				http.put(
+					`${JIRA_API}/issue/:key/assignee`,
+					async ({ request, params }) => {
+						calls.push({
+							kind: "assign",
+							key: String(params["key"]),
+							body: await request.json(),
+						});
+						return new HttpResponse(null, { status: 204 });
+					},
+				),
+				http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+					HttpResponse.json({
+						transitions: [
+							{ id: "11", name: "Start", to: { name: "In Progress" } },
+						],
+					}),
+				),
+				http.post(
+					`${JIRA_API}/issue/:key/transitions`,
+					async ({ request, params }) => {
+						calls.push({
+							kind: "transition",
+							key: String(params["key"]),
+							body: await request.json(),
+						});
+						return new HttpResponse(null, { status: 204 });
+					},
+				),
+			);
+
+			const tracker = createTracker();
+
+			await tracker.transitionState(
+				REPO,
+				issueNumber(42),
+				"pending",
+				"running",
+			);
+
+			expect(calls).toEqual([
+				{
+					kind: "assign",
+					key: "PROJ-42",
+					body: { accountId: "acct-123" },
+				},
+				{
+					kind: "transition",
+					key: "PROJ-42",
+					body: { transition: { id: "11" } },
+				},
+			]);
+		});
+
+		it("does not assign or fetch the authenticated user when transitioning out of running", async () => {
+			let myselfCalled = false;
+			let assignCalled = false;
+			server.use(
+				http.get(`${JIRA_API}/myself`, () => {
+					myselfCalled = true;
+					return HttpResponse.json({ accountId: "acct-123" });
+				}),
+				http.put(`${JIRA_API}/issue/:key/assignee`, () => {
+					assignCalled = true;
+					return new HttpResponse(null, { status: 204 });
+				}),
+				http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+					HttpResponse.json({
+						transitions: [
+							{ id: "21", name: "Review", to: { name: "In Review" } },
+						],
+					}),
+				),
+				http.post(`${JIRA_API}/issue/:key/transitions`, () =>
+					HttpResponse.json(null, { status: 204 }),
+				),
+			);
+
+			const tracker = createTracker();
+
+			await tracker.transitionState(
+				REPO,
+				issueNumber(42),
+				"running",
+				"awaiting_review",
+			);
+
+			expect(myselfCalled).toBe(false);
+			expect(assignCalled).toBe(false);
+		});
+
+		it("does not post the transition when fetching the authenticated user fails", async () => {
+			let transitionPosts = 0;
+			server.use(
+				http.get(
+					`${JIRA_API}/myself`,
+					() => new HttpResponse(null, { status: 500 }),
+				),
+				http.put(`${JIRA_API}/issue/:key/assignee`, () =>
+					HttpResponse.json(null, { status: 204 }),
+				),
+				http.get(`${JIRA_API}/issue/:key/transitions`, () =>
+					HttpResponse.json({
+						transitions: [
+							{ id: "11", name: "Start", to: { name: "In Progress" } },
+						],
+					}),
+				),
+				http.post(`${JIRA_API}/issue/:key/transitions`, () => {
+					transitionPosts += 1;
+					return new HttpResponse(null, { status: 204 });
+				}),
+			);
+
+			const tracker = createTracker();
+
+			await expect(
+				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
+			).rejects.toThrow();
+			expect(transitionPosts).toBe(0);
 		});
 
 		it("fails when Jira does not expose a transition to the target status", async () => {
