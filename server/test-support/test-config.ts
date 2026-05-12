@@ -30,5 +30,11 @@ export function createTestConfig(
 			workspace_root: "/tmp/test-workspaces",
 			...overrides,
 		},
+		agent: {
+			env: {
+				include: [],
+				set: {},
+			},
+		},
 	};
 }

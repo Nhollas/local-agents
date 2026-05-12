@@ -54,6 +54,26 @@ ${validJiraTracker}${validGitLabCodeHost}${fullDefaults}`);
 
 		expect(config.code_host.scopes).toEqual(["group/project"]);
 		expect(config.defaults.workspace_root).toBe("/tmp/workspaces");
+		expect(config.agent.env).toEqual({ include: [], set: {} });
+	});
+
+	it("accepts agent env allowlist configuration", () => {
+		using configFile = writeConfig(`
+${validJiraTracker}${validGitLabCodeHost}${fullDefaults}agent:
+  env:
+    include:
+      - PATH
+      - GITLAB_PACKAGES_TOKEN
+    set:
+      CI: "true"
+`);
+
+		const config = loadConfig(configFile.path);
+
+		expect(config.agent.env).toEqual({
+			include: ["PATH", "GITLAB_PACKAGES_TOKEN"],
+			set: { CI: "true" },
+		});
 	});
 
 	it("accepts gitlab code host with configured base URL", () => {

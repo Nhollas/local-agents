@@ -46,6 +46,18 @@ const configSchema = z
 				workspace_root: z.string().min(1),
 			})
 			.strict(),
+		agent: z
+			.object({
+				env: z
+					.object({
+						include: z.array(z.string().min(1)).default([]),
+						set: z.record(z.string(), z.string()).default({}),
+					})
+					.strict()
+					.default({ include: [], set: {} }),
+			})
+			.strict()
+			.default({ env: { include: [], set: {} } }),
 	})
 	.strict();
 
