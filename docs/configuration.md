@@ -40,6 +40,11 @@ defaults:
   max_concurrent: 2
   model: claude-sonnet-4-6
   workspace_root: /tmp/local-agent-workspaces
+
+agent:
+  env:
+    include:
+      - ANTHROPIC_API_KEY
 ```
 
 ### `tracker`
@@ -111,6 +116,43 @@ Tokens and credentials live in `.env`, not in `config.yaml`. The orchestrator va
 - `JIRA_EMAIL` and `JIRA_API_TOKEN` are required.
 - `GITHUB_TOKEN` is required when `code_host.kind` is `github`.
 - `GITLAB_TOKEN` is required when `code_host.kind` is `gitlab`.
+
+### `agent`
+
+Controls what the spawned Claude Agent SDK subprocess sees in its environment. The host orchestrator's env is **not** inherited wholesale; the agent gets a curated subset.
+
+```yaml
+agent:
+  env:
+    include:
+      - ANTHROPIC_API_KEY
+    set:
+      CI: "true"
+```
+
+| Field         | Type     | Default | Description |
+|---------------|----------|---------|-------------|
+| `env.include` | string[] | `[]`    | Names of host env vars to copy through to the agent. Use this for secrets and project-specific vars. |
+| `env.set`     | object   | `{}`    | Literal key/value pairs set in the agent's env. Overrides anything from `include` or the implicit shell basics. |
+
+#### Always-included shell basics
+
+These are passed through automatically and do not need to appear in `include`:
+
+`HOME`, `PATH`, `SHELL`, `USER`, `LOGNAME`, `LANG`, `TZ`.
+
+Without `HOME` the SDK can't read `~/.claude/` credentials and the agent fails to authenticate; without `PATH` it can't find `git`, `node`, `pnpm`, or `fnm`. These are prerequisites, not opt-ins.
+
+If you need to override one (for example, prepending to `PATH`), use `env.set`.
+
+#### What to put in `include`
+
+App secrets and project-specific vars the agent actually needs at runtime, for example:
+
+- `ANTHROPIC_API_KEY` if you authenticate via API key instead of `claude login`.
+- Private package registry tokens like `GITLAB_PACKAGES_TOKEN`.
+
+Everything else on the host stays on the host.
 
 ---
 
