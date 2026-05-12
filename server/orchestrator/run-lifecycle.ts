@@ -46,6 +46,7 @@ type RunLifecycleDeps = {
 	runShell: RunShell;
 	logger: Logger;
 	workspaceRoot: string;
+	agentEnv: Record<string, string>;
 };
 
 type FailurePhase =
@@ -74,6 +75,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		runShell,
 		logger,
 		workspaceRoot,
+		agentEnv,
 	} = deps;
 
 	async function dispatch(req: RunRequest): Promise<RunHandle> {
@@ -167,7 +169,11 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 							phase = "setup";
 							await ensureBranch(wsPath, branch);
-							const repoSetupRan = await runRepoSetup(wsPath, runShell);
+							const repoSetupRan = await runRepoSetup(
+								wsPath,
+								runShell,
+								agentEnv,
+							);
 							canonicalLog.set({ repo_setup_ran: repoSetupRan });
 							if (repoSetupRan) {
 								ctx.emit({

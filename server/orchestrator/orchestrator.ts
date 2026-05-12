@@ -7,6 +7,7 @@ import type { Runner } from "../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
+import { resolveAgentEnvironment } from "./agent-env.ts";
 import { type AgentInvoker, claudeSdkAgentInvoker } from "./agent-invoker.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import { createRunLifecycle } from "./run-lifecycle.ts";
@@ -75,11 +76,12 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		workflow,
 		runner,
 		logger,
-		agent = claudeSdkAgentInvoker(),
 		clock = systemClock(),
 		runShell = realRunShell,
 	} = opts;
 	const { defaults } = config;
+	const agentEnv = resolveAgentEnvironment(config.agent.env);
+	const agent = opts.agent ?? claudeSdkAgentInvoker(agentEnv);
 
 	function logTransitionFailed(
 		repo: Issue["repo"],
@@ -107,6 +109,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		runShell,
 		logger,
 		workspaceRoot: defaults.workspace_root,
+		agentEnv,
 	});
 
 	function trackPostRun(done: Promise<unknown>): void {

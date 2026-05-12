@@ -6,10 +6,14 @@ import type { Issue } from "../trackers/types.ts";
 
 const exec = promisify(execFile);
 
-export type RunShell = (script: string, cwd: string) => Promise<void>;
+export type RunShell = (
+	script: string,
+	cwd: string,
+	env: Record<string, string>,
+) => Promise<void>;
 
-export const realRunShell: RunShell = async (script, cwd) => {
-	await exec("sh", ["-c", script], { cwd });
+export const realRunShell: RunShell = async (script, cwd, env) => {
+	await exec("sh", ["-c", script], { cwd, env });
 };
 
 export function sanitizeKey(key: string): string {
@@ -92,6 +96,7 @@ const SETUP_SCRIPT_PATH = ".agent/setup.sh";
 export async function runRepoSetup(
 	wsPath: string,
 	runShell: RunShell,
+	env: Record<string, string>,
 ): Promise<boolean> {
 	const scriptPath = join(wsPath, SETUP_SCRIPT_PATH);
 	try {
@@ -100,6 +105,6 @@ export async function runRepoSetup(
 		return false;
 	}
 
-	await runShell(`bash ${SETUP_SCRIPT_PATH}`, wsPath);
+	await runShell(`bash ${SETUP_SCRIPT_PATH}`, wsPath, env);
 	return true;
 }

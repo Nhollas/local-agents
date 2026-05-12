@@ -242,12 +242,23 @@ describe("runRepoSetup", () => {
 		await using ws = await withWorkspace();
 		await writeSetupScript(ws.path, "#!/usr/bin/env bash\necho hi\n");
 
-		const calls: { script: string; cwd: string }[] = [];
-		await runRepoSetup(ws.path, async (script, cwd) => {
-			calls.push({ script, cwd });
-		});
+		const calls: {
+			script: string;
+			cwd: string;
+			env: Record<string, string>;
+		}[] = [];
+		const env = { PATH: "/bin", TOKEN: "secret" };
+		await runRepoSetup(
+			ws.path,
+			async (script, cwd, passedEnv) => {
+				calls.push({ script, cwd, env: passedEnv });
+			},
+			env,
+		);
 
-		expect(calls).toEqual([{ script: "bash .agent/setup.sh", cwd: ws.path }]);
+		expect(calls).toEqual([
+			{ script: "bash .agent/setup.sh", cwd: ws.path, env },
+		]);
 	});
 
 	it("realRunShell executes the script in the workspace and a non-zero exit rejects", async () => {
@@ -257,24 +268,30 @@ describe("runRepoSetup", () => {
 			"#!/usr/bin/env bash\necho ok > setup_output\n",
 		);
 
-		await runRepoSetup(ws.path, realRunShell);
+		const realEnv = { PATH: process.env["PATH"] ?? "" };
+		await runRepoSetup(ws.path, realRunShell, realEnv);
 
 		await expect(
 			access(join(ws.path, "setup_output")),
 		).resolves.toBeUndefined();
 
-		// Non-zero exit propagates as a rejection from realRunShell.
 		await writeSetupScript(ws.path, "#!/usr/bin/env bash\nexit 1\n");
-		await expect(runRepoSetup(ws.path, realRunShell)).rejects.toThrow();
+		await expect(
+			runRepoSetup(ws.path, realRunShell, realEnv),
+		).rejects.toThrow();
 	});
 
 	it("is a no-op when the script is absent", async () => {
 		await using ws = await withWorkspace();
 		const calls: { script: string; cwd: string }[] = [];
 
-		await runRepoSetup(ws.path, async (script, cwd) => {
-			calls.push({ script, cwd });
-		});
+		await runRepoSetup(
+			ws.path,
+			async (script, cwd) => {
+				calls.push({ script, cwd });
+			},
+			{},
+		);
 
 		expect(calls).toEqual([]);
 	});
@@ -284,9 +301,13 @@ describe("runRepoSetup", () => {
 		await writeSetupScript(ws.path, "#!/usr/bin/env bash\nexit 1\n");
 
 		await expect(
-			runRepoSetup(ws.path, async () => {
-				throw new Error("setup.sh exit 1");
-			}),
+			runRepoSetup(
+				ws.path,
+				async () => {
+					throw new Error("setup.sh exit 1");
+				},
+				{},
+			),
 		).rejects.toThrow(/setup.sh exit 1/);
 	});
 });

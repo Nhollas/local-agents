@@ -33,7 +33,9 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Task",
 ] as const;
 
-export function claudeSdkAgentInvoker(): AgentInvoker {
+export function claudeSdkAgentInvoker(
+	env: Record<string, string>,
+): AgentInvoker {
 	return {
 		invoke({
 			prompt,
@@ -49,6 +51,7 @@ export function claudeSdkAgentInvoker(): AgentInvoker {
 				options: {
 					cwd,
 					model,
+					env,
 					abortController: abortControllerFromSignal(signal),
 					allowedTools: [...(allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
 					permissionMode: "dontAsk" as const,
