@@ -45,7 +45,7 @@ export type LangfuseConfig = {
 	publicKey: string;
 	secretKey: string;
 	host: string;
-	projectId: string | undefined;
+	projectId: string;
 };
 
 export function claudeSdkAgentInvoker({

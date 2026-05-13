@@ -26,6 +26,9 @@ function dispatchedRunRow(issueNum: number) {
 		...baseRunRow,
 		issueUrl: `https://tracker.example.test/browse/${jiraIssueKey(issueNum)}`,
 		repoUrl: `https://code-host.example.test/${REPO}`,
+		langfuseTraceUrl: expect.stringMatching(
+			/^http:\/\/localhost:3100\/project\/test-project-id\/traces\/[0-9a-f]+$/,
+		),
 	};
 }
 

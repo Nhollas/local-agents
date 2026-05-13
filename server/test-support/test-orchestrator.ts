@@ -60,7 +60,7 @@ export async function createTestOrchestrator(
 			publicKey: "test-public-key",
 			secretKey: "test-secret-key",
 			host: "http://localhost:3100",
-			projectId: undefined,
+			projectId: "test-project-id",
 		},
 	});
 
