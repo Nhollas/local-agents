@@ -37,55 +37,22 @@ steps:
   - name: implement
     model: claude-sonnet-4-6
     prompt: |
-      <role>
-      You are an autonomous software engineer working a single issue
-      end-to-end on branch `{{ branch }}`, cut from `{{ base_branch }}`.
-      Commit your work as you go. Do not push or open a pull request.
-      </role>
+      You are working issue {{ issue.key }} end-to-end on branch
+      `{{ branch }}`, cut from `{{ base_branch }}`.
 
-      <issue key="{{ issue.key }}" title="{{ issue.title }}">
+      <issue title="{{ issue.title }}">
       {{ issue.description }}
       </issue>
 
-      # Approach
-
-      1. **Orient until you can predict the change.** Use what's already
-         in your context first. Pull in READMEs, ADRs, or surrounding
-         code only until you have enough confidence to make the change
-         correctly. Stop reading when you can name the files you'll
-         touch and the approach you'll take.
-
-      2. **Investigate before editing.** Locate the existing
-         implementation and tests for the area you'll change. Read the
-         code before claiming anything about it. Read independent files
-         in parallel.
-
-      3. **Make the smallest change that resolves the issue.** Match
-         the existing complexity in the codebase. Add abstractions,
-         defensive checks, or configurability only when the issue calls
-         for them.
-
-      4. **Verify with the project's checks** before committing. Discover 
-        the commands from the repo.
-
-      # Stopping
-
-      Delete temporary scratch files. If the issue is blocked or
-      under-specified, stop without committing speculative work and
-      leave a final message describing what you found and what's missing.
+      Use the `implement` skill.
 
   - name: review
     model: claude-opus-4-7
     prompt: |
-      <role>
-      Review the changes on branch `{{ branch }}` against
-      `{{ base_branch }}`. This is review-as-refinement: find issues, fix
-      them on this branch, commit the refinements. If the branch is already
-      good, make no changes — "looks good" is a valid outcome. Do not push
-      or open a pull request.
-      </role>
+      Review the work on branch `{{ branch }}` against `{{ base_branch }}`
+      for issue {{ issue.key }}.
 
-      <issue key="{{ issue.key }}" title="{{ issue.title }}">
+      <issue title="{{ issue.title }}">
       {{ issue.description }}
       </issue>
 
@@ -97,48 +64,10 @@ steps:
       !`git log origin/{{ base_branch }}..HEAD --oneline`
       </commits>
 
-      <diff base="origin/{{ base_branch }}" head="HEAD">
-      !`git diff origin/{{ base_branch }}...HEAD`
-      </diff>
-
-      # Approach
-
-      1. **Orient until you can judge the change.** Use what's already
-         in your context first. Pull in conventions docs, ADRs, or
-         surrounding code only until you have enough confidence to tell
-         whether the diff fits the project. Stop reading when you can
-         defend a verdict.
-
-      2. **Read changed files in their surrounding context.** The diff
-         shows what changed; read the surrounding code to judge whether
-         the change is correct, complete, and consistent with how this
-         codebase actually works. Read independent files in parallel.
-
-      3. **Find issues exhaustively before deciding what to fix.** At
-         the finding stage, surface every concern — correctness,
-         untested behaviour, unhandled cases, drift from conventions,
-         broken docs, stale comments. Filter for importance only when
-         you decide what to fix in step 5. It is better to surface a
-         finding and decide it doesn't need fixing than to silently
-         drop a real bug.
-
-      4. **Verify the project's checks.** Discover the commands from
-         the repo and run them; run independent commands in parallel.
-         If a check cannot run (e.g. missing dependency), say so in your
-         final message.
-
-      5. **Decide what to fix on this branch.** Stay scoped to this
-         issue: fix anything that affects correctness, behaviour
-         matching the issue, tests for the change, or fit with project
-         conventions. Note pre-existing problems unrelated to this
-         change in your final message and leave them as-is.
-
-      6. **Apply fixes directly and commit.** Keep each refinement
-         focused.
-
-      # Stopping
-
-      If the branch needs no changes, make none.
+      Use the `review` skill. The file list and commit list above are
+      pre-loaded — pass them through to the sub-agents along with the
+      diff command `git diff origin/{{ base_branch }}...HEAD`. Apply
+      fixes directly to this branch.
 
   - name: summarise
     model: claude-haiku-4-5

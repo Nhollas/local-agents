@@ -1,8 +1,20 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, readdir, rm, stat } from "node:fs/promises";
+import {
+	access,
+	appendFile,
+	chmod,
+	cp,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Issue } from "../trackers/types.ts";
+import { renderPrompt } from "../workflow/workflow.ts";
 
 const exec = promisify(execFile);
 
@@ -36,12 +48,7 @@ export async function resolveWorkspaceEnvironment(
 	wsPath: string,
 	baseEnv: Record<string, string>,
 ): Promise<Record<string, string>> {
-	const nvmrcPath = join(wsPath, ".nvmrc");
-	try {
-		await access(nvmrcPath);
-	} catch {
-		return baseEnv;
-	}
+	if (!(await pathExists(join(wsPath, ".nvmrc")))) return baseEnv;
 
 	const { stdout } = await exec("bash", ["-c", ACTIVATE_NODE_VERSION_SCRIPT], {
 		cwd: wsPath,
@@ -139,6 +146,170 @@ export async function sweepWorkspaces(
 	return { removed };
 }
 
+async function pathExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+	const info = await stat(path).catch(() => null);
+	return info?.isDirectory() === true;
+}
+
+const WORKSPACE_SKILLS_DIR = ".claude/skills";
+
+type SkillRenderVars = {
+	issue: Issue;
+	branch: string;
+	base_branch: string;
+};
+
+// Target-repo wins on name collision: a skill committed under `.claude/skills/<name>`
+// in the workspace overrides LA's bundled one. We only render `{{ var }}` in the
+// copied .md files — Claude Code's own `!`cmd`` blocks still fire at skill-load time.
+export async function installSkills(
+	wsPath: string,
+	skillsSourceDir: string,
+	vars: SkillRenderVars,
+): Promise<{ installed: string[]; skipped: string[] }> {
+	let entries: string[];
+	try {
+		entries = await readdir(skillsSourceDir);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			return { installed: [], skipped: [] };
+		}
+		throw err;
+	}
+
+	const destRoot = join(wsPath, WORKSPACE_SKILLS_DIR);
+	await mkdir(destRoot, { recursive: true });
+
+	const installed: string[] = [];
+	const skipped: string[] = [];
+
+	for (const name of entries) {
+		const source = join(skillsSourceDir, name);
+		if (!(await isDirectory(source))) continue;
+
+		const target = join(destRoot, name);
+		if (await pathExists(target)) {
+			skipped.push(name);
+			continue;
+		}
+		await cp(source, target, { recursive: true });
+		await renderMarkdownInPlace(target, vars);
+		installed.push(name);
+	}
+
+	await appendToGitExclude(
+		wsPath,
+		installed.map((name) => `${WORKSPACE_SKILLS_DIR}/${name}/`),
+	);
+
+	return { installed, skipped };
+}
+
+const WORKSPACE_HOOKS_DIR = ".claude/hooks";
+const WORKSPACE_SETTINGS_FILE = ".claude/settings.json";
+
+// Hooks and settings are policy the orchestrator enforces, not skills the target
+// repo can opt out of. We always overwrite — the agent must not be able to bypass
+// the guardrails by committing a competing .claude/settings.json into its repo.
+export async function installAgentDefaults(
+	wsPath: string,
+	hooksSourceDir: string,
+	settingsSourceFile: string,
+): Promise<{ hooksInstalled: string[]; settingsInstalled: boolean }> {
+	const destHooks = join(wsPath, WORKSPACE_HOOKS_DIR);
+	await mkdir(destHooks, { recursive: true });
+
+	let entries: string[];
+	try {
+		entries = await readdir(hooksSourceDir);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			entries = [];
+		} else {
+			throw err;
+		}
+	}
+
+	const hooksInstalled: string[] = [];
+	for (const name of entries) {
+		const source = join(hooksSourceDir, name);
+		const info = await stat(source).catch(() => null);
+		if (!info?.isFile()) continue;
+		const target = join(destHooks, name);
+		await cp(source, target);
+		// Restore the exec bit — `cp` honours mode but some FS layouts (npm pack,
+		// fat archives) can strip it. Hooks must be executable to fire.
+		await chmod(target, 0o755);
+		hooksInstalled.push(name);
+	}
+
+	await cp(settingsSourceFile, join(wsPath, WORKSPACE_SETTINGS_FILE));
+
+	await appendToGitExclude(wsPath, [
+		`${WORKSPACE_HOOKS_DIR}/`,
+		WORKSPACE_SETTINGS_FILE,
+	]);
+
+	return { hooksInstalled, settingsInstalled: true };
+}
+
+// Per-clone exclude in .git/info/exclude — keeps orchestrator-injected files out
+// of `git status` without writing a .gitignore the agent would see in the tree.
+async function appendToGitExclude(
+	wsPath: string,
+	entries: string[],
+): Promise<void> {
+	const excludePath = join(wsPath, ".git", "info", "exclude");
+	let existing: string;
+	try {
+		existing = await readFile(excludePath, "utf8");
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+		throw err;
+	}
+
+	const present = new Set(
+		existing
+			.split("\n")
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0 && !line.startsWith("#")),
+	);
+	const toAppend = entries.filter((entry) => !present.has(entry));
+	if (toAppend.length === 0) return;
+
+	const prefix = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+	await appendFile(excludePath, `${prefix}${toAppend.join("\n")}\n`);
+}
+
+async function renderMarkdownInPlace(
+	dir: string,
+	vars: SkillRenderVars,
+): Promise<void> {
+	const entries = await readdir(dir, { withFileTypes: true });
+	for (const entry of entries) {
+		const path = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			await renderMarkdownInPlace(path, vars);
+			continue;
+		}
+		if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+		const source = await readFile(path, "utf8");
+		const rendered = renderPrompt(source, vars);
+		if (rendered !== source) {
+			await writeFile(path, rendered);
+		}
+	}
+}
+
 const SETUP_SCRIPT_PATH = ".agent/setup.sh";
 
 export async function runRepoSetup(
@@ -146,13 +317,7 @@ export async function runRepoSetup(
 	runShell: RunShell,
 	env: Record<string, string>,
 ): Promise<boolean> {
-	const scriptPath = join(wsPath, SETUP_SCRIPT_PATH);
-	try {
-		await access(scriptPath);
-	} catch {
-		return false;
-	}
-
+	if (!(await pathExists(join(wsPath, SETUP_SCRIPT_PATH)))) return false;
 	await runShell(`bash ${SETUP_SCRIPT_PATH}`, wsPath, env);
 	return true;
 }

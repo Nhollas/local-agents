@@ -34,7 +34,7 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Bash",
 	"Glob",
 	"Grep",
-	"Task",
+	"Agent",
 ] as const;
 
 export function claudeSdkAgentInvoker({
@@ -67,6 +67,11 @@ export function claudeSdkAgentInvoker({
 					allowedTools: [...(allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
 					permissionMode: "dontAsk" as const,
 					settingSources: ["project"],
+					// Auto-enables the Skill tool so skills like `implement` can chain
+					// into others (e.g. `tdd`). Without this, `permissionMode: "dontAsk"`
+					// denies Skill because it isn't in `allowedTools`, and listing
+					// `"Skill"` there is deprecated (sdk.d.ts: use `skills` instead).
+					skills: "all",
 					systemPrompt: {
 						type: "preset",
 						preset: "claude_code",

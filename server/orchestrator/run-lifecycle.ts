@@ -20,6 +20,8 @@ import { runWorkflowSteps } from "./step-runner.ts";
 import {
 	createWorkspace,
 	ensureBranch,
+	installAgentDefaults,
+	installSkills,
 	pushBranch,
 	type RunShell,
 	removeWorkspace,
@@ -47,12 +49,17 @@ type RunLifecycleDeps = {
 	runShell: RunShell;
 	logger: Logger;
 	workspaceRoot: string;
+	skillsSourceDir: string;
+	hooksSourceDir: string;
+	agentSettingsFile: string;
 	agentEnv: Record<string, string>;
 };
 
 type FailurePhase =
 	| "workspace"
 	| "branch_resolver"
+	| "skills"
+	| "agent_defaults"
 	| "setup"
 	| "step"
 	| FinalizeFailurePhase;
@@ -76,6 +83,9 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		runShell,
 		logger,
 		workspaceRoot,
+		skillsSourceDir,
+		hooksSourceDir,
+		agentSettingsFile,
 		agentEnv,
 	} = deps;
 
@@ -169,8 +179,55 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								},
 							});
 
-							phase = "setup";
 							await ensureBranch(wsPath, branch);
+
+							phase = "skills";
+							const skillsResult = await installSkills(
+								wsPath,
+								skillsSourceDir,
+								{ issue, branch, base_branch: baseBranch },
+							);
+							canonicalLog.set({
+								skills_installed: skillsResult.installed,
+								skills_skipped: skillsResult.skipped,
+							});
+							if (
+								skillsResult.installed.length > 0 ||
+								skillsResult.skipped.length > 0
+							) {
+								ctx.emit({
+									kind: "system",
+									stepName: null,
+									data: {
+										message: `skills installed: ${skillsResult.installed.length} (skipped ${skillsResult.skipped.length})`,
+										command: null,
+										path: null,
+										exitCode: null,
+									},
+								});
+							}
+
+							phase = "agent_defaults";
+							const defaultsResult = await installAgentDefaults(
+								wsPath,
+								hooksSourceDir,
+								agentSettingsFile,
+							);
+							canonicalLog.set({
+								hooks_installed: defaultsResult.hooksInstalled,
+							});
+							ctx.emit({
+								kind: "system",
+								stepName: null,
+								data: {
+									message: `hooks installed: ${defaultsResult.hooksInstalled.length}`,
+									command: null,
+									path: null,
+									exitCode: null,
+								},
+							});
+
+							phase = "setup";
 							const workspaceEnv = await resolveWorkspaceEnvironment(
 								wsPath,
 								agentEnv,

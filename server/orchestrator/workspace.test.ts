@@ -1,5 +1,14 @@
 import { execFile } from "node:child_process";
-import { access, chmod, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import {
+	access,
+	chmod,
+	mkdir,
+	readFile,
+	rm,
+	stat,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +18,8 @@ import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import {
 	createWorkspace,
+	installAgentDefaults,
+	installSkills,
 	pushBranch,
 	realRunShell,
 	removeWorkspace,
@@ -367,5 +378,361 @@ describe("resolveWorkspaceEnvironment", () => {
 		await expect(
 			resolveWorkspaceEnvironment(ws.path, { PATH: "/bin" }),
 		).rejects.toThrow(/fnm is not available on PATH/);
+	});
+});
+
+async function makeSkillsSource(skills: Record<string, string>): Promise<{
+	path: string;
+	[Symbol.asyncDispose](): Promise<void>;
+}> {
+	const path = join(
+		tmpdir(),
+		`skills-src-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+	);
+	await mkdir(path, { recursive: true });
+	for (const [name, body] of Object.entries(skills)) {
+		await mkdir(join(path, name), { recursive: true });
+		await writeFile(join(path, name, "SKILL.md"), body);
+	}
+	return {
+		path,
+		async [Symbol.asyncDispose]() {
+			await rm(path, { recursive: true, force: true });
+		},
+	};
+}
+
+const TEST_RENDER_VARS = {
+	issue: createIssue(42),
+	branch: "feat/ABC-42-thing",
+	base_branch: "main",
+};
+
+describe("installSkills", () => {
+	it("copies each skill directory into <ws>/.claude/skills/", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			review: "review body",
+			implement: "implement body",
+		});
+
+		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		expect(result.installed.sort()).toEqual(["implement", "review"]);
+		expect(result.skipped).toEqual([]);
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
+		).resolves.toBe("review body");
+		await expect(
+			readFile(join(ws.path, ".claude/skills/implement/SKILL.md"), "utf8"),
+		).resolves.toBe("implement body");
+	});
+
+	it("skips skills the target repo already ships under the same name", async () => {
+		await using ws = await withWorkspace();
+		await mkdir(join(ws.path, ".claude/skills/review"), { recursive: true });
+		await writeFile(
+			join(ws.path, ".claude/skills/review/SKILL.md"),
+			"repo-provided review",
+		);
+		await using src = await makeSkillsSource({
+			review: "LA review",
+			implement: "LA implement",
+		});
+
+		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		expect(result.installed).toEqual(["implement"]);
+		expect(result.skipped).toEqual(["review"]);
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
+		).resolves.toBe("repo-provided review");
+	});
+
+	it("returns empty when the skills source directory is missing", async () => {
+		await using ws = await withWorkspace();
+		const missing = join(
+			tmpdir(),
+			`missing-skills-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		);
+
+		const result = await installSkills(ws.path, missing, TEST_RENDER_VARS);
+
+		expect(result).toEqual({ installed: [], skipped: [] });
+		await expect(access(join(ws.path, ".claude/skills"))).rejects.toThrow();
+	});
+
+	it("ignores non-directory entries in the source", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({ review: "review" });
+		await writeFile(join(src.path, "README.md"), "not a skill");
+
+		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		expect(result.installed).toEqual(["review"]);
+	});
+
+	it("renders {{ }} substitutions in .md files using the supplied vars", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			advisor:
+				"<commits>\n!`git log origin/{{ base_branch }}..HEAD --oneline`\n</commits>\n\nIssue: {{ issue.key }}, Branch: {{ branch }}.",
+		});
+
+		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		const rendered = await readFile(
+			join(ws.path, ".claude/skills/advisor/SKILL.md"),
+			"utf8",
+		);
+		expect(rendered).toContain("!`git log origin/main..HEAD --oneline`");
+		expect(rendered).toContain(
+			`Issue: ${TEST_RENDER_VARS.issue.key}, Branch: feat/ABC-42-thing.`,
+		);
+	});
+
+	it("renders sibling .md files inside a skill directory, not just SKILL.md", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			review: "main on {{ base_branch }}",
+		});
+		await writeFile(
+			join(src.path, "review", "details.md"),
+			"detail for {{ branch }}",
+		);
+
+		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
+		).resolves.toBe("main on main");
+		await expect(
+			readFile(join(ws.path, ".claude/skills/review/details.md"), "utf8"),
+		).resolves.toBe("detail for feat/ABC-42-thing");
+	});
+
+	it("adds installed skills to .git/info/exclude so they stay out of git status", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(100);
+		const wsPath = await createWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			"run-skills-exclude",
+		);
+		await using src = await makeSkillsSource({
+			review: "review body",
+			implement: "implement body",
+		});
+
+		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+
+		const { stdout: status } = await exec(
+			"git",
+			["status", "--porcelain", "--ignored"],
+			{ cwd: wsPath },
+		);
+		expect(status).not.toMatch(/\.claude\/skills\/review/);
+		expect(status).not.toMatch(/\.claude\/skills\/implement/);
+
+		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
+		expect(exclude).toMatch(/\.claude\/skills\/review\//);
+		expect(exclude).toMatch(/\.claude\/skills\/implement\//);
+	});
+
+	it("does not duplicate exclude entries on repeated installs", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(101);
+		const wsPath = await createWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			"run-skills-idempotent",
+		);
+		await using src = await makeSkillsSource({ review: "review" });
+
+		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+		await rm(join(wsPath, ".claude/skills/review"), { recursive: true });
+		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+
+		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
+		const matches = exclude.match(/\.claude\/skills\/review\//g) ?? [];
+		expect(matches.length).toBe(1);
+	});
+
+	it("leaves non-.md files untouched", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeSkillsSource({
+			advisor: "see {{ base_branch }}",
+		});
+		await writeFile(
+			join(src.path, "advisor", "fixture.txt"),
+			"literal {{ base_branch }} stays",
+		);
+
+		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+
+		await expect(
+			readFile(join(ws.path, ".claude/skills/advisor/SKILL.md"), "utf8"),
+		).resolves.toBe("see main");
+		await expect(
+			readFile(join(ws.path, ".claude/skills/advisor/fixture.txt"), "utf8"),
+		).resolves.toBe("literal {{ base_branch }} stays");
+	});
+});
+
+async function makeAgentDefaultsSource(
+	hookScripts: Record<string, string>,
+	settings: string,
+): Promise<{
+	hooksDir: string;
+	settingsFile: string;
+	[Symbol.asyncDispose](): Promise<void>;
+}> {
+	const root = join(
+		tmpdir(),
+		`defaults-src-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+	);
+	const hooksDir = join(root, "hooks");
+	await mkdir(hooksDir, { recursive: true });
+	for (const [name, body] of Object.entries(hookScripts)) {
+		const path = join(hooksDir, name);
+		await writeFile(path, body);
+		await chmod(path, 0o755);
+	}
+	const settingsFile = join(root, "agent-settings.json");
+	await writeFile(settingsFile, settings);
+	return {
+		hooksDir,
+		settingsFile,
+		async [Symbol.asyncDispose]() {
+			await rm(root, { recursive: true, force: true });
+		},
+	};
+}
+
+describe("installAgentDefaults", () => {
+	it("copies hook scripts to <ws>/.claude/hooks/ and the settings file to <ws>/.claude/settings.json", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeAgentDefaultsSource(
+			{
+				"block-dangerous-git.sh": "#!/usr/bin/env bash\necho block\n",
+				"validate-commit-message.sh": "#!/usr/bin/env bash\necho commit\n",
+			},
+			'{"hooks":{}}',
+		);
+
+		const result = await installAgentDefaults(
+			ws.path,
+			src.hooksDir,
+			src.settingsFile,
+		);
+
+		expect(result).toEqual({
+			hooksInstalled: ["block-dangerous-git.sh", "validate-commit-message.sh"],
+			settingsInstalled: true,
+		});
+		await expect(
+			readFile(join(ws.path, ".claude/hooks/block-dangerous-git.sh"), "utf8"),
+		).resolves.toBe("#!/usr/bin/env bash\necho block\n");
+		await expect(
+			readFile(join(ws.path, ".claude/settings.json"), "utf8"),
+		).resolves.toBe('{"hooks":{}}');
+	});
+
+	it("makes installed hook scripts executable", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeAgentDefaultsSource(
+			{ "noop.sh": "#!/usr/bin/env bash\nexit 0\n" },
+			"{}",
+		);
+
+		await installAgentDefaults(ws.path, src.hooksDir, src.settingsFile);
+
+		const info = await stat(join(ws.path, ".claude/hooks/noop.sh"));
+		expect(info.mode & 0o111).not.toBe(0);
+	});
+
+	it("excludes installed hooks and settings from git via .git/info/exclude", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(102);
+		const wsPath = await createWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			"run-defaults-exclude",
+		);
+		await using src = await makeAgentDefaultsSource(
+			{ "noop.sh": "#!/usr/bin/env bash\nexit 0\n" },
+			'{"hooks":{}}',
+		);
+
+		await installAgentDefaults(wsPath, src.hooksDir, src.settingsFile);
+
+		const { stdout: status } = await exec("git", ["status", "--porcelain"], {
+			cwd: wsPath,
+		});
+		expect(status).not.toMatch(/\.claude\/hooks/);
+		expect(status).not.toMatch(/\.claude\/settings\.json/);
+
+		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
+		expect(exclude).toMatch(/\.claude\/hooks\//);
+		expect(exclude).toMatch(/\.claude\/settings\.json/);
+	});
+
+	it("overwrites an existing settings.json so target-repo customisations cannot bypass orchestrator policy", async () => {
+		await using ws = await withWorkspace();
+		await mkdir(join(ws.path, ".claude"), { recursive: true });
+		await writeFile(
+			join(ws.path, ".claude/settings.json"),
+			'{"target":"repo-provided"}',
+		);
+		await using src = await makeAgentDefaultsSource(
+			{},
+			'{"orchestrator":"wins"}',
+		);
+
+		await installAgentDefaults(ws.path, src.hooksDir, src.settingsFile);
+
+		await expect(
+			readFile(join(ws.path, ".claude/settings.json"), "utf8"),
+		).resolves.toBe('{"orchestrator":"wins"}');
+	});
+
+	it("still installs settings when the hooks source directory is missing", async () => {
+		await using ws = await withWorkspace();
+		const missingHooks = join(
+			tmpdir(),
+			`missing-hooks-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		);
+		await using src = await makeAgentDefaultsSource({}, '{"k":"v"}');
+
+		const result = await installAgentDefaults(
+			ws.path,
+			missingHooks,
+			src.settingsFile,
+		);
+
+		expect(result).toEqual({ hooksInstalled: [], settingsInstalled: true });
+		await expect(
+			readFile(join(ws.path, ".claude/settings.json"), "utf8"),
+		).resolves.toBe('{"k":"v"}');
+	});
+
+	it("ignores non-file entries in the hooks source directory", async () => {
+		await using ws = await withWorkspace();
+		await using src = await makeAgentDefaultsSource(
+			{ "real.sh": "#!/usr/bin/env bash\nexit 0\n" },
+			"{}",
+		);
+		await mkdir(join(src.hooksDir, "nested"), { recursive: true });
+
+		const result = await installAgentDefaults(
+			ws.path,
+			src.hooksDir,
+			src.settingsFile,
+		);
+
+		expect(result.hooksInstalled).toEqual(["real.sh"]);
 	});
 });
