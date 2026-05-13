@@ -14,7 +14,13 @@ export function buildAgentHooks(
 	const postToolUse: HookCallback[] = [safe(record)];
 	const postToolUseFailure: HookCallback[] = [safe(record)];
 	if (onToolFailure) {
-		postToolUseFailure.push(safe(countRetry(onToolFailure)));
+		postToolUseFailure.push(
+			safe((input) => {
+				if (input.hook_event_name === "PostToolUseFailure") {
+					onToolFailure(input.tool_name);
+				}
+			}),
+		);
 	}
 	if (runLogWriter) {
 		postToolUse.push(safe(writeRunLog(runLogWriter)));
@@ -23,14 +29,6 @@ export function buildAgentHooks(
 	return {
 		PostToolUse: [{ hooks: postToolUse }],
 		PostToolUseFailure: [{ hooks: postToolUseFailure }],
-	};
-}
-
-function countRetry(onToolFailure: (toolName: string) => void) {
-	return (input: HookInput): void => {
-		if (input.hook_event_name === "PostToolUseFailure") {
-			onToolFailure(input.tool_name);
-		}
 	};
 }
 

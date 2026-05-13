@@ -149,8 +149,9 @@ async function runWorkflowStep({
 				? { type: "json_schema", schema: step.output_schema }
 				: undefined;
 
-			const headBefore =
-				step.name === "review" ? await gitRevParseSafe(cwd, logger) : null;
+			const headBefore = step.measure_diff
+				? await gitRevParseSafe(cwd, logger)
+				: null;
 
 			for await (const msg of agent.invoke({
 				prompt,
@@ -197,10 +198,6 @@ async function runWorkflowStep({
 				}
 			}
 
-			if (step.name === "review") {
-				await setReviewFixAttributes(stepSpan, cwd, headBefore, logger);
-			}
-
 			const completedAtMs = Date.now();
 			const durationMs = completedAtMs - startedAtMs;
 			runRepo.completeStep(ctx.runId, stepIndex, {
@@ -219,6 +216,9 @@ async function runWorkflowStep({
 				stepName: step.name,
 				data: { name: step.name, index: stepIndex, durationMs },
 			});
+			if (headBefore !== null) {
+				await setStepDiffAttributes(stepSpan, cwd, headBefore, logger);
+			}
 			return currentSessionId;
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);
@@ -245,10 +245,12 @@ async function runWorkflowStep({
 			throw err;
 		} finally {
 			const total = Object.values(retryCounts).reduce((a, b) => a + b, 0);
-			stepSpan.setAttributes({
-				"retries.by_tool": JSON.stringify(retryCounts),
-				"retries.total": total,
-			});
+			if (total > 0) {
+				stepSpan.setAttributes({
+					"retries.by_tool": JSON.stringify(retryCounts),
+					"retries.total": total,
+				});
+			}
 		}
 	});
 }
@@ -263,56 +265,30 @@ async function gitRevParseSafe(
 		const { stdout } = await exec("git", ["rev-parse", "HEAD"], { cwd });
 		return stdout.trim();
 	} catch (err) {
-		logger.warn({ err, cwd }, "step_runner.review_fix_size.head_before_failed");
+		logger.warn({ err, cwd }, "step_runner.step_diff.head_before_failed");
 		return null;
 	}
 }
 
-async function setReviewFixAttributes(
+async function setStepDiffAttributes(
 	span: Span,
 	cwd: string,
-	headBefore: string | null,
+	headBefore: string,
 	logger: Logger,
 ): Promise<void> {
-	if (headBefore === null) {
-		span.setAttributes({
-			"review.fixes.files_changed": -1,
-			"review.fixes.lines_added": -1,
-			"review.fixes.lines_removed": -1,
-		});
-		return;
-	}
 	try {
-		const { stdout: headAfterRaw } = await exec("git", ["rev-parse", "HEAD"], {
-			cwd,
-		});
-		const headAfter = headAfterRaw.trim();
-		if (headBefore === headAfter) {
-			span.setAttributes({
-				"review.fixes.files_changed": 0,
-				"review.fixes.lines_added": 0,
-				"review.fixes.lines_removed": 0,
-			});
-			return;
-		}
-		const { stdout: shortstatRaw } = await exec(
+		const { stdout } = await exec(
 			"git",
-			["diff", "--shortstat", `${headBefore}..${headAfter}`],
+			["diff", "--shortstat", `${headBefore}..HEAD`],
 			{ cwd },
 		);
-		const { filesChanged, linesAdded, linesRemoved } =
-			parseShortstat(shortstatRaw);
+		const { filesChanged, linesAdded, linesRemoved } = parseShortstat(stdout);
 		span.setAttributes({
-			"review.fixes.files_changed": filesChanged,
-			"review.fixes.lines_added": linesAdded,
-			"review.fixes.lines_removed": linesRemoved,
+			"step.diff.files_changed": filesChanged,
+			"step.diff.lines_added": linesAdded,
+			"step.diff.lines_removed": linesRemoved,
 		});
 	} catch (err) {
-		logger.warn({ err, cwd }, "step_runner.review_fix_size.diff_failed");
-		span.setAttributes({
-			"review.fixes.files_changed": -1,
-			"review.fixes.lines_added": -1,
-			"review.fixes.lines_removed": -1,
-		});
+		logger.warn({ err, cwd }, "step_runner.step_diff.diff_failed");
 	}
 }

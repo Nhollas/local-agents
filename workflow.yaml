@@ -36,6 +36,7 @@ branch:
 steps:
   - name: implement
     model: claude-sonnet-4-6
+    measure_diff: true
     prompt: |
       You are working issue {{ issue.key }} end-to-end on branch
       `{{ branch }}`, cut from `{{ base_branch }}`.
@@ -48,6 +49,7 @@ steps:
 
   - name: review
     model: claude-opus-4-7
+    measure_diff: true
     prompt: |
       Review the work on branch `{{ branch }}` against `{{ base_branch }}`
       for issue {{ issue.key }}.
