@@ -20,6 +20,7 @@ import { runWorkflowSteps } from "./step-runner.ts";
 import {
 	createWorkspace,
 	ensureBranch,
+	installAgentDefaults,
 	installSkills,
 	pushBranch,
 	type RunShell,
@@ -49,6 +50,8 @@ type RunLifecycleDeps = {
 	logger: Logger;
 	workspaceRoot: string;
 	skillsSourceDir: string;
+	hooksSourceDir: string;
+	agentSettingsFile: string;
 	agentEnv: Record<string, string>;
 };
 
@@ -56,6 +59,7 @@ type FailurePhase =
 	| "workspace"
 	| "branch_resolver"
 	| "skills"
+	| "agent_defaults"
 	| "setup"
 	| "step"
 	| FinalizeFailurePhase;
@@ -80,6 +84,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		logger,
 		workspaceRoot,
 		skillsSourceDir,
+		hooksSourceDir,
+		agentSettingsFile,
 		agentEnv,
 	} = deps;
 
@@ -200,6 +206,26 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 									},
 								});
 							}
+
+							phase = "agent_defaults";
+							const defaultsResult = await installAgentDefaults(
+								wsPath,
+								hooksSourceDir,
+								agentSettingsFile,
+							);
+							canonicalLog.set({
+								hooks_installed: defaultsResult.hooksInstalled,
+							});
+							ctx.emit({
+								kind: "system",
+								stepName: null,
+								data: {
+									message: `hooks installed: ${defaultsResult.hooksInstalled.length}`,
+									command: null,
+									path: null,
+									exitCode: null,
+								},
+							});
 
 							phase = "setup";
 							const workspaceEnv = await resolveWorkspaceEnvironment(

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import {
 	access,
+	chmod,
 	cp,
 	mkdir,
 	readdir,
@@ -205,6 +206,49 @@ export async function installSkills(
 	}
 
 	return { installed, skipped };
+}
+
+const WORKSPACE_HOOKS_DIR = ".claude/hooks";
+const WORKSPACE_SETTINGS_FILE = ".claude/settings.json";
+
+// Hooks and settings are policy the orchestrator enforces, not skills the target
+// repo can opt out of. We always overwrite — the agent must not be able to bypass
+// the guardrails by committing a competing .claude/settings.json into its repo.
+export async function installAgentDefaults(
+	wsPath: string,
+	hooksSourceDir: string,
+	settingsSourceFile: string,
+): Promise<{ hooksInstalled: string[]; settingsInstalled: boolean }> {
+	const destHooks = join(wsPath, WORKSPACE_HOOKS_DIR);
+	await mkdir(destHooks, { recursive: true });
+
+	let entries: string[];
+	try {
+		entries = await readdir(hooksSourceDir);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			entries = [];
+		} else {
+			throw err;
+		}
+	}
+
+	const hooksInstalled: string[] = [];
+	for (const name of entries) {
+		const source = join(hooksSourceDir, name);
+		const info = await stat(source).catch(() => null);
+		if (!info?.isFile()) continue;
+		const target = join(destHooks, name);
+		await cp(source, target);
+		// Restore the exec bit — `cp` honours mode but some FS layouts (npm pack,
+		// fat archives) can strip it. Hooks must be executable to fire.
+		await chmod(target, 0o755);
+		hooksInstalled.push(name);
+	}
+
+	await cp(settingsSourceFile, join(wsPath, WORKSPACE_SETTINGS_FILE));
+
+	return { hooksInstalled, settingsInstalled: true };
 }
 
 async function renderMarkdownInPlace(

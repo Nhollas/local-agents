@@ -117,5 +117,4 @@ Reporting them separately stops one axis from masking the other.
 ## Stopping
 
 - If the branch needs no changes, make none. End with "no changes" plus the two reports.
-- Do **not** push the branch. Do **not** open a change request. The orchestrator owns those steps.
 - Do **not** restructure code beyond what the findings call for.

@@ -44,8 +44,7 @@ steps:
       {{ issue.description }}
       </issue>
 
-      Use the `implement` skill. Commit your work as you go. Do not push
-      and do not open a change request — the orchestrator owns those.
+      Use the `implement` skill.
 
   - name: review
     model: claude-opus-4-7
@@ -68,8 +67,7 @@ steps:
       Use the `review` skill. The file list and commit list above are
       pre-loaded — pass them through to the sub-agents along with the
       diff command `git diff origin/{{ base_branch }}...HEAD`. Apply
-      fixes directly to this branch. Do not push and do not open a
-      change request — the orchestrator owns those.
+      fixes directly to this branch.
 
   - name: summarise
     model: claude-haiku-4-5

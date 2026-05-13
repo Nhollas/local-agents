@@ -5,7 +5,7 @@ description: Work a single issue end-to-end on the current branch. Orient until 
 
 # Implement
 
-You are working a single issue end-to-end on a branch the orchestrator has already created and checked out. Commit your work as you go. Do **not** push and do **not** open a change request — the orchestrator owns those steps.
+You are working a single issue end-to-end on the current branch. Commit your work as you go.
 
 ## Process
 
@@ -76,6 +76,6 @@ Match the repo's commit-message convention (read recent `git log`). Keep commits
 
 ## Stopping
 
-If the issue is blocked or under-specified, stop without committing speculative work. Leave a final message describing what you found, what you tried, and what's missing. The orchestrator will route the issue back appropriately.
+If the issue is blocked or under-specified, stop without committing speculative work. Leave a final message describing what you found, what you tried, and what's missing.
 
-Delete temporary scratch files before stopping. Do not push the branch. Do not open a change request.
+Delete temporary scratch files before stopping.

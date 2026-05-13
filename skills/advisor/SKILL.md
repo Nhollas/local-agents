@@ -42,7 +42,7 @@ Use these as raw material for the "What I've tried" section below. Distil to att
 
 ## How to invoke
 
-Spawn a single sub-agent via the `Agent` tool. Use `subagent_type: "general-purpose"` with `model: claude-opus-4-7` (or the strongest model available in this environment).
+Spawn a single sub-agent via the `Agent` tool. Use `subagent_type: "general-purpose"` with `model: "opus"` — the SDK accepts only the family name (`"sonnet" | "opus" | "haiku"`), not full IDs.
 
 The prompt to the advisor must be **self-contained** — the advisor sees none of your prior conversation. Include, in this order:
 
