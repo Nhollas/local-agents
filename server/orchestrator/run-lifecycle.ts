@@ -55,7 +55,7 @@ type RunLifecycleDeps = {
 	agentSettingsFile: string;
 	agentEnv: Record<string, string>;
 	langfuseHost: string;
-	langfuseProjectId: string | undefined;
+	langfuseProjectId: string;
 };
 
 type FailurePhase =
@@ -115,12 +115,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 					},
 					() =>
 						runRunSpan(ctx.runId, issue.key, async (traceId) => {
-							const langfuseTraceUrl = langfuseProjectId
-								? `${langfuseHost}/project/${langfuseProjectId}/traces/${traceId}`
-								: null;
-							if (langfuseTraceUrl) {
-								runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
-							}
+							const langfuseTraceUrl = `${langfuseHost}/project/${langfuseProjectId}/traces/${traceId}`;
+							runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
 							try {
 								const startTime = clock.now();
 								let result: RunResult;
