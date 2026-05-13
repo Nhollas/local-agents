@@ -24,8 +24,6 @@ Do **not** invoke the advisor for:
 
 ## Current state of the run
 
-Pre-loaded for you at skill-load time so you can compose the consultation prompt without scraping. These are live snapshots — they re-fetch every time this skill is loaded.
-
 <commits_so_far>
 !`git log origin/{{ base_branch }}..HEAD --oneline`
 </commits_so_far>

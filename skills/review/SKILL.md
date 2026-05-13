@@ -5,7 +5,7 @@ description: Two-axis review of the work on the current branch against its base.
 
 # Review
 
-Two-axis review of the diff between `HEAD` and the base branch you were given:
+Two-axis review of the diff between `HEAD` and its base branch:
 
 - **Standards** — does the code conform to this repo's documented standards?
 - **Spec** — does the code faithfully implement the originating issue?
@@ -18,9 +18,7 @@ This is review-as-refinement: surface every issue, then fix what matters on this
 
 ### 1. Pin the diff
 
-The base branch, the changed-file list, and the commit list have been pre-loaded into your context by the orchestrator. Do **not** re-run `git diff --name-status` or `git log` to fetch them — they are already there.
-
-You still need a diff command to hand to the sub-agents so they can read the actual hunks. Use:
+The diff command to hand to the sub-agents:
 
 ```
 git diff origin/<base>...HEAD
@@ -36,15 +34,10 @@ Anything in the repo that documents how code should be written. Common locations
 - `CONTRIBUTING.md`
 - `docs/coding-standards.md`, `docs/testing-standards.md`, `docs/architecture.md`
 - `docs/adr/` — architectural decisions are standards
-- `.editorconfig`, `biome.json`, `tsconfig.json` — note them but don't re-check what tooling enforces
 
 Collect the list. The Standards sub-agent will read them.
 
-### 3. Identify the spec
-
-The originating issue is the spec. If you were not given its full body, fetch it before spawning the sub-agent. If no spec exists — explicitly, not just "I couldn't find one" — the Spec sub-agent will skip and report "no spec available".
-
-### 4. Spawn both sub-agents in parallel
+### 3. Spawn both sub-agents in parallel
 
 Send a single message with two `Agent` tool calls. Use the `general-purpose` subagent for both.
 
@@ -60,9 +53,7 @@ Send a single message with two `Agent` tool calls. Use the `general-purpose` sub
 - The issue body verbatim.
 - The brief: "Read the issue. Then read the diff. Report: (a) requirements the issue asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the issue line for each finding. Under 400 words."
 
-If the issue body is not available, skip the Spec sub-agent and note it in the final report.
-
-### 5. Decide what to fix
+### 4. Decide what to fix
 
 Stay scoped to this issue. Fix anything that affects:
 
@@ -73,13 +64,13 @@ Stay scoped to this issue. Fix anything that affects:
 
 Note pre-existing problems unrelated to this change in your final message and leave them as-is. It is better to surface a finding and decide it doesn't need fixing than to silently drop a real bug.
 
-### 6. Apply fixes and verify
+### 5. Apply fixes and verify
 
-Apply fixes directly on the branch, one focused commit per logical refinement. After fixing, re-run the project's checks (`pnpm typecheck`, `pnpm test`, or whatever the repo declares). If a check cannot run, say so in your final message.
+Apply fixes directly on the branch, one focused commit per logical refinement. After fixing, re-run the project's typecheck and test commands — discover them from the repo (`package.json`, `Makefile`, `justfile`, READMEs). If a check cannot run, say so in your final message.
 
-### 7. Report
+### 6. Report
 
-The final message is consumed by both a human reviewer and the orchestrator's summariser. Use this exact shape — three top-level sections, in this order, no other top-level headings:
+Use this exact shape — three top-level sections, in this order, no other top-level headings:
 
 ```
 ## Standards
@@ -88,13 +79,13 @@ The final message is consumed by both a human reviewer and the orchestrator's su
 
 ## Spec
 
-<verbatim Spec sub-agent report, or "No spec available." if step 3 had no issue body>
+<verbatim Spec sub-agent report>
 
 ## Summary
 
 - Standards: <N> findings — <M> fixed, <K> left
 - Spec: <N> findings — <M> fixed, <K> left
-- Checks: <pnpm typecheck: pass|fail|skipped>, <pnpm test: pass|fail|skipped>, …
+- Checks: <typecheck: pass|fail|skipped>, <tests: pass|fail|skipped>, …
 - Outcome: <changes-applied | no-changes>
 ```
 
