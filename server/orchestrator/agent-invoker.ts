@@ -1,6 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { RunId } from "../types/brands.ts";
+import type { IssueKey, RunId } from "../types/brands.ts";
 import { buildAgentHooks } from "./agent-hooks.ts";
+import { buildOtelEnv } from "./otel-env.ts";
 import { createRunLogWriter } from "./run-log-file.ts";
 
 export type AgentMessage =
@@ -16,6 +17,8 @@ export type AgentInvokeOptions = {
 	cwd: string;
 	model: string;
 	runId: RunId;
+	issueKey?: IssueKey;
+	stepName?: string;
 	env?: Record<string, string>;
 	resumeSessionId?: string;
 	signal: AbortSignal;
@@ -37,12 +40,20 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Agent",
 ] as const;
 
+export type LangfuseConfig = {
+	publicKey: string;
+	secretKey: string;
+	host: string;
+};
+
 export function claudeSdkAgentInvoker({
 	env,
 	logDir,
+	langfuse,
 }: {
 	env: Record<string, string>;
 	logDir: string;
+	langfuse: LangfuseConfig;
 }): AgentInvoker {
 	return {
 		invoke({
@@ -50,6 +61,8 @@ export function claudeSdkAgentInvoker({
 			cwd,
 			model,
 			runId,
+			issueKey,
+			stepName,
 			env: invocationEnv,
 			resumeSessionId,
 			outputFormat,
@@ -57,12 +70,17 @@ export function claudeSdkAgentInvoker({
 			allowedTools,
 		}) {
 			const runLogWriter = createRunLogWriter(logDir, runId);
+			const baseEnv = invocationEnv ?? env;
+			const resolvedEnv = {
+				...baseEnv,
+				...buildOtelEnv({ runId, issueKey, stepName, langfuse }),
+			};
 			return query({
 				prompt,
 				options: {
 					cwd,
 					model,
-					env: invocationEnv ?? env,
+					env: resolvedEnv,
 					abortController: abortControllerFromSignal(signal),
 					allowedTools: [...(allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
 					permissionMode: "dontAsk" as const,

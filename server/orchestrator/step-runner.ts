@@ -142,6 +142,8 @@ async function runWorkflowStep({
 			cwd,
 			model,
 			runId: ctx.runId,
+			issueKey: issue.key,
+			stepName: step.name,
 			signal: ctx.signal,
 			env,
 			...(resumeSessionId && { resumeSessionId }),

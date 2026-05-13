@@ -49,6 +49,7 @@ export async function resolveBranch({
 			cwd,
 			model: workflowBranch.model,
 			runId,
+			issueKey: issue.key,
 			signal,
 			outputFormat,
 		})) {

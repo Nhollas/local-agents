@@ -1,0 +1,140 @@
+# Langfuse v3 self-hosted — reference release v3.174.0 (:3 tag tracks v3 major)
+# Secrets live in infra/langfuse/.env (gitignored). See .env.example for required vars.
+# Start: pnpm langfuse:up  Stop: pnpm langfuse:down  Logs: pnpm langfuse:logs
+
+x-langfuse-depends: &langfuse-depends
+  postgres:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+x-langfuse-env: &langfuse-env
+  DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/langfuse"
+  SALT: "${SALT}"
+  ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+  NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
+  NEXTAUTH_URL: "http://localhost:3000"
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:${CLICKHOUSE_PASSWORD}@clickhouse:9000"
+  CLICKHOUSE_URL: "http://clickhouse:8123"
+  CLICKHOUSE_USER: "clickhouse"
+  CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_AUTH: "${REDIS_AUTH}"
+  LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: "langfuse"
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: "http://minio:9000"
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: "auto"
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: "minio"
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD}"
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: "langfuse"
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: "http://minio:9000"
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: "auto"
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: "minio"
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: "${MINIO_ROOT_PASSWORD}"
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+
+services:
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    restart: unless-stopped
+    depends_on: *langfuse-depends
+    environment:
+      <<: *langfuse-env
+
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:3
+    restart: unless-stopped
+    depends_on: *langfuse-depends
+    ports:
+      - "3000:3000"
+    environment:
+      <<: *langfuse-env
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: "langfuse"
+      CLICKHOUSE_USER: "clickhouse"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8123/ping",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  minio:
+    image: cgr.dev/chainguard/minio
+    restart: unless-stopped
+    entrypoint: sh
+    command: -c 'minio server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: "minio"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  redis:
+    image: docker.io/redis:7
+    restart: unless-stopped
+    command: >-
+      --requirepass ${REDIS_AUTH}
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test:
+        ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_AUTH}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: docker.io/postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "langfuse"
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_minio_data:
+  langfuse_redis_data:

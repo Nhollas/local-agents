@@ -19,6 +19,9 @@ const envSchema = z.object({
 	GITHUB_TOKEN: z.string().optional(),
 	JIRA_EMAIL: z.string().optional(),
 	JIRA_API_TOKEN: z.string().optional(),
+	LANGFUSE_PUBLIC_KEY: z.string().min(1),
+	LANGFUSE_SECRET_KEY: z.string().min(1),
+	LANGFUSE_HOST: z.url().default("http://localhost:3000"),
 });
 
 type Env = z.infer<typeof envSchema>;
