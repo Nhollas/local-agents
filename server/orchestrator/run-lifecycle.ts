@@ -55,7 +55,7 @@ type RunLifecycleDeps = {
 	agentSettingsFile: string;
 	agentEnv: Record<string, string>;
 	langfuseBaseUrl: string;
-	langfuseProjectId: string;
+	langfuseProjectId: string | undefined;
 };
 
 type FailurePhase =

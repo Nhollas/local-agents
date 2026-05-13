@@ -15,10 +15,16 @@ const { BatchLogRecordProcessor } = logs;
 
 function readVersion(): string {
 	try {
-		const pkg = JSON.parse(readFileSync("./package.json", "utf8")) as {
-			version?: string;
-		};
-		return pkg.version ?? "unknown";
+		const parsed: unknown = JSON.parse(readFileSync("./package.json", "utf8"));
+		if (
+			parsed &&
+			typeof parsed === "object" &&
+			"version" in parsed &&
+			typeof parsed.version === "string"
+		) {
+			return parsed.version;
+		}
+		return "unknown";
 	} catch {
 		return "unknown";
 	}

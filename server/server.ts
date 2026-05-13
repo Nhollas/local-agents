@@ -1,3 +1,7 @@
+// Side-effect import: installs the OpenTelemetry SDK's global tracer/meter/log
+// providers before any other module loads. Keep first.
+import "./telemetry/otel.ts";
+
 import { serve } from "@hono/node-server";
 import { createApi, type HealthCheck } from "./api/api.ts";
 import { createCodeHost } from "./code-hosts/create-code-host.ts";
