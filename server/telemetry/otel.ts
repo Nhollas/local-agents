@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -9,6 +8,7 @@ import {
 	ATTR_SERVICE_NAME,
 	ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import { env } from "../env.ts";
 
 const { PeriodicExportingMetricReader } = metrics;
 const { BatchLogRecordProcessor } = logs;
@@ -30,19 +30,11 @@ function readVersion(): string {
 	}
 }
 
-function buildHeaders(): Record<string, string> {
-	const publicKey = process.env["LANGFUSE_PUBLIC_KEY"] ?? "";
-	const secretKey = process.env["LANGFUSE_SECRET_KEY"] ?? "";
-	if (!publicKey || !secretKey) return {};
-	const credentials = Buffer.from(`${publicKey}:${secretKey}`).toString(
-		"base64",
-	);
-	return { Authorization: `Basic ${credentials}` };
-}
-
-const host = process.env["LANGFUSE_HOST"] ?? "http://localhost:3100";
-const baseUrl = `${host}/api/public/otel`;
-const headers = buildHeaders();
+const credentials = Buffer.from(
+	`${env.LANGFUSE_PUBLIC_KEY}:${env.LANGFUSE_SECRET_KEY}`,
+).toString("base64");
+const headers = { Authorization: `Basic ${credentials}` };
+const otelEndpoint = `${env.LANGFUSE_HOST}/api/public/otel`;
 
 const resource = resourceFromAttributes({
 	[ATTR_SERVICE_NAME]: "local-agents",
@@ -52,20 +44,20 @@ const resource = resourceFromAttributes({
 const sdk = new NodeSDK({
 	resource,
 	traceExporter: new OTLPTraceExporter({
-		url: `${baseUrl}/v1/traces`,
+		url: `${otelEndpoint}/v1/traces`,
 		headers,
 	}),
 	metricReaders: [
 		new PeriodicExportingMetricReader({
 			exporter: new OTLPMetricExporter({
-				url: `${baseUrl}/v1/metrics`,
+				url: `${otelEndpoint}/v1/metrics`,
 				headers,
 			}),
 		}),
 	],
 	logRecordProcessors: [
 		new BatchLogRecordProcessor(
-			new OTLPLogExporter({ url: `${baseUrl}/v1/logs`, headers }),
+			new OTLPLogExporter({ url: `${otelEndpoint}/v1/logs`, headers }),
 		),
 	],
 });

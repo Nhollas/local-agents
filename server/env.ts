@@ -22,7 +22,6 @@ const envSchema = z.object({
 	LANGFUSE_PUBLIC_KEY: z.string().min(1),
 	LANGFUSE_SECRET_KEY: z.string().min(1),
 	LANGFUSE_HOST: z.url().default("http://localhost:3100"),
-	LANGFUSE_BASE_URL: z.url().default("http://localhost:3100"),
 	LANGFUSE_PROJECT_ID: z.string().min(1).optional(),
 });
 

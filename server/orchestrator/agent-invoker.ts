@@ -45,7 +45,6 @@ export type LangfuseConfig = {
 	publicKey: string;
 	secretKey: string;
 	host: string;
-	baseUrl: string;
 	projectId: string | undefined;
 };
 

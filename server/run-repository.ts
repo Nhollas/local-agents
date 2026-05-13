@@ -474,7 +474,7 @@ function rowToRun(row: RunRow, failedStep: RunFailedStep | null): Run {
 		tokensInput: row.tokensInput,
 		tokensOutput: row.tokensOutput,
 		pr,
-		langfuseTraceUrl: row.langfuseTraceUrl ?? null,
+		langfuseTraceUrl: row.langfuseTraceUrl,
 	};
 
 	switch (row.status) {

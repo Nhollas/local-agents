@@ -1,4 +1,4 @@
-import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { type Attributes, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { IssueKey, RunId } from "../types/brands.ts";
 
 const tracer = trace.getTracer("local-agents");
@@ -8,24 +8,10 @@ export function runRunSpan<T>(
 	issueKey: IssueKey,
 	fn: (traceId: string) => Promise<T>,
 ): Promise<T> {
-	return tracer.startActiveSpan(
+	return withSpan(
 		"run",
-		{ attributes: { "run.id": runId, "issue.key": issueKey } },
-		async (span) => {
-			const traceId = span.spanContext().traceId;
-			try {
-				const result = await fn(traceId);
-				span.end();
-				return result;
-			} catch (err) {
-				span.setStatus({
-					code: SpanStatusCode.ERROR,
-					message: err instanceof Error ? err.message : String(err),
-				});
-				span.end();
-				throw err;
-			}
-		},
+		{ "run.id": runId, "issue.key": issueKey },
+		(traceId) => fn(traceId),
 	);
 }
 
@@ -33,22 +19,27 @@ export function runStepSpan<T>(
 	stepName: string,
 	fn: () => Promise<T>,
 ): Promise<T> {
-	return tracer.startActiveSpan(
-		`step:${stepName}`,
-		{ attributes: { "workflow.step": stepName } },
-		async (span) => {
-			try {
-				const result = await fn();
-				span.end();
-				return result;
-			} catch (err) {
-				span.setStatus({
-					code: SpanStatusCode.ERROR,
-					message: err instanceof Error ? err.message : String(err),
-				});
-				span.end();
-				throw err;
-			}
-		},
+	return withSpan(`step:${stepName}`, { "workflow.step": stepName }, () =>
+		fn(),
 	);
+}
+
+function withSpan<T>(
+	name: string,
+	attributes: Attributes,
+	fn: (traceId: string) => Promise<T>,
+): Promise<T> {
+	return tracer.startActiveSpan(name, { attributes }, async (span) => {
+		try {
+			return await fn(span.spanContext().traceId);
+		} catch (err) {
+			span.setStatus({
+				code: SpanStatusCode.ERROR,
+				message: err instanceof Error ? err.message : String(err),
+			});
+			throw err;
+		} finally {
+			span.end();
+		}
+	});
 }

@@ -55,7 +55,6 @@ const orchestrator = createOrchestrator({
 		publicKey: env.LANGFUSE_PUBLIC_KEY,
 		secretKey: env.LANGFUSE_SECRET_KEY,
 		host: env.LANGFUSE_HOST,
-		baseUrl: env.LANGFUSE_BASE_URL,
 		projectId: env.LANGFUSE_PROJECT_ID,
 	},
 });
