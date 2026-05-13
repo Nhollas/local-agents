@@ -1,5 +1,5 @@
 ---
-name: advisor
+name: la-advisor
 description: Escalation pattern for when you're stuck. Spawn a stronger model as a sub-agent, give it the failing context, apply its guidance, and continue. The advisor is a one-shot consultation — it does not take over the task. Use when you have tried the same approach three or more times and it keeps failing, when you cannot form a plausible hypothesis about why something is breaking, or when the user explicitly asks for "a second opinion" / "consult the advisor".
 ---
 
@@ -20,7 +20,7 @@ Do **not** invoke the advisor for:
 
 - Tasks you simply haven't started — the advisor isn't a planner.
 - Tasks the user said should be quick — pause and ask the user instead.
-- Generic "is this code good?" reviews — that's the `review` skill.
+- Generic "is this code good?" reviews — that's the `la-review` skill.
 
 ## Current state of the run
 

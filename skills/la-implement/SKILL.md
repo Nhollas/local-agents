@@ -1,6 +1,6 @@
 ---
-name: implement
-description: Work a single issue end-to-end on the current branch. Orient until you can predict the change, write a plan, execute the smallest change that resolves the issue, verify with the project's checks, and commit as you go. Defers to the tdd skill when the issue calls for test-first work or when the issue is a bug fix with a sensible test seam. Use when implementing an AFK issue, picking up a tracer-bullet ticket, or whenever the user asks to "implement the issue" / "work this ticket".
+name: la-implement
+description: Work a single issue end-to-end on the current branch. Orient until you can predict the change, write a plan, execute the smallest change that resolves the issue, verify with the project's checks, and commit as you go. Defers to the la-tdd skill when the issue calls for test-first work or when the issue is a bug fix with a sensible test seam. Use when implementing an AFK issue, picking up a tracer-bullet ticket, or whenever the user asks to "implement the issue" / "work this ticket".
 ---
 
 # Implement
@@ -24,12 +24,12 @@ If the issue's scope is genuinely unclear and you'd otherwise spend a long time 
 
 ### 2. Decide whether to use TDD
 
-Use the **tdd** skill when either is true:
+Use the **la-tdd** skill when either is true:
 
 - The issue describes test-first work or names automated tests as part of what to deliver.
 - The issue is a bug fix and the bug has a sensible test seam (a place where a failing repro test naturally lives).
 
-If either applies, load the tdd skill now via the `Skill` tool (`skill: "tdd"`) and follow its red-green-refactor loop for the rest of this issue.
+If either applies, load the la-tdd skill now via the `Skill` tool (`skill: "la-tdd"`) and follow its red-green-refactor loop for the rest of this issue.
 
 Otherwise, implement without forcing a test-first loop, and match the project's existing testing patterns when you add or update tests.
 
@@ -70,7 +70,7 @@ Match the repo's commit-message convention (read recent `git log`). Keep commits
 
 ## Anti-patterns
 
-- **Horizontal slicing.** Don't write all the code for layer A, then all the code for layer B. Land one vertical slice end-to-end and verify it, then the next. See the `tdd` skill for the disciplined version of this.
+- **Horizontal slicing.** Don't write all the code for layer A, then all the code for layer B. Land one vertical slice end-to-end and verify it, then the next. See the `la-tdd` skill for the disciplined version of this.
 - **Speculative scope.** If you find adjacent issues while implementing, note them in your final message. Do not fix them here.
 - **Silent skipping.** If a check is broken in a way you can't fix in scope, say so explicitly in your final message rather than skipping it quietly.
 

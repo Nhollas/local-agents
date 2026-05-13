@@ -147,6 +147,33 @@ describe("emitAgentMessageEvents", () => {
 		]);
 	});
 
+	it("renders bash paths relative to the workdir, including the /private symlink prefix", () => {
+		const { ctx, emitted } = captureCtx();
+		emitAgentMessageEvents(
+			toolUseMsg("Bash", {
+				command:
+					"ls /private/tmp/local-agent-workspaces/AIENG-2308-66c8761c/docs/",
+			}),
+			{
+				ctx,
+				stepName: "implement",
+				cwd: "/tmp/local-agent-workspaces/AIENG-2308-66c8761c",
+			},
+		);
+		expect(emitted).toEqual([
+			{
+				kind: "tool:bash",
+				stepName: "implement",
+				data: {
+					command: "ls docs/",
+					cwd: "/tmp/local-agent-workspaces/AIENG-2308-66c8761c",
+					state: "running",
+					exitCode: null,
+				},
+			},
+		]);
+	});
+
 	it("emits tool:other for unrecognised tools, summarising via known input fields", () => {
 		const { ctx, emitted } = captureCtx();
 		emitAgentMessageEvents(
@@ -177,6 +204,21 @@ describe("emitAgentMessageEvents", () => {
 				kind: "tool:other",
 				stepName: "implement",
 				data: { tool: "Agent", summary: "find duplicate detection sites" },
+			},
+		]);
+	});
+
+	it("names the invoked skill in the tool:other summary for Skill", () => {
+		const { ctx, emitted } = captureCtx();
+		emitAgentMessageEvents(
+			toolUseMsg("Skill", { skill: "review", args: "PR #42" }),
+			{ ctx, stepName: "implement", cwd: "/work" },
+		);
+		expect(emitted).toEqual([
+			{
+				kind: "tool:other",
+				stepName: "implement",
+				data: { tool: "Skill", summary: "review" },
 			},
 		]);
 	});
