@@ -72,6 +72,13 @@ export function RunBanner({ run }: Props) {
 								<span className="id">{run.workspaceDir}</span>
 							</span>
 						)}
+						{run.langfuseTraceUrl != null && (
+							<span>
+								<a href={run.langfuseTraceUrl} target="_blank" rel="noreferrer">
+									View trace
+								</a>
+							</span>
+						)}
 					</div>
 				</div>
 				<div className="banner-actions">

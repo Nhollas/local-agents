@@ -1,3 +1,7 @@
+// Side-effect import: installs the OpenTelemetry SDK's global tracer/meter/log
+// providers before any other module loads. Keep first.
+import "./telemetry/otel.ts";
+
 import { serve } from "@hono/node-server";
 import { createApi, type HealthCheck } from "./api/api.ts";
 import { createCodeHost } from "./code-hosts/create-code-host.ts";
@@ -10,6 +14,7 @@ import { createLogger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
+import { shutdownOtel } from "./telemetry/otel.ts";
 import { createTracker } from "./trackers/create-tracker.ts";
 import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
@@ -50,6 +55,7 @@ const orchestrator = createOrchestrator({
 		publicKey: env.LANGFUSE_PUBLIC_KEY,
 		secretKey: env.LANGFUSE_SECRET_KEY,
 		host: env.LANGFUSE_HOST,
+		projectId: env.LANGFUSE_PROJECT_ID,
 	},
 });
 
@@ -120,6 +126,7 @@ async function shutdown(signal: string) {
 		logger.warn("shutdown.drain_timeout");
 	}
 
+	await shutdownOtel();
 	closeDb();
 	logger.info("shutdown.complete");
 	process.exit(drainResult === "timeout" ? 1 : 0);

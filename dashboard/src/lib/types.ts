@@ -43,6 +43,7 @@ export type Run = {
 	error: string | null;
 	failedStep: RunFailedStep | null;
 	finalizeFailure: RunFinalizeFailure | null;
+	langfuseTraceUrl: string | null;
 };
 
 export type Step = {

@@ -14,6 +14,7 @@ const baseRunWire = {
 	pr: null,
 	failedStep: null,
 	finalizeFailure: null,
+	langfuseTraceUrl: null,
 };
 
 describe("GET /runs", () => {
@@ -299,6 +300,7 @@ describe("GET /runs/:id", () => {
 				pr: null,
 				failedStep: null,
 				finalizeFailure: null,
+				langfuseTraceUrl: null,
 			},
 			steps: [
 				{

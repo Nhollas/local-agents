@@ -1,0 +1,1 @@
+ALTER TABLE `runs` ADD `langfuse_trace_url` text;

@@ -43,6 +43,7 @@ type RunBase = {
 	tokensInput: number | null;
 	tokensOutput: number | null;
 	pr: RunPr | null;
+	langfuseTraceUrl: string | null;
 };
 
 export type RunFailedStep = { index: number; name: string };
@@ -111,6 +112,7 @@ export type RunRepository = {
 	setRunBranch(runId: RunId, branch: string): void;
 	setRunWorkspaceDir(runId: RunId, workspaceDir: string): void;
 	setRunPr(runId: RunId, pr: RunPr): void;
+	setRunLangfuseTraceUrl(runId: RunId, url: string): void;
 	addRunUsage(runId: RunId, usage: StepUsage): void;
 	insertEvent(event: InsertEventInput): RunEvent;
 	updateToolBashState(
@@ -200,6 +202,13 @@ export function createRunRepository(db: Db): RunRepository {
 					prUrl: pr.url,
 					prKind: pr.kind,
 				})
+				.where(eq(runs.id, runId))
+				.run();
+		},
+
+		setRunLangfuseTraceUrl(runId, url) {
+			db.update(runs)
+				.set({ langfuseTraceUrl: url })
 				.where(eq(runs.id, runId))
 				.run();
 		},
@@ -465,6 +474,7 @@ function rowToRun(row: RunRow, failedStep: RunFailedStep | null): Run {
 		tokensInput: row.tokensInput,
 		tokensOutput: row.tokensOutput,
 		pr,
+		langfuseTraceUrl: row.langfuseTraceUrl,
 	};
 
 	switch (row.status) {

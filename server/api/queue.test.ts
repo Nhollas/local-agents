@@ -74,6 +74,7 @@ describe("GET /queue", () => {
 					pr: null,
 					failedStep: null,
 					finalizeFailure: null,
+					langfuseTraceUrl: null,
 					currentStep: { name: "implement", index: 1, total: 3 },
 					progressRatio: 0.5 / 3,
 				},
