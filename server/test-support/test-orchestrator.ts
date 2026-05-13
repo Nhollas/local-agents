@@ -59,7 +59,9 @@ export async function createTestOrchestrator(
 		langfuse: {
 			publicKey: "test-public-key",
 			secretKey: "test-secret-key",
-			host: "http://localhost:3000",
+			host: "http://localhost:3100",
+			baseUrl: "http://localhost:3000",
+			projectId: "",
 		},
 	});
 

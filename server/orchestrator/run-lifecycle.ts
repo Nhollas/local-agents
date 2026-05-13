@@ -9,6 +9,7 @@ import type {
 	Runner,
 	RunResult,
 } from "../runner/runner.ts";
+import { runRunSpan } from "../telemetry/spans.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
@@ -53,6 +54,8 @@ type RunLifecycleDeps = {
 	hooksSourceDir: string;
 	agentSettingsFile: string;
 	agentEnv: Record<string, string>;
+	langfuseBaseUrl: string;
+	langfuseProjectId: string;
 };
 
 type FailurePhase =
@@ -87,6 +90,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		hooksSourceDir,
 		agentSettingsFile,
 		agentEnv,
+		langfuseBaseUrl,
+		langfuseProjectId,
 	} = deps;
 
 	async function dispatch(req: RunRequest): Promise<RunHandle> {
@@ -108,223 +113,237 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						run_id: ctx.runId,
 						issue_key: issue.key,
 					},
-					async () => {
-						const startTime = clock.now();
-						let result: RunResult;
-						let branch: string | undefined;
-						let outputs: Record<string, unknown> = {};
-						let phase: FailurePhase = "branch_resolver";
+					() =>
+						runRunSpan(ctx.runId, issue.key, async (traceId) => {
+							const langfuseTraceUrl = langfuseProjectId
+								? `${langfuseBaseUrl}/project/${langfuseProjectId}/traces/${traceId}`
+								: null;
+							if (langfuseTraceUrl) {
+								runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
+							}
+							const startTime = clock.now();
+							let result: RunResult;
+							let branch: string | undefined;
+							let outputs: Record<string, unknown> = {};
+							let phase: FailurePhase = "branch_resolver";
 
-						runRepo.insertSteps(
-							ctx.runId,
-							workflow.steps.map((s, i) => ({ index: i + 1, name: s.name })),
-						);
-
-						let wsPath: string;
-						try {
-							wsPath = await createWorkspace(
-								issue,
-								workspaceRoot,
-								cloneUrl,
+							runRepo.insertSteps(
 								ctx.runId,
+								workflow.steps.map((s, i) => ({ index: i + 1, name: s.name })),
 							);
-						} catch (err) {
-							const error = err instanceof Error ? err.message : String(err);
-							recordFailure("workspace", error);
-							canonicalLog.set({ status: "failed" });
-							await markIssueFailed(repo, issue);
-							return {
-								status: "failed",
-								error,
-								durationMs: clock.now() - startTime,
-							};
-						}
 
-						runRepo.setRunWorkspaceDir(ctx.runId, wsPath);
-						ctx.emit({
-							kind: "system",
-							stepName: null,
-							data: {
-								message: "workspace prepared",
-								command: null,
-								path: wsPath,
-								exitCode: null,
-							},
-						});
-
-						try {
-							const branchResolverStart = clock.now();
-							const resolvedBranch = await resolveBranch({
-								workflowBranch: workflow.branch,
-								issue,
-								agent,
-								runRepo,
-								cwd: wsPath,
-								runId: ctx.runId,
-								signal: ctx.signal,
-							});
-							canonicalLog.set({
-								branch_resolver_ms: clock.now() - branchResolverStart,
-							});
-							branch = resolvedBranch;
-							canonicalLog.set({ branch });
-							runRepo.setRunBranch(ctx.runId, branch);
-							ctx.emit({
-								kind: "system",
-								stepName: null,
-								data: {
-									message: "branch resolved",
-									command: null,
-									path: branch,
-									exitCode: null,
-								},
-							});
-
-							await ensureBranch(wsPath, branch);
-
-							phase = "skills";
-							const skillsResult = await installSkills(
-								wsPath,
-								skillsSourceDir,
-								{ issue, branch, base_branch: baseBranch },
-							);
-							canonicalLog.set({
-								skills_installed: skillsResult.installed,
-								skills_skipped: skillsResult.skipped,
-							});
-							if (
-								skillsResult.installed.length > 0 ||
-								skillsResult.skipped.length > 0
-							) {
-								ctx.emit({
-									kind: "system",
-									stepName: null,
-									data: {
-										message: `skills installed: ${skillsResult.installed.length} (skipped ${skillsResult.skipped.length})`,
-										command: null,
-										path: null,
-										exitCode: null,
-									},
-								});
-							}
-
-							phase = "agent_defaults";
-							const defaultsResult = await installAgentDefaults(
-								wsPath,
-								hooksSourceDir,
-								agentSettingsFile,
-							);
-							canonicalLog.set({
-								hooks_installed: defaultsResult.hooksInstalled,
-							});
-							ctx.emit({
-								kind: "system",
-								stepName: null,
-								data: {
-									message: `hooks installed: ${defaultsResult.hooksInstalled.length}`,
-									command: null,
-									path: null,
-									exitCode: null,
-								},
-							});
-
-							phase = "setup";
-							const workspaceEnv = await resolveWorkspaceEnvironment(
-								wsPath,
-								agentEnv,
-							);
-							const repoSetupRan = await runRepoSetup(
-								wsPath,
-								runShell,
-								workspaceEnv,
-							);
-							canonicalLog.set({ repo_setup_ran: repoSetupRan });
-							if (repoSetupRan) {
-								ctx.emit({
-									kind: "system",
-									stepName: null,
-									data: {
-										message: "repo setup ran",
-										command: ".agent/setup.sh",
-										path: wsPath,
-										exitCode: 0,
-									},
-								});
-							}
-
-							phase = "step";
-							outputs = await runWorkflowSteps({
-								ctx,
-								runRepo,
-								agent,
-								workflow,
-								issue,
-								branch,
-								baseBranch,
-								cwd: wsPath,
-								env: workspaceEnv,
-							});
-
-							result = {
-								status: "completed",
-								durationMs: clock.now() - startTime,
-							};
-						} catch (err) {
-							const error = err instanceof Error ? err.message : String(err);
-							recordFailure(phase, error);
-							result = {
-								status: "failed",
-								error,
-								durationMs: clock.now() - startTime,
-							};
-						}
-
-						if (result.status === "completed" && branch !== undefined) {
-							const finalize = await finalizeSuccess(
-								ctx,
-								repo,
-								issue,
-								workflow,
-								wsPath,
-								branch,
-								baseBranch,
-								outputs,
-							);
-							if (!finalize.ok) {
-								ctx.emit({
-									kind: "system",
-									stepName: null,
-									data: {
-										message: `finalize failed: ${finalize.phase}`,
-										command: null,
-										path: null,
-										exitCode: null,
-									},
-								});
-								result = {
+							let wsPath: string;
+							try {
+								wsPath = await createWorkspace(
+									issue,
+									workspaceRoot,
+									cloneUrl,
+									ctx.runId,
+								);
+							} catch (err) {
+								const error = err instanceof Error ? err.message : String(err);
+								recordFailure("workspace", error);
+								canonicalLog.set({ status: "failed" });
+								await markIssueFailed(repo, issue);
+								if (langfuseTraceUrl) {
+									logger.info(`langfuse trace: ${langfuseTraceUrl}`);
+								}
+								return {
 									status: "failed",
-									error: `${finalize.phase}: ${finalize.error}`,
-									durationMs: result.durationMs,
-									finalizeFailure: {
-										phase: finalize.phase,
-										error: finalize.error,
-									},
+									error,
+									durationMs: clock.now() - startTime,
 								};
 							}
-						}
 
-						canonicalLog.set({ status: result.status });
+							runRepo.setRunWorkspaceDir(ctx.runId, wsPath);
+							ctx.emit({
+								kind: "system",
+								stepName: null,
+								data: {
+									message: "workspace prepared",
+									command: null,
+									path: wsPath,
+									exitCode: null,
+								},
+							});
 
-						// Keep the workspace on any failure so the run can be inspected;
-						// only fully successful runs (agent + push + change-request) clean up.
-						if (result.status === "completed") {
-							await removeWorkspace(wsPath);
-						} else {
-							await markIssueFailed(repo, issue);
-						}
+							try {
+								const branchResolverStart = clock.now();
+								const resolvedBranch = await resolveBranch({
+									workflowBranch: workflow.branch,
+									issue,
+									agent,
+									runRepo,
+									cwd: wsPath,
+									runId: ctx.runId,
+									signal: ctx.signal,
+								});
+								canonicalLog.set({
+									branch_resolver_ms: clock.now() - branchResolverStart,
+								});
+								branch = resolvedBranch;
+								canonicalLog.set({ branch });
+								runRepo.setRunBranch(ctx.runId, branch);
+								ctx.emit({
+									kind: "system",
+									stepName: null,
+									data: {
+										message: "branch resolved",
+										command: null,
+										path: branch,
+										exitCode: null,
+									},
+								});
 
-						return result;
-					},
+								await ensureBranch(wsPath, branch);
+
+								phase = "skills";
+								const skillsResult = await installSkills(
+									wsPath,
+									skillsSourceDir,
+									{ issue, branch, base_branch: baseBranch },
+								);
+								canonicalLog.set({
+									skills_installed: skillsResult.installed,
+									skills_skipped: skillsResult.skipped,
+								});
+								if (
+									skillsResult.installed.length > 0 ||
+									skillsResult.skipped.length > 0
+								) {
+									ctx.emit({
+										kind: "system",
+										stepName: null,
+										data: {
+											message: `skills installed: ${skillsResult.installed.length} (skipped ${skillsResult.skipped.length})`,
+											command: null,
+											path: null,
+											exitCode: null,
+										},
+									});
+								}
+
+								phase = "agent_defaults";
+								const defaultsResult = await installAgentDefaults(
+									wsPath,
+									hooksSourceDir,
+									agentSettingsFile,
+								);
+								canonicalLog.set({
+									hooks_installed: defaultsResult.hooksInstalled,
+								});
+								ctx.emit({
+									kind: "system",
+									stepName: null,
+									data: {
+										message: `hooks installed: ${defaultsResult.hooksInstalled.length}`,
+										command: null,
+										path: null,
+										exitCode: null,
+									},
+								});
+
+								phase = "setup";
+								const workspaceEnv = await resolveWorkspaceEnvironment(
+									wsPath,
+									agentEnv,
+								);
+								const repoSetupRan = await runRepoSetup(
+									wsPath,
+									runShell,
+									workspaceEnv,
+								);
+								canonicalLog.set({ repo_setup_ran: repoSetupRan });
+								if (repoSetupRan) {
+									ctx.emit({
+										kind: "system",
+										stepName: null,
+										data: {
+											message: "repo setup ran",
+											command: ".agent/setup.sh",
+											path: wsPath,
+											exitCode: 0,
+										},
+									});
+								}
+
+								phase = "step";
+								outputs = await runWorkflowSteps({
+									ctx,
+									runRepo,
+									agent,
+									workflow,
+									issue,
+									branch,
+									baseBranch,
+									cwd: wsPath,
+									env: workspaceEnv,
+								});
+
+								result = {
+									status: "completed",
+									durationMs: clock.now() - startTime,
+								};
+							} catch (err) {
+								const error = err instanceof Error ? err.message : String(err);
+								recordFailure(phase, error);
+								result = {
+									status: "failed",
+									error,
+									durationMs: clock.now() - startTime,
+								};
+							}
+
+							if (result.status === "completed" && branch !== undefined) {
+								const finalize = await finalizeSuccess(
+									ctx,
+									repo,
+									issue,
+									workflow,
+									wsPath,
+									branch,
+									baseBranch,
+									outputs,
+								);
+								if (!finalize.ok) {
+									ctx.emit({
+										kind: "system",
+										stepName: null,
+										data: {
+											message: `finalize failed: ${finalize.phase}`,
+											command: null,
+											path: null,
+											exitCode: null,
+										},
+									});
+									result = {
+										status: "failed",
+										error: `${finalize.phase}: ${finalize.error}`,
+										durationMs: result.durationMs,
+										finalizeFailure: {
+											phase: finalize.phase,
+											error: finalize.error,
+										},
+									};
+								}
+							}
+
+							canonicalLog.set({ status: result.status });
+
+							// Keep the workspace on any failure so the run can be inspected;
+							// only fully successful runs (agent + push + change-request) clean up.
+							if (result.status === "completed") {
+								await removeWorkspace(wsPath);
+							} else {
+								await markIssueFailed(repo, issue);
+							}
+
+							if (langfuseTraceUrl) {
+								logger.info(`langfuse trace: ${langfuseTraceUrl}`);
+							}
+
+							return result;
+						}),
 					logger,
 				),
 		});

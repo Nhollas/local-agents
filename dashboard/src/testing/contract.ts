@@ -30,6 +30,7 @@ export function createRun(overrides: Partial<Run> = {}): Run {
 		error: null,
 		failedStep: null,
 		finalizeFailure: null,
+		langfuseTraceUrl: null,
 		...overrides,
 	};
 }

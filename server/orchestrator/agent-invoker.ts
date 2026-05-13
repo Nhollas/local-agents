@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { context as otelContext, propagation } from "@opentelemetry/api";
 import type { IssueKey, RunId } from "../types/brands.ts";
 import { buildAgentHooks } from "./agent-hooks.ts";
 import { buildOtelEnv } from "./otel-env.ts";
@@ -44,6 +45,8 @@ export type LangfuseConfig = {
 	publicKey: string;
 	secretKey: string;
 	host: string;
+	baseUrl: string;
+	projectId: string;
 };
 
 export function claudeSdkAgentInvoker({
@@ -71,9 +74,17 @@ export function claudeSdkAgentInvoker({
 		}) {
 			const runLogWriter = createRunLogWriter(logDir, runId);
 			const baseEnv = invocationEnv ?? env;
+			const propagationCarrier: Record<string, string> = {};
+			propagation.inject(otelContext.active(), propagationCarrier);
 			const resolvedEnv = {
 				...baseEnv,
 				...buildOtelEnv({ runId, issueKey, stepName, langfuse }),
+				...(propagationCarrier["traceparent"] && {
+					TRACEPARENT: propagationCarrier["traceparent"],
+				}),
+				...(propagationCarrier["tracestate"] && {
+					TRACESTATE: propagationCarrier["tracestate"],
+				}),
 			};
 			return query({
 				prompt,

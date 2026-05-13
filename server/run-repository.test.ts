@@ -43,6 +43,7 @@ describe("run repository row projection", () => {
 			pr: null,
 			failedStep: null,
 			finalizeFailure: null,
+			langfuseTraceUrl: null,
 		});
 	});
 

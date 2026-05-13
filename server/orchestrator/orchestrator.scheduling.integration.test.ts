@@ -18,6 +18,7 @@ const baseRunRow = {
 	prKind: null,
 	finalizeFailurePhase: null,
 	finalizeFailureError: null,
+	langfuseTraceUrl: null,
 };
 
 function dispatchedRunRow(issueNum: number) {

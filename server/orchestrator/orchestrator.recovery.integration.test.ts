@@ -29,6 +29,7 @@ const baseRunRow = {
 	prKind: null,
 	finalizeFailurePhase: null,
 	finalizeFailureError: null,
+	langfuseTraceUrl: null,
 };
 
 describe("Orchestrator startup recovery", () => {

@@ -236,6 +236,7 @@ type RunWire = {
 	error: string | null;
 	failedStep: { index: number; name: string } | null;
 	finalizeFailure: { phase: FinalizeFailurePhase; error: string } | null;
+	langfuseTraceUrl: string | null;
 };
 
 type StepWire = Omit<RunStepRow, "runId">;
@@ -309,6 +310,7 @@ function runToWire(run: Run): RunWire {
 		error: null,
 		failedStep: null,
 		finalizeFailure: null,
+		langfuseTraceUrl: run.langfuseTraceUrl,
 	};
 	switch (run.status) {
 		case "running":

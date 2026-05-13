@@ -35,6 +35,7 @@ export const runs = sqliteTable("runs", {
 		"finalize_failure_phase",
 	).$type<FinalizeFailurePhase>(),
 	finalizeFailureError: text("finalize_failure_error"),
+	langfuseTraceUrl: text("langfuse_trace_url"),
 });
 
 export const runSteps = sqliteTable(

@@ -136,6 +136,8 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		hooksSourceDir: HOOKS_SOURCE_DIR,
 		agentSettingsFile: AGENT_SETTINGS_FILE,
 		agentEnv,
+		langfuseBaseUrl: langfuse.baseUrl,
+		langfuseProjectId: langfuse.projectId,
 	});
 
 	function trackPostRun(done: Promise<unknown>): void {
