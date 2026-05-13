@@ -82,6 +82,7 @@ export function createTestWorkflow(
 				prompt: "Fix issue {{ issue.number }}: {{ issue.title }}",
 				resume_previous: false,
 				model: "claude-sonnet-4-6",
+				measure_diff: false,
 			},
 		],
 		change_request: {

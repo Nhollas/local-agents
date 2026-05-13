@@ -9,9 +9,19 @@ import type { RunLogWriter } from "./run-log-file.ts";
 
 export function buildAgentHooks(
 	runLogWriter?: RunLogWriter,
+	onToolFailure?: (toolName: string) => void,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
 	const postToolUse: HookCallback[] = [safe(record)];
 	const postToolUseFailure: HookCallback[] = [safe(record)];
+	if (onToolFailure) {
+		postToolUseFailure.push(
+			safe((input) => {
+				if (input.hook_event_name === "PostToolUseFailure") {
+					onToolFailure(input.tool_name);
+				}
+			}),
+		);
+	}
 	if (runLogWriter) {
 		postToolUse.push(safe(writeRunLog(runLogWriter)));
 		postToolUseFailure.push(safe(writeRunLog(runLogWriter)));

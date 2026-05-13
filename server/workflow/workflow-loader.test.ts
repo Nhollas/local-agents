@@ -45,6 +45,7 @@ describe("loadWorkflow", () => {
 					name: "implement",
 					prompt: "Fix the issue",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],

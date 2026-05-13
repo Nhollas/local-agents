@@ -8,6 +8,7 @@ import {
 	buildErrorResult,
 	buildSuccessResult,
 } from "../test-support/agent-messages.ts";
+import { testLogger } from "../test-support/test-logger.ts";
 import type { Issue } from "../trackers/types.ts";
 import {
 	issueKey,
@@ -153,6 +154,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -168,6 +170,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(agent.calls[0]?.outputFormat).toBeUndefined();
@@ -186,6 +189,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -201,6 +205,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 			env,
 		});
 
@@ -226,6 +231,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "Summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
@@ -242,6 +248,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(agent.calls[0]?.outputFormat).toEqual({
@@ -281,6 +288,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "Summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
@@ -288,6 +296,7 @@ describe("runWorkflowSteps", () => {
 					name: "after",
 					prompt: "after",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -304,6 +313,7 @@ describe("runWorkflowSteps", () => {
 				cwd: "/work",
 				branch: "agent/issue-1",
 				baseBranch: "main",
+				logger: testLogger,
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);
 
@@ -344,6 +354,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -359,6 +370,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(recorder.stepOutputs).toEqual([]);
@@ -386,6 +398,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "Working on {{ branch }}",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -401,6 +414,7 @@ describe("runWorkflowSteps", () => {
 			branch: "feat/proposed",
 			cwd: "/work",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(agent.calls[0]?.prompt).toBe("Working on feat/proposed");
@@ -424,6 +438,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "Summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
@@ -431,6 +446,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "Use {{ steps.summarise.output.title }}",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -446,6 +462,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(agent.calls.map((c) => c.prompt)).toEqual([
@@ -464,12 +481,14 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 				{
 					name: "summarise",
 					prompt: "summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -489,6 +508,7 @@ describe("runWorkflowSteps", () => {
 					cwd: "/work",
 					branch: "agent/issue-1",
 					baseBranch: "main",
+					logger: testLogger,
 				}),
 			logger,
 		);
@@ -518,6 +538,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 					output_schema: outputSchema,
 				},
@@ -538,6 +559,7 @@ describe("runWorkflowSteps", () => {
 					cwd: "/work",
 					branch: "agent/issue-1",
 					baseBranch: "main",
+					logger: testLogger,
 				}),
 			logger,
 		);
@@ -562,12 +584,14 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 				{
 					name: "after",
 					prompt: "after",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -588,6 +612,7 @@ describe("runWorkflowSteps", () => {
 						cwd: "/work",
 						branch: "agent/issue-1",
 						baseBranch: "main",
+						logger: testLogger,
 					}),
 				logger,
 			),
@@ -629,12 +654,14 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 				{
 					name: "summarise",
 					prompt: "summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-haiku-4-5",
 				},
 			],
@@ -654,6 +681,7 @@ describe("runWorkflowSteps", () => {
 					cwd: "/work",
 					branch: "agent/issue-1",
 					baseBranch: "main",
+					logger: testLogger,
 				}),
 			logger,
 		);
@@ -705,6 +733,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -725,6 +754,7 @@ describe("runWorkflowSteps", () => {
 						cwd: "/work",
 						branch: "agent/issue-1",
 						baseBranch: "main",
+						logger: testLogger,
 					}),
 				logger,
 			),
@@ -749,6 +779,7 @@ describe("runWorkflowSteps", () => {
 					name: "summarise",
 					prompt: "summarise",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-haiku-4-5",
 					allowed_tools: ["Read", "Glob", "Grep"],
 				},
@@ -756,6 +787,7 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -771,6 +803,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(agent.calls[0]?.allowedTools).toEqual(["Read", "Glob", "Grep"]);
@@ -787,12 +820,14 @@ describe("runWorkflowSteps", () => {
 					name: "implement",
 					prompt: "do it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 				{
 					name: "review",
 					prompt: "review it",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-opus-4-7",
 				},
 			],
@@ -808,6 +843,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			branch: "agent/issue-1",
 			baseBranch: "main",
+			logger: testLogger,
 		});
 
 		expect(agent.calls.map((c) => c.model)).toEqual([

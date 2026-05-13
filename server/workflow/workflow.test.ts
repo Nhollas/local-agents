@@ -81,6 +81,7 @@ ${validChangeRequest}`;
 					name: "implement",
 					prompt: "Fix this issue",
 					resume_previous: false,
+					measure_diff: false,
 					model: "claude-sonnet-4-6",
 				},
 			],
@@ -111,12 +112,14 @@ ${validChangeRequest}`;
 				name: "plan",
 				prompt: "Write a plan",
 				resume_previous: false,
+				measure_diff: false,
 				model: "claude-sonnet-4-6",
 			},
 			{
 				name: "implement",
 				prompt: "Implement the plan",
 				resume_previous: true,
+				measure_diff: false,
 				model: "claude-sonnet-4-6",
 			},
 		]);
@@ -296,6 +299,7 @@ ${validChangeRequest}`;
 				name: "summarise",
 				prompt: "Summarise the issue",
 				resume_previous: false,
+				measure_diff: false,
 				model: "claude-sonnet-4-6",
 				output_schema: {
 					type: "object",
@@ -323,6 +327,7 @@ ${validChangeRequest}`;
 				name: "summarise",
 				prompt: "Summarise the issue",
 				resume_previous: false,
+				measure_diff: false,
 				model: "claude-haiku-4-5",
 				allowed_tools: ["Read", "Glob", "Grep"],
 			},

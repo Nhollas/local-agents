@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import * as canonicalLog from "../canonical-log.ts";
+import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunContext } from "../runner/runner.ts";
-import { runStepSpan } from "../telemetry/spans.ts";
+import { runStepSpan, type Span } from "../telemetry/spans.ts";
 import type { Issue } from "../trackers/types.ts";
 import {
 	expandMarkedShellBlocks,
@@ -12,6 +15,7 @@ import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { emitAgentMessageEvents } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
+import { parseShortstat } from "./parse-shortstat.ts";
 
 type StepRunRepository = Pick<
 	RunRepository,
@@ -28,6 +32,7 @@ type RunWorkflowStepsParams = {
 	baseBranch: string;
 	cwd: string;
 	env?: Record<string, string>;
+	logger: Logger;
 };
 
 export async function runWorkflowSteps({
@@ -40,6 +45,7 @@ export async function runWorkflowSteps({
 	baseBranch,
 	cwd,
 	env = {},
+	logger,
 }: RunWorkflowStepsParams): Promise<Record<string, unknown>> {
 	const { steps } = workflow;
 	const outputs: Record<string, unknown> = {};
@@ -65,6 +71,7 @@ export async function runWorkflowSteps({
 			cwd,
 			env,
 			model: step.model,
+			logger,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
 		});
 
@@ -88,6 +95,7 @@ type RunWorkflowStepParams = {
 	cwd: string;
 	env: Record<string, string>;
 	model: string;
+	logger: Logger;
 	resumeSessionId?: string;
 };
 
@@ -105,6 +113,7 @@ async function runWorkflowStep({
 	cwd,
 	env,
 	model,
+	logger,
 	resumeSessionId,
 }: RunWorkflowStepParams): Promise<string | undefined> {
 	const startedAtMs = Date.now();
@@ -121,7 +130,8 @@ async function runWorkflowStep({
 	let stepTokensInput = 0;
 	let stepTokensOutput = 0;
 
-	return runStepSpan(step.name, async () => {
+	return runStepSpan(step.name, async (stepSpan) => {
+		const retryCounts: Record<string, number> = {};
 		try {
 			const renderedPrompt = renderPrompt(markTrustedShellBlocks(step.prompt), {
 				issue,
@@ -139,6 +149,10 @@ async function runWorkflowStep({
 				? { type: "json_schema", schema: step.output_schema }
 				: undefined;
 
+			const headBefore = step.measure_diff
+				? await gitRevParseSafe(cwd, logger)
+				: null;
+
 			for await (const msg of agent.invoke({
 				prompt,
 				cwd,
@@ -151,6 +165,9 @@ async function runWorkflowStep({
 				...(resumeSessionId && { resumeSessionId }),
 				...(outputFormat && { outputFormat }),
 				...(step.allowed_tools && { allowedTools: step.allowed_tools }),
+				onToolFailure: (toolName) => {
+					retryCounts[toolName] = (retryCounts[toolName] ?? 0) + 1;
+				},
 			})) {
 				if (msg.type === "assistant") {
 					emitAgentMessageEvents(msg, { ctx, stepName: step.name, cwd });
@@ -199,6 +216,9 @@ async function runWorkflowStep({
 				stepName: step.name,
 				data: { name: step.name, index: stepIndex, durationMs },
 			});
+			if (headBefore !== null) {
+				await setStepDiffAttributes(stepSpan, cwd, headBefore, logger);
+			}
 			return currentSessionId;
 		} catch (err) {
 			const error = err instanceof Error ? err.message : String(err);
@@ -223,6 +243,52 @@ async function runWorkflowStep({
 				data: { name: step.name, index: stepIndex, error, durationMs },
 			});
 			throw err;
+		} finally {
+			const total = Object.values(retryCounts).reduce((a, b) => a + b, 0);
+			if (total > 0) {
+				stepSpan.setAttributes({
+					"retries.by_tool": JSON.stringify(retryCounts),
+					"retries.total": total,
+				});
+			}
 		}
 	});
+}
+
+const exec = promisify(execFile);
+
+async function gitRevParseSafe(
+	cwd: string,
+	logger: Logger,
+): Promise<string | null> {
+	try {
+		const { stdout } = await exec("git", ["rev-parse", "HEAD"], { cwd });
+		return stdout.trim();
+	} catch (err) {
+		logger.warn({ err, cwd }, "step_runner.step_diff.head_before_failed");
+		return null;
+	}
+}
+
+async function setStepDiffAttributes(
+	span: Span,
+	cwd: string,
+	headBefore: string,
+	logger: Logger,
+): Promise<void> {
+	try {
+		const { stdout } = await exec(
+			"git",
+			["diff", "--shortstat", `${headBefore}..HEAD`],
+			{ cwd },
+		);
+		const { filesChanged, linesAdded, linesRemoved } = parseShortstat(stdout);
+		span.setAttributes({
+			"step.diff.files_changed": filesChanged,
+			"step.diff.lines_added": linesAdded,
+			"step.diff.lines_removed": linesRemoved,
+		});
+	} catch (err) {
+		logger.warn({ err, cwd }, "step_runner.step_diff.diff_failed");
+	}
 }
