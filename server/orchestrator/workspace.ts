@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import {
 	access,
+	appendFile,
 	chmod,
 	cp,
 	mkdir,
@@ -205,6 +206,11 @@ export async function installSkills(
 		installed.push(name);
 	}
 
+	await appendToGitExclude(
+		wsPath,
+		installed.map((name) => `${WORKSPACE_SKILLS_DIR}/${name}/`),
+	);
+
 	return { installed, skipped };
 }
 
@@ -248,7 +254,40 @@ export async function installAgentDefaults(
 
 	await cp(settingsSourceFile, join(wsPath, WORKSPACE_SETTINGS_FILE));
 
+	await appendToGitExclude(wsPath, [
+		`${WORKSPACE_HOOKS_DIR}/`,
+		WORKSPACE_SETTINGS_FILE,
+	]);
+
 	return { hooksInstalled, settingsInstalled: true };
+}
+
+// Per-clone exclude in .git/info/exclude — keeps orchestrator-injected files out
+// of `git status` without writing a .gitignore the agent would see in the tree.
+async function appendToGitExclude(
+	wsPath: string,
+	entries: string[],
+): Promise<void> {
+	const excludePath = join(wsPath, ".git", "info", "exclude");
+	let existing: string;
+	try {
+		existing = await readFile(excludePath, "utf8");
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+		throw err;
+	}
+
+	const present = new Set(
+		existing
+			.split("\n")
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0 && !line.startsWith("#")),
+	);
+	const toAppend = entries.filter((entry) => !present.has(entry));
+	if (toAppend.length === 0) return;
+
+	const prefix = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+	await appendFile(excludePath, `${prefix}${toAppend.join("\n")}\n`);
 }
 
 async function renderMarkdownInPlace(

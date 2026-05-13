@@ -511,6 +511,55 @@ describe("installSkills", () => {
 		).resolves.toBe("detail for feat/ABC-42-thing");
 	});
 
+	it("adds installed skills to .git/info/exclude so they stay out of git status", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(100);
+		const wsPath = await createWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			"run-skills-exclude",
+		);
+		await using src = await makeSkillsSource({
+			review: "review body",
+			implement: "implement body",
+		});
+
+		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+
+		const { stdout: status } = await exec(
+			"git",
+			["status", "--porcelain", "--ignored"],
+			{ cwd: wsPath },
+		);
+		expect(status).not.toMatch(/\.claude\/skills\/review/);
+		expect(status).not.toMatch(/\.claude\/skills\/implement/);
+
+		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
+		expect(exclude).toMatch(/\.claude\/skills\/review\//);
+		expect(exclude).toMatch(/\.claude\/skills\/implement\//);
+	});
+
+	it("does not duplicate exclude entries on repeated installs", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(101);
+		const wsPath = await createWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			"run-skills-idempotent",
+		);
+		await using src = await makeSkillsSource({ review: "review" });
+
+		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+		await rm(join(wsPath, ".claude/skills/review"), { recursive: true });
+		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+
+		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
+		const matches = exclude.match(/\.claude\/skills\/review\//g) ?? [];
+		expect(matches.length).toBe(1);
+	});
+
 	it("leaves non-.md files untouched", async () => {
 		await using ws = await withWorkspace();
 		await using src = await makeSkillsSource({
@@ -602,6 +651,33 @@ describe("installAgentDefaults", () => {
 
 		const info = await stat(join(ws.path, ".claude/hooks/noop.sh"));
 		expect(info.mode & 0o111).not.toBe(0);
+	});
+
+	it("excludes installed hooks and settings from git via .git/info/exclude", async () => {
+		await using ws = await createWorkspaceRoot();
+		const issue = createIssue(102);
+		const wsPath = await createWorkspace(
+			issue,
+			ws.root,
+			bareRepo,
+			"run-defaults-exclude",
+		);
+		await using src = await makeAgentDefaultsSource(
+			{ "noop.sh": "#!/usr/bin/env bash\nexit 0\n" },
+			'{"hooks":{}}',
+		);
+
+		await installAgentDefaults(wsPath, src.hooksDir, src.settingsFile);
+
+		const { stdout: status } = await exec("git", ["status", "--porcelain"], {
+			cwd: wsPath,
+		});
+		expect(status).not.toMatch(/\.claude\/hooks/);
+		expect(status).not.toMatch(/\.claude\/settings\.json/);
+
+		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
+		expect(exclude).toMatch(/\.claude\/hooks\//);
+		expect(exclude).toMatch(/\.claude\/settings\.json/);
 	});
 
 	it("overwrites an existing settings.json so target-repo customisations cannot bypass orchestrator policy", async () => {
