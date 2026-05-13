@@ -158,6 +158,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								workflowBranch: workflow.branch,
 								issue,
 								agent,
+								runRepo,
 								cwd: wsPath,
 								runId: ctx.runId,
 								signal: ctx.signal,
