@@ -56,6 +56,11 @@ export async function createTestOrchestrator(
 		runner,
 		agent,
 		logger: testLogger,
+		langfuse: {
+			publicKey: "test-public-key",
+			secretKey: "test-secret-key",
+			host: "http://localhost:3000",
+		},
 	});
 
 	return {

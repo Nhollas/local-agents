@@ -40,12 +40,20 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Agent",
 ] as const;
 
+export type LangfuseConfig = {
+	publicKey: string;
+	secretKey: string;
+	host: string;
+};
+
 export function claudeSdkAgentInvoker({
 	env,
 	logDir,
+	langfuse,
 }: {
 	env: Record<string, string>;
 	logDir: string;
+	langfuse: LangfuseConfig;
 }): AgentInvoker {
 	return {
 		invoke({
@@ -65,7 +73,7 @@ export function claudeSdkAgentInvoker({
 			const baseEnv = invocationEnv ?? env;
 			const resolvedEnv = {
 				...baseEnv,
-				...buildOtelEnv({ runId, issueKey, stepName }),
+				...buildOtelEnv({ runId, issueKey, stepName, langfuse }),
 			};
 			return query({
 				prompt,

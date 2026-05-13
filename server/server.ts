@@ -46,6 +46,11 @@ const orchestrator = createOrchestrator({
 	workflow,
 	runner,
 	logger,
+	langfuse: {
+		publicKey: env.LANGFUSE_PUBLIC_KEY,
+		secretKey: env.LANGFUSE_SECRET_KEY,
+		host: env.LANGFUSE_HOST,
+	},
 });
 
 const checkHealth: HealthCheck = () => {

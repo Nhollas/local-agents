@@ -1,19 +1,20 @@
 import type { IssueKey, RunId } from "../types/brands.ts";
 
+type LangfuseCredentials = {
+	publicKey: string;
+	secretKey: string;
+	host: string;
+};
+
 type OtelEnvInputs = {
 	runId: RunId;
 	issueKey: IssueKey | undefined;
 	stepName: string | undefined;
+	langfuse: LangfuseCredentials;
 };
 
-export function buildOtelEnv(
-	inputs: OtelEnvInputs,
-	sourceEnv: NodeJS.ProcessEnv = process.env,
-): Record<string, string> {
-	const publicKey = sourceEnv["LANGFUSE_PUBLIC_KEY"];
-	const secretKey = sourceEnv["LANGFUSE_SECRET_KEY"];
-	if (!publicKey || !secretKey) return {};
-
+export function buildOtelEnv(inputs: OtelEnvInputs): Record<string, string> {
+	const { publicKey, secretKey, host } = inputs.langfuse;
 	const credentials = Buffer.from(`${publicKey}:${secretKey}`).toString(
 		"base64",
 	);
@@ -25,7 +26,7 @@ export function buildOtelEnv(
 	return {
 		CLAUDE_CODE_ENABLE_TELEMETRY: "1",
 		CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: "1",
-		OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:3000/api/public/otel",
+		OTEL_EXPORTER_OTLP_ENDPOINT: `${host}/api/public/otel`,
 		OTEL_EXPORTER_OTLP_HEADERS: `Authorization=Basic ${credentials}`,
 		OTEL_TRACES_EXPORTER: "otlp",
 		OTEL_METRICS_EXPORTER: "otlp",

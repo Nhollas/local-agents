@@ -10,7 +10,11 @@ import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
-import { type AgentInvoker, claudeSdkAgentInvoker } from "./agent-invoker.ts";
+import {
+	type AgentInvoker,
+	claudeSdkAgentInvoker,
+	type LangfuseConfig,
+} from "./agent-invoker.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import { createRunLifecycle } from "./run-lifecycle.ts";
 import { type RunShell, realRunShell, sweepWorkspaces } from "./workspace.ts";
@@ -38,6 +42,7 @@ type OrchestratorConfig = {
 	workflow: RepoWorkflow;
 	runner: Runner;
 	logger: Logger;
+	langfuse: LangfuseConfig;
 	agent?: AgentInvoker;
 	clock?: Clock;
 	runShell?: RunShell;
@@ -91,13 +96,15 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		workflow,
 		runner,
 		logger,
+		langfuse,
 		clock = systemClock(),
 		runShell = realRunShell,
 	} = opts;
 	const { defaults } = config;
 	const agentEnv = resolveAgentEnvironment(config.agent.env);
 	const logDir = resolvePath(process.cwd(), defaults.log_dir);
-	const agent = opts.agent ?? claudeSdkAgentInvoker({ env: agentEnv, logDir });
+	const agent =
+		opts.agent ?? claudeSdkAgentInvoker({ env: agentEnv, logDir, langfuse });
 
 	function logTransitionFailed(
 		repo: Issue["repo"],
