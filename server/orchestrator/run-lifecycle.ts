@@ -276,6 +276,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 										baseBranch,
 										cwd: wsPath,
 										env: workspaceEnv,
+										logger,
 									});
 
 									result = {

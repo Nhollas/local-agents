@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as canonicalLog from "../canonical-log.ts";
+import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunContext } from "../runner/runner.ts";
 import { runStepSpan, type Span } from "../telemetry/spans.ts";
@@ -14,6 +15,7 @@ import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { emitAgentMessageEvents } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
+import { parseShortstat } from "./parse-shortstat.ts";
 
 type StepRunRepository = Pick<
 	RunRepository,
@@ -30,6 +32,7 @@ type RunWorkflowStepsParams = {
 	baseBranch: string;
 	cwd: string;
 	env?: Record<string, string>;
+	logger: Logger;
 };
 
 export async function runWorkflowSteps({
@@ -42,6 +45,7 @@ export async function runWorkflowSteps({
 	baseBranch,
 	cwd,
 	env = {},
+	logger,
 }: RunWorkflowStepsParams): Promise<Record<string, unknown>> {
 	const { steps } = workflow;
 	const outputs: Record<string, unknown> = {};
@@ -67,6 +71,7 @@ export async function runWorkflowSteps({
 			cwd,
 			env,
 			model: step.model,
+			logger,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
 		});
 
@@ -90,6 +95,7 @@ type RunWorkflowStepParams = {
 	cwd: string;
 	env: Record<string, string>;
 	model: string;
+	logger: Logger;
 	resumeSessionId?: string;
 };
 
@@ -107,6 +113,7 @@ async function runWorkflowStep({
 	cwd,
 	env,
 	model,
+	logger,
 	resumeSessionId,
 }: RunWorkflowStepParams): Promise<string | undefined> {
 	const startedAtMs = Date.now();
@@ -143,7 +150,7 @@ async function runWorkflowStep({
 				: undefined;
 
 			const headBefore =
-				step.name === "review" ? await gitRevParseSafe(cwd) : null;
+				step.name === "review" ? await gitRevParseSafe(cwd, logger) : null;
 
 			for await (const msg of agent.invoke({
 				prompt,
@@ -191,7 +198,7 @@ async function runWorkflowStep({
 			}
 
 			if (step.name === "review") {
-				await setReviewFixAttributes(stepSpan, cwd, headBefore);
+				await setReviewFixAttributes(stepSpan, cwd, headBefore, logger);
 			}
 
 			const completedAtMs = Date.now();
@@ -248,15 +255,15 @@ async function runWorkflowStep({
 
 const exec = promisify(execFile);
 
-async function gitRevParseSafe(cwd: string): Promise<string | null> {
+async function gitRevParseSafe(
+	cwd: string,
+	logger: Logger,
+): Promise<string | null> {
 	try {
 		const { stdout } = await exec("git", ["rev-parse", "HEAD"], { cwd });
 		return stdout.trim();
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		console.warn(
-			`review fix-size: failed to capture HEAD before step: ${message}`,
-		);
+		logger.warn({ err, cwd }, "step_runner.review_fix_size.head_before_failed");
 		return null;
 	}
 }
@@ -265,6 +272,7 @@ async function setReviewFixAttributes(
 	span: Span,
 	cwd: string,
 	headBefore: string | null,
+	logger: Logger,
 ): Promise<void> {
 	if (headBefore === null) {
 		span.setAttributes({
@@ -300,28 +308,11 @@ async function setReviewFixAttributes(
 			"review.fixes.lines_removed": linesRemoved,
 		});
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		console.warn(`review fix-size: git diff failed: ${message}`);
+		logger.warn({ err, cwd }, "step_runner.review_fix_size.diff_failed");
 		span.setAttributes({
 			"review.fixes.files_changed": -1,
 			"review.fixes.lines_added": -1,
 			"review.fixes.lines_removed": -1,
 		});
 	}
-}
-
-function parseShortstat(output: string): {
-	filesChanged: number;
-	linesAdded: number;
-	linesRemoved: number;
-} {
-	const num = (re: RegExp): number => {
-		const m = re.exec(output);
-		return m?.[1] != null ? parseInt(m[1], 10) : 0;
-	};
-	return {
-		filesChanged: num(/(\d+) files? changed/),
-		linesAdded: num(/(\d+) insertions?\(\+\)/),
-		linesRemoved: num(/(\d+) deletions?\(-\)/),
-	};
 }
