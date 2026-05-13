@@ -39,7 +39,7 @@ Collect the list. The Standards sub-agent will read them.
 
 ### 3. Spawn both sub-agents in parallel
 
-Send a single message with two `Agent` tool calls. Use the `general-purpose` subagent for both.
+Send a single message with two `Agent` tool calls. Use the `general-purpose` subagent for both, with `model: "sonnet"`.
 
 **Standards sub-agent prompt** — include:
 

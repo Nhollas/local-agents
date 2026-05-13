@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
+import type { RunRepository, StepUsage } from "../run-repository.ts";
 import {
 	buildAssistantMessage,
 	buildErrorResult,
 	buildSuccessResult,
 } from "../test-support/agent-messages.ts";
 import type { Issue } from "../trackers/types.ts";
-import { issueKey, issueNumber, repoSlug, runId } from "../types/brands.ts";
+import {
+	issueKey,
+	issueNumber,
+	type RunId,
+	repoSlug,
+	runId,
+} from "../types/brands.ts";
 import type {
 	AgentInvokeOptions,
 	AgentInvoker,
@@ -44,14 +51,30 @@ function createAgent(
 	};
 }
 
+type UsageCall = { runId: RunId; usage: StepUsage };
+
+function createRunRepo(): Pick<RunRepository, "addRunUsage"> & {
+	usageCalls: UsageCall[];
+} {
+	const usageCalls: UsageCall[] = [];
+	return {
+		usageCalls,
+		addRunUsage(runId, usage) {
+			usageCalls.push({ runId, usage });
+		},
+	};
+}
+
 describe("resolveBranch", () => {
 	it("renders the static template form against issue and attempt", async () => {
 		const agent = createAgent(async function* () {});
+		const runRepo = createRunRepo();
 
 		const result = await resolveBranch({
 			workflowBranch: "agent/issue-{{ issue.number }}",
 			issue,
 			agent,
+			runRepo,
 			cwd: "/work",
 			runId: runId("test-run"),
 			signal: new AbortController().signal,
@@ -59,6 +82,7 @@ describe("resolveBranch", () => {
 
 		expect(result).toBe("agent/issue-7");
 		expect(agent.calls).toEqual([]);
+		expect(runRepo.usageCalls).toEqual([]);
 	});
 
 	it("invokes the agent with outputFormat for the dynamic form", async () => {
@@ -69,6 +93,7 @@ describe("resolveBranch", () => {
 				structuredOutput: { name: "feat/owner-repo-1-fix-it" },
 			});
 		});
+		const runRepo = createRunRepo();
 
 		const result = await resolveBranch({
 			workflowBranch: {
@@ -78,6 +103,7 @@ describe("resolveBranch", () => {
 			},
 			issue,
 			agent,
+			runRepo,
 			cwd: "/work",
 			runId: runId("test-run"),
 			signal: new AbortController().signal,
@@ -114,6 +140,7 @@ describe("resolveBranch", () => {
 				},
 				issue,
 				agent,
+				runRepo: createRunRepo(),
 				cwd: "/work",
 				runId: runId("test-run"),
 				signal: new AbortController().signal,
@@ -127,6 +154,7 @@ describe("resolveBranch", () => {
 				uuid: "00000000-0000-0000-0000-000000000040",
 			});
 		});
+		const runRepo = createRunRepo();
 
 		await expect(
 			resolveBranch({
@@ -137,11 +165,14 @@ describe("resolveBranch", () => {
 				},
 				issue,
 				agent,
+				runRepo,
 				cwd: "/work",
 				runId: runId("test-run"),
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/stream ended without a result message/);
+
+		expect(runRepo.usageCalls).toEqual([]);
 	});
 
 	it("aborts when the SDK returns error_max_structured_output_retries", async () => {
@@ -162,10 +193,56 @@ describe("resolveBranch", () => {
 				},
 				issue,
 				agent,
+				runRepo: createRunRepo(),
 				cwd: "/work",
 				runId: runId("test-run"),
 				signal: new AbortController().signal,
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);
+	});
+
+	it("records cost and tokens against the run when the agent returns usage", async () => {
+		const agent = createAgent(async function* () {
+			yield buildSuccessResult({
+				uuid: "00000000-0000-0000-0000-000000000050",
+				sessionId: "sess-branch",
+				structuredOutput: { name: "feat/owner-repo-1-fix-it" },
+				totalCostUsd: 0.02,
+				modelUsage: {
+					"claude-haiku-4-5": {
+						inputTokens: 400,
+						outputTokens: 80,
+						cacheReadInputTokens: 0,
+						cacheCreationInputTokens: 0,
+						webSearchRequests: 0,
+						costUSD: 0.02,
+						contextWindow: 200_000,
+						maxOutputTokens: 8_000,
+					},
+				},
+			});
+		});
+		const runRepo = createRunRepo();
+
+		await resolveBranch({
+			workflowBranch: {
+				prompt: "Propose",
+				schema: branchSchema,
+				model: "claude-haiku-4-5",
+			},
+			issue,
+			agent,
+			runRepo,
+			cwd: "/work",
+			runId: runId("test-run"),
+			signal: new AbortController().signal,
+		});
+
+		expect(runRepo.usageCalls).toEqual([
+			{
+				runId: runId("test-run"),
+				usage: { costUsd: 0.02, tokensInput: 400, tokensOutput: 80 },
+			},
+		]);
 	});
 });
