@@ -9,9 +9,13 @@ import type { RunLogWriter } from "./run-log-file.ts";
 
 export function buildAgentHooks(
 	runLogWriter?: RunLogWriter,
+	onToolFailure?: (toolName: string) => void,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
 	const postToolUse: HookCallback[] = [safe(record)];
 	const postToolUseFailure: HookCallback[] = [safe(record)];
+	if (onToolFailure) {
+		postToolUseFailure.push(safe(countRetry(onToolFailure)));
+	}
 	if (runLogWriter) {
 		postToolUse.push(safe(writeRunLog(runLogWriter)));
 		postToolUseFailure.push(safe(writeRunLog(runLogWriter)));
@@ -19,6 +23,14 @@ export function buildAgentHooks(
 	return {
 		PostToolUse: [{ hooks: postToolUse }],
 		PostToolUseFailure: [{ hooks: postToolUseFailure }],
+	};
+}
+
+function countRetry(onToolFailure: (toolName: string) => void) {
+	return (input: HookInput): void => {
+		if (input.hook_event_name === "PostToolUseFailure") {
+			onToolFailure(input.tool_name);
+		}
 	};
 }
 

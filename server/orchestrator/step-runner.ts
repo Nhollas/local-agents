@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import * as canonicalLog from "../canonical-log.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunContext } from "../runner/runner.ts";
-import { runStepSpan } from "../telemetry/spans.ts";
+import { runStepSpan, type Span } from "../telemetry/spans.ts";
 import type { Issue } from "../trackers/types.ts";
 import {
 	expandMarkedShellBlocks,
@@ -121,7 +123,8 @@ async function runWorkflowStep({
 	let stepTokensInput = 0;
 	let stepTokensOutput = 0;
 
-	return runStepSpan(step.name, async () => {
+	return runStepSpan(step.name, async (stepSpan) => {
+		const retryCounts: Record<string, number> = {};
 		try {
 			const renderedPrompt = renderPrompt(markTrustedShellBlocks(step.prompt), {
 				issue,
@@ -139,6 +142,9 @@ async function runWorkflowStep({
 				? { type: "json_schema", schema: step.output_schema }
 				: undefined;
 
+			const headBefore =
+				step.name === "review" ? await gitRevParseSafe(cwd) : null;
+
 			for await (const msg of agent.invoke({
 				prompt,
 				cwd,
@@ -151,6 +157,9 @@ async function runWorkflowStep({
 				...(resumeSessionId && { resumeSessionId }),
 				...(outputFormat && { outputFormat }),
 				...(step.allowed_tools && { allowedTools: step.allowed_tools }),
+				onToolFailure: (toolName) => {
+					retryCounts[toolName] = (retryCounts[toolName] ?? 0) + 1;
+				},
 			})) {
 				if (msg.type === "assistant") {
 					emitAgentMessageEvents(msg, { ctx, stepName: step.name, cwd });
@@ -179,6 +188,10 @@ async function runWorkflowStep({
 					}
 					throw new Error(msg.subtype);
 				}
+			}
+
+			if (step.name === "review") {
+				await setReviewFixAttributes(stepSpan, cwd, headBefore);
 			}
 
 			const completedAtMs = Date.now();
@@ -223,6 +236,92 @@ async function runWorkflowStep({
 				data: { name: step.name, index: stepIndex, error, durationMs },
 			});
 			throw err;
+		} finally {
+			const total = Object.values(retryCounts).reduce((a, b) => a + b, 0);
+			stepSpan.setAttributes({
+				"retries.by_tool": JSON.stringify(retryCounts),
+				"retries.total": total,
+			});
 		}
 	});
+}
+
+const exec = promisify(execFile);
+
+async function gitRevParseSafe(cwd: string): Promise<string | null> {
+	try {
+		const { stdout } = await exec("git", ["rev-parse", "HEAD"], { cwd });
+		return stdout.trim();
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		console.warn(
+			`review fix-size: failed to capture HEAD before step: ${message}`,
+		);
+		return null;
+	}
+}
+
+async function setReviewFixAttributes(
+	span: Span,
+	cwd: string,
+	headBefore: string | null,
+): Promise<void> {
+	if (headBefore === null) {
+		span.setAttributes({
+			"review.fixes.files_changed": -1,
+			"review.fixes.lines_added": -1,
+			"review.fixes.lines_removed": -1,
+		});
+		return;
+	}
+	try {
+		const { stdout: headAfterRaw } = await exec("git", ["rev-parse", "HEAD"], {
+			cwd,
+		});
+		const headAfter = headAfterRaw.trim();
+		if (headBefore === headAfter) {
+			span.setAttributes({
+				"review.fixes.files_changed": 0,
+				"review.fixes.lines_added": 0,
+				"review.fixes.lines_removed": 0,
+			});
+			return;
+		}
+		const { stdout: shortstatRaw } = await exec(
+			"git",
+			["diff", "--shortstat", `${headBefore}..${headAfter}`],
+			{ cwd },
+		);
+		const { filesChanged, linesAdded, linesRemoved } =
+			parseShortstat(shortstatRaw);
+		span.setAttributes({
+			"review.fixes.files_changed": filesChanged,
+			"review.fixes.lines_added": linesAdded,
+			"review.fixes.lines_removed": linesRemoved,
+		});
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		console.warn(`review fix-size: git diff failed: ${message}`);
+		span.setAttributes({
+			"review.fixes.files_changed": -1,
+			"review.fixes.lines_added": -1,
+			"review.fixes.lines_removed": -1,
+		});
+	}
+}
+
+function parseShortstat(output: string): {
+	filesChanged: number;
+	linesAdded: number;
+	linesRemoved: number;
+} {
+	const num = (re: RegExp): number => {
+		const m = re.exec(output);
+		return m?.[1] != null ? parseInt(m[1], 10) : 0;
+	};
+	return {
+		filesChanged: num(/(\d+) files? changed/),
+		linesAdded: num(/(\d+) insertions?\(\+\)/),
+		linesRemoved: num(/(\d+) deletions?\(-\)/),
+	};
 }

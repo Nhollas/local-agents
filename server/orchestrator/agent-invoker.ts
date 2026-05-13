@@ -25,6 +25,7 @@ export type AgentInvokeOptions = {
 	signal: AbortSignal;
 	outputFormat?: OutputFormat;
 	allowedTools?: readonly string[];
+	onToolFailure?: (toolName: string) => void;
 };
 
 export type AgentInvoker = {
@@ -70,6 +71,7 @@ export function claudeSdkAgentInvoker({
 			outputFormat,
 			signal,
 			allowedTools,
+			onToolFailure,
 		}) {
 			const runLogWriter = createRunLogWriter(logDir, runId);
 			const baseEnv = invocationEnv ?? env;
@@ -105,7 +107,7 @@ export function claudeSdkAgentInvoker({
 						preset: "claude_code",
 						excludeDynamicSections: true,
 					},
-					hooks: buildAgentHooks(runLogWriter),
+					hooks: buildAgentHooks(runLogWriter, onToolFailure),
 					...(resumeSessionId && { resume: resumeSessionId }),
 					...(outputFormat && { outputFormat }),
 				},
