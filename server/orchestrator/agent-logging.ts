@@ -106,10 +106,21 @@ function emitToolEvent(
 				kind: "tool:bash",
 				stepName,
 				data: {
-					command: stringInput(input["command"]),
+					command: shortenCommand(stringInput(input["command"]), cwd),
 					cwd,
 					state: "running",
 					exitCode: null,
+				},
+			});
+			return;
+		}
+		case "Skill": {
+			ctx.emit({
+				kind: "tool:other",
+				stepName,
+				data: {
+					tool: "Skill",
+					summary: stringInput(input["skill"]).slice(0, 100),
 				},
 			});
 			return;
@@ -152,4 +163,13 @@ function shortPath(fullPath: string, workDir: string): string {
 		return fullPath.slice(workDir.length + 1);
 	}
 	return fullPath;
+}
+
+function shortenCommand(command: string, workDir: string): string {
+	if (workDir === "") return command;
+	return command
+		.split(`/private${workDir}/`)
+		.join("")
+		.split(`${workDir}/`)
+		.join("");
 }

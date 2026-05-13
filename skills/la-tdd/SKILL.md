@@ -1,5 +1,5 @@
 ---
-name: tdd
+name: la-tdd
 description: Test-driven development with a red-green-refactor loop. Drive one behaviour at a time as a vertical slice — write a failing test, write the minimal code to pass it, repeat. Survives refactors because tests verify behaviour through public interfaces, not implementation details. Use when the issue calls for test-first work, when fixing a bug that has a sensible test seam, or when the user asks to "TDD this" / "red-green-refactor" / "test-first".
 ---
 

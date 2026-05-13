@@ -1,5 +1,5 @@
 ---
-name: review
+name: la-review
 description: Two-axis review of the work on the current branch against its base. The Standards axis checks the diff against this repo's documented coding/testing standards. The Spec axis checks the diff against the originating issue. Both axes run as parallel sub-agents so they don't pollute each other's context. Use when reviewing a branch produced by an AFK agent run, refining the diff before opening a change request, or whenever the user asks to "review the changes" / "review this branch".
 ---
 

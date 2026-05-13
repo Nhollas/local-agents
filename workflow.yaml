@@ -44,7 +44,7 @@ steps:
       {{ issue.description }}
       </issue>
 
-      Use the `implement` skill.
+      Use the `la-implement` skill.
 
   - name: review
     model: claude-opus-4-7
@@ -64,7 +64,7 @@ steps:
       !`git log origin/{{ base_branch }}..HEAD --oneline`
       </commits>
 
-      Use the `review` skill. The file list and commit list above are
+      Use the `la-review` skill. The file list and commit list above are
       pre-loaded — pass them through to the sub-agents along with the
       diff command `git diff origin/{{ base_branch }}...HEAD`. Apply
       fixes directly to this branch.
