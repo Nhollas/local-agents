@@ -24,6 +24,9 @@ x-langfuse-env: &langfuse-env
   CLICKHOUSE_URL: "http://clickhouse:8123"
   CLICKHOUSE_USER: "clickhouse"
   CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+  # Without this, migrations use `ON CLUSTER default ... ReplicatedMergeTree`
+  # which requires ZooKeeper. Set to "false" for single-node local dev.
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
   REDIS_AUTH: "${REDIS_AUTH}"
