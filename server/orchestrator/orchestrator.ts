@@ -21,17 +21,10 @@ import { type RunShell, realRunShell, sweepWorkspaces } from "./workspace.ts";
 
 const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// LA ships its own skills, hooks, and agent settings at `<repo-root>/`. Resolve
-// relative to this source file so the paths are tied to the install, not the
-// launch CWD.
+// LA ships its own skills at `<repo-root>/skills/`. Resolve relative to this
+// source file so the path is tied to the install, not the launch CWD.
 const SKILLS_SOURCE_DIR = fileURLToPath(
 	new URL("../../skills/", import.meta.url),
-);
-const HOOKS_SOURCE_DIR = fileURLToPath(
-	new URL("../../hooks/", import.meta.url),
-);
-const AGENT_SETTINGS_FILE = fileURLToPath(
-	new URL("../../agent-settings.json", import.meta.url),
 );
 
 type OrchestratorConfig = {
@@ -133,8 +126,6 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		logger,
 		workspaceRoot: defaults.workspace_root,
 		skillsSourceDir: SKILLS_SOURCE_DIR,
-		hooksSourceDir: HOOKS_SOURCE_DIR,
-		agentSettingsFile: AGENT_SETTINGS_FILE,
 		agentEnv,
 		langfuseHost: langfuse.host,
 		langfuseProjectId: langfuse.projectId,

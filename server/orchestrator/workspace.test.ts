@@ -5,7 +5,6 @@ import {
 	mkdir,
 	readFile,
 	rm,
-	stat,
 	utimes,
 	writeFile,
 } from "node:fs/promises";
@@ -18,7 +17,6 @@ import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import {
 	createWorkspace,
-	installAgentDefaults,
 	installSkills,
 	pushBranch,
 	realRunShell,
@@ -578,161 +576,5 @@ describe("installSkills", () => {
 		await expect(
 			readFile(join(ws.path, ".claude/skills/advisor/fixture.txt"), "utf8"),
 		).resolves.toBe("literal {{ base_branch }} stays");
-	});
-});
-
-async function makeAgentDefaultsSource(
-	hookScripts: Record<string, string>,
-	settings: string,
-): Promise<{
-	hooksDir: string;
-	settingsFile: string;
-	[Symbol.asyncDispose](): Promise<void>;
-}> {
-	const root = join(
-		tmpdir(),
-		`defaults-src-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-	);
-	const hooksDir = join(root, "hooks");
-	await mkdir(hooksDir, { recursive: true });
-	for (const [name, body] of Object.entries(hookScripts)) {
-		const path = join(hooksDir, name);
-		await writeFile(path, body);
-		await chmod(path, 0o755);
-	}
-	const settingsFile = join(root, "agent-settings.json");
-	await writeFile(settingsFile, settings);
-	return {
-		hooksDir,
-		settingsFile,
-		async [Symbol.asyncDispose]() {
-			await rm(root, { recursive: true, force: true });
-		},
-	};
-}
-
-describe("installAgentDefaults", () => {
-	it("copies hook scripts to <ws>/.claude/hooks/ and the settings file to <ws>/.claude/settings.json", async () => {
-		await using ws = await withWorkspace();
-		await using src = await makeAgentDefaultsSource(
-			{
-				"block-dangerous-git.sh": "#!/usr/bin/env bash\necho block\n",
-				"validate-commit-message.sh": "#!/usr/bin/env bash\necho commit\n",
-			},
-			'{"hooks":{}}',
-		);
-
-		const result = await installAgentDefaults(
-			ws.path,
-			src.hooksDir,
-			src.settingsFile,
-		);
-
-		expect(result).toEqual({
-			hooksInstalled: ["block-dangerous-git.sh", "validate-commit-message.sh"],
-			settingsInstalled: true,
-		});
-		await expect(
-			readFile(join(ws.path, ".claude/hooks/block-dangerous-git.sh"), "utf8"),
-		).resolves.toBe("#!/usr/bin/env bash\necho block\n");
-		await expect(
-			readFile(join(ws.path, ".claude/settings.json"), "utf8"),
-		).resolves.toBe('{"hooks":{}}');
-	});
-
-	it("makes installed hook scripts executable", async () => {
-		await using ws = await withWorkspace();
-		await using src = await makeAgentDefaultsSource(
-			{ "noop.sh": "#!/usr/bin/env bash\nexit 0\n" },
-			"{}",
-		);
-
-		await installAgentDefaults(ws.path, src.hooksDir, src.settingsFile);
-
-		const info = await stat(join(ws.path, ".claude/hooks/noop.sh"));
-		expect(info.mode & 0o111).not.toBe(0);
-	});
-
-	it("excludes installed hooks and settings from git via .git/info/exclude", async () => {
-		await using ws = await createWorkspaceRoot();
-		const issue = createIssue(102);
-		const wsPath = await createWorkspace(
-			issue,
-			ws.root,
-			bareRepo,
-			"run-defaults-exclude",
-		);
-		await using src = await makeAgentDefaultsSource(
-			{ "noop.sh": "#!/usr/bin/env bash\nexit 0\n" },
-			'{"hooks":{}}',
-		);
-
-		await installAgentDefaults(wsPath, src.hooksDir, src.settingsFile);
-
-		const { stdout: status } = await exec("git", ["status", "--porcelain"], {
-			cwd: wsPath,
-		});
-		expect(status).not.toMatch(/\.claude\/hooks/);
-		expect(status).not.toMatch(/\.claude\/settings\.json/);
-
-		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
-		expect(exclude).toMatch(/\.claude\/hooks\//);
-		expect(exclude).toMatch(/\.claude\/settings\.json/);
-	});
-
-	it("overwrites an existing settings.json so target-repo customisations cannot bypass orchestrator policy", async () => {
-		await using ws = await withWorkspace();
-		await mkdir(join(ws.path, ".claude"), { recursive: true });
-		await writeFile(
-			join(ws.path, ".claude/settings.json"),
-			'{"target":"repo-provided"}',
-		);
-		await using src = await makeAgentDefaultsSource(
-			{},
-			'{"orchestrator":"wins"}',
-		);
-
-		await installAgentDefaults(ws.path, src.hooksDir, src.settingsFile);
-
-		await expect(
-			readFile(join(ws.path, ".claude/settings.json"), "utf8"),
-		).resolves.toBe('{"orchestrator":"wins"}');
-	});
-
-	it("still installs settings when the hooks source directory is missing", async () => {
-		await using ws = await withWorkspace();
-		const missingHooks = join(
-			tmpdir(),
-			`missing-hooks-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-		);
-		await using src = await makeAgentDefaultsSource({}, '{"k":"v"}');
-
-		const result = await installAgentDefaults(
-			ws.path,
-			missingHooks,
-			src.settingsFile,
-		);
-
-		expect(result).toEqual({ hooksInstalled: [], settingsInstalled: true });
-		await expect(
-			readFile(join(ws.path, ".claude/settings.json"), "utf8"),
-		).resolves.toBe('{"k":"v"}');
-	});
-
-	it("ignores non-file entries in the hooks source directory", async () => {
-		await using ws = await withWorkspace();
-		await using src = await makeAgentDefaultsSource(
-			{ "real.sh": "#!/usr/bin/env bash\nexit 0\n" },
-			"{}",
-		);
-		await mkdir(join(src.hooksDir, "nested"), { recursive: true });
-
-		const result = await installAgentDefaults(
-			ws.path,
-			src.hooksDir,
-			src.settingsFile,
-		);
-
-		expect(result.hooksInstalled).toEqual(["real.sh"]);
 	});
 });
