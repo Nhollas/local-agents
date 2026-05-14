@@ -107,6 +107,23 @@ services:
       retries: 10
       start_period: 1s
 
+  # One-shot: create the `langfuse` bucket on every `up`. Idempotent — `mc mb
+  # --ignore-existing` is a no-op when the bucket is already there. Without
+  # this, langfuse-worker fails event uploads with "Failed to upload JSON to S3"
+  # and traces never appear in the dashboard.
+  minio-init:
+    image: cgr.dev/chainguard/minio-client
+    depends_on:
+      minio:
+        condition: service_healthy
+    # Distroless image (no shell), so we go through `mc` directly. `MC_HOST_<alias>`
+    # configures the `local` alias from env without a separate `alias set` step.
+    # `--ignore-existing` keeps this idempotent across restarts.
+    command: ["mb", "--ignore-existing", "local/langfuse"]
+    environment:
+      MC_HOST_local: "http://minio:${MINIO_ROOT_PASSWORD}@minio:9000"
+    restart: "no"
+
   redis:
     image: docker.io/redis:7
     restart: unless-stopped

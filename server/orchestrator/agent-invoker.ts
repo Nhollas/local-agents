@@ -96,7 +96,6 @@ export function claudeSdkAgentInvoker({
 					abortController: abortControllerFromSignal(signal),
 					allowedTools: [...(allowedTools ?? DEFAULT_ALLOWED_TOOLS)],
 					permissionMode: "dontAsk" as const,
-					settingSources: ["project"],
 					// Auto-enables the Skill tool so skills like `implement` can chain
 					// into others (e.g. `tdd`). Without this, `permissionMode: "dontAsk"`
 					// denies Skill because it isn't in `allowedTools`, and listing
