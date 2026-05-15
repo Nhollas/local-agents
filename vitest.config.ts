@@ -60,6 +60,9 @@ export default defineConfig({
 		env: {
 			LOG_LEVEL: "silent",
 			CONFIG_PATH: "./config.example.yaml",
+			LANGFUSE_PUBLIC_KEY: "test-public-key",
+			LANGFUSE_SECRET_KEY: "test-secret-key",
+			LANGFUSE_PROJECT_ID: "test-project-id",
 		},
 	},
 });
