@@ -96,8 +96,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	const { defaults } = config;
 	const agentEnv = resolveAgentEnvironment(config.agent.env);
 	const logDir = resolvePath(process.cwd(), defaults.log_dir);
-	const agent =
-		opts.agent ?? claudeSdkAgentInvoker({ env: agentEnv, logDir, langfuse });
+	const agent = opts.agent ?? claudeSdkAgentInvoker({ env: agentEnv, logDir });
 
 	function logTransitionFailed(
 		repo: Issue["repo"],
