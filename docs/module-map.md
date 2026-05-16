@@ -25,13 +25,13 @@ Shared vocabulary used across the diagrams. Terminology matches [architecture.md
 
 ## Containers
 
-![Container diagram](diagrams/structurizr-containers.svg)
+![Container diagram](diagrams/containers.svg)
 
 ## Orchestrator components
 
 The orchestrator is a single Node.js process. The components below are logical modules inside `server/` — not separate services.
 
-![Orchestrator components](diagrams/structurizr-orchestrator-components.svg)
+![Orchestrator components](diagrams/orchestrator-components.svg)
 
 ## Reading guide
 

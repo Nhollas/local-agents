@@ -2,7 +2,11 @@
 
 AI agents that run on your machine, triggered by issue trackers, powered by your Claude subscription.
 
-A polling orchestrator watches Jira for triggered issues, resolves the target repo from each issue's `repo:` label, creates an isolated workspace, and runs a Claude agent to do the work. Jira is the supported tracker, and either GitHub or GitLab can be configured as the code host.
+Local agents picks up tickets from your issue tracker, clones the target repo into an isolated workspace, and works on them autonomously using the Claude Agent SDK. Jira is the supported tracker; either GitHub or GitLab can be configured as the code host.
+
+![Dashboard](docs/dashboard.png)
+
+![Container diagram](docs/diagrams/containers.svg)
 
 ## Documentation
 
