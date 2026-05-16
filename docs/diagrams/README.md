@@ -6,9 +6,9 @@ C4 diagrams for the codebase. `workspace.dsl` is the source of truth; the SVGs a
 
 - `workspace.dsl` — Structurizr DSL describing the full C4 model.
 - `regen.sh` — regenerates the SVGs from the DSL.
-- `structurizr-containers.svg` — containers inside the local-agents boundary and their links to external systems.
-- `structurizr-orchestrator-components.svg` — orchestrator components and their responsibilities.
-- `structurizr-run-lifecycle.svg` — dynamic view walking one run from poll to transition.
+- `containers.svg` — containers inside the local-agents boundary and their links to external systems.
+- `orchestrator-components.svg` — orchestrator components and their responsibilities.
+- `run-lifecycle.svg` — dynamic view walking one run from poll to transition.
 
 ## Iterating quickly
 

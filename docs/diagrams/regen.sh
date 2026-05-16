@@ -17,5 +17,10 @@ sed -i '' '2i\
 plantuml -tsvg structurizr-*.puml
 rm structurizr-*.puml
 
+# structurizr-cli prefixes its output with `structurizr-`; drop it.
+for f in structurizr-*.svg; do
+  mv "$f" "${f#structurizr-}"
+done
+
 echo "Generated:"
-ls -1 structurizr-*.svg
+ls -1 *.svg
