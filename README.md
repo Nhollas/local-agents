@@ -4,8 +4,33 @@ AI agents that run on your machine, triggered by issue trackers, powered by your
 
 A polling orchestrator watches Jira for triggered issues, resolves the target repo from each issue's `repo:` label, creates an isolated workspace, and runs a Claude agent to do the work. Jira is the supported tracker, and either GitHub or GitLab can be configured as the code host.
 
-- [docs/architecture.md](docs/architecture.md) — how the system works.
+## Documentation
+
+**Understanding the system**
+
+- [docs/architecture.md](docs/architecture.md) — how the system works end-to-end.
+- [docs/diagrams/](docs/diagrams) — C4 diagrams (Structurizr).
+- [docs/module-map.md](docs/module-map.md) — where things live in the code.
+
+**Using and operating it**
+
 - [docs/configuration.md](docs/configuration.md) — `config.yaml` and `workflow.yaml` reference.
+- [docs/production-considerations.md](docs/production-considerations.md) — open thoughts on what a production deployment would need to address. Not current architecture.
+
+**Contributing**
+
+- [docs/coding-standards.md](docs/coding-standards.md)
+- [docs/testing-standards.md](docs/testing-standards.md)
+- [docs/adr/](docs/adr) — decision history.
+
+## Requirements
+
+- Node.js >= 22.6.0
+- pnpm
+- [`fnm`](https://github.com/Schniz/fnm) on `PATH` — used to activate target repositories' `.nvmrc` versions before running repo setup and agent steps.
+- Claude Code, logged in with an active subscription. The Agent SDK uses this login automatically.
+- `JIRA_EMAIL` and `JIRA_API_TOKEN`
+- `GITHUB_TOKEN` or `GITLAB_TOKEN`, depending on the configured code host.
 
 ## Setup
 
@@ -15,11 +40,7 @@ cp .env.example .env
 cp config.example.yaml config.yaml
 ```
 
-Install [`fnm`](https://github.com/Schniz/fnm) and make sure it is available on `PATH`. local-agents uses it to activate target repositories' `.nvmrc` versions before running repo setup and agent steps.
-
 Fill in `JIRA_EMAIL`, `JIRA_API_TOKEN`, and either `GITHUB_TOKEN` or `GITLAB_TOKEN` to match the configured code host.
-
-The Agent SDK uses your existing Claude Code login automatically. Make sure you're logged into Claude Code with an active subscription.
 
 Edit `config.yaml` (gitignored — local to your machine) to point at your Jira project and the user or organisation scopes the orchestrator is allowed to clone from. Create `workflow.yaml` in the local-agents working directory to define branch naming, the steps the agent runs, and the change-request template. See [docs/configuration.md](docs/configuration.md) for the full schemas, and [`examples/`](examples) for ready-to-copy starting points.
 
@@ -56,11 +77,3 @@ The dashboard shows all agent runs in real-time:
 - Kill running agents.
 - Dark and light themes.
 
-## Requirements
-
-- Node.js >= 22.6.0
-- pnpm
-- fnm
-- Claude Code (logged in with active subscription)
-- `JIRA_EMAIL` and `JIRA_API_TOKEN`
-- `GITHUB_TOKEN` or `GITLAB_TOKEN`, depending on the configured code host

@@ -23,7 +23,7 @@ Claude Agent SDK (query)
 Push branch → Open change request → Transition tracker
 ```
 
-The issue tracker is the orchestration layer. Polling means the orchestrator catches up on its next tick after downtime, runs behind NATs and firewalls, and exposes nothing publicly.
+The issue tracker is the orchestration layer. Polling has a few useful properties: the orchestrator catches up on its next tick after downtime, it runs happily behind NATs and firewalls, and it exposes nothing publicly.
 
 ## Components
 
@@ -76,20 +76,20 @@ clone → resolve branch → checkout → repo bootstrap → [ workflow steps ] 
 
 ### Workspaces
 
-Each issue gets an isolated workspace under `defaults.workspace_root`. The orchestrator clones the repo into it, resolves the branch (either by template or by running the branch-naming agent), checks the branch out, and runs `.agent/setup.sh` from the cloned repo if one is present. Workflow files do not contain `pnpm install` or codegen warm-ups themselves, since the same workflow targets repos with different toolchains. Repo-side bootstrap belongs to the repo.
+Each issue gets an isolated workspace under `defaults.workspace_root`. The orchestrator clones the repo into it, resolves the branch (either by template or by running the branch-naming agent), checks the branch out, and runs `.agent/setup.sh` from the cloned repo if one is present. Workflow files do not contain `pnpm install` or codegen warm-ups themselves, since the same workflow targets repos with different toolchains. That kind of repo-specific bootstrap lives in the repo itself.
 
-A failing run keeps its workspace on disk so the work can be inspected. A fully successful run removes its workspace afterwards. Success here means every step succeeded, the branch was pushed, the change request was opened, and the tracker transition went through.
+A failing run keeps its workspace on disk so the work can be inspected; a fully successful run removes the workspace once it's done. Success here is the full chain: every step succeeded, the branch was pushed, the change request was opened, and the tracker transition went through.
 
 ### Fixed Lifecycle Pins
 
-Step outputs are pure typed data. They flow into later step prompts and into the `change_request` template, but they never reorder when the orchestrator does anything. Lifecycle actions fire at fixed pins instead, with the pinned order recorded in [ADR 0001](adr/0001-phase-outputs-and-fixed-lifecycle.md).
+Step outputs are pure typed data. They flow into later step prompts and into the `change_request` template, but their presence or content never reorders what the orchestrator does. Lifecycle actions fire at fixed pins instead, with the pinned order recorded in [ADR 0001](adr/0001-phase-outputs-and-fixed-lifecycle.md).
 
 1. Run all workflow steps to completion.
 2. `git push --force` the branch to origin.
 3. Open the change request through the code-host adapter, using the rendered `change_request` template.
 4. Transition the tracker issue from `running` to `awaiting_review`.
 
-If any of these fail, the run is marked failed, the workspace is preserved, and the tracker issue is moved to a failed state through the adapter rather than left in `running`.
+If any of these fail, the run is marked failed, the workspace is preserved, and the adapter moves the tracker issue into its failed state so it does not get stuck in `running`.
 
 ### The Agent
 
@@ -113,7 +113,7 @@ When the process restarts, any runs that were in flight at shutdown are dead. Th
 - Runs marked `running` in the run repository are failed with a "stale run" reason.
 - Tracker issues stuck in the `running` state are pushed back to `pending` so the next tick re-dispatches them.
 
-This makes restarting safe. Anything mid-flight is rerun cleanly rather than left orphaned.
+Restarting is therefore safe. Anything that was mid-flight is picked up and rerun cleanly on the next tick.
 
 ## Design Principles
 
@@ -121,8 +121,8 @@ This makes restarting safe. Anything mid-flight is rerun cleanly rather than lef
 - **Multi-repo, single orchestrator.** One process polls the configured tracker and dispatches across all in-scope repos with a shared concurrency pool.
 - **Cross-repo fairness.** Issues are merged into a single oldest-first queue so no repo starves another.
 - **Narrow scope.** Each agent works on one issue at a time in an isolated workspace.
-- **Codebase as context.** Agents discover what they need by reading the repo, not from configuration passed to them.
-- **Disposable work environments.** Clone fresh, work in `/tmp`, clean up after a fully successful run.
-- **Same toolchain as engineers.** Agents run tests, linters, and the repo's own bootstrap the same way you would.
-- **Repo-owned bootstrap.** `.agent/setup.sh` lives in the target repo so workflows stay portable.
-- **Orchestrator-owned lifecycle.** Push, change-request creation, and tracker transitions fire at fixed pins, not at points the workflow author has to choose.
+- **Codebase as context.** Agents discover what they need by reading the repo they're working in, so the workflow file stays free of repo-specific facts.
+- **Disposable work environments.** Each run clones fresh into `/tmp`, and the workspace is cleaned up after a fully successful run.
+- **Same toolchain as engineers.** Agents run tests, linters, and the repo's own bootstrap the same way an engineer working on the repo would.
+- **Repo-owned bootstrap.** `.agent/setup.sh` lives in the target repo, which keeps workflows portable across repos with different toolchains.
+- **Orchestrator-owned lifecycle.** Push, change-request creation, and tracker transitions fire at fixed pins owned by the orchestrator, so workflow authors don't have to decide when each one runs.

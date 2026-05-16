@@ -5,7 +5,7 @@ Canonical reference for the two YAML files the orchestrator reads at startup. Fo
 - `config.yaml` defines the tracker, the code host, and operational defaults.
 - `workflow.yaml` defines the branch, the steps the agent runs, and the change-request template.
 
-Both files are validated by Zod schemas at startup. Unknown fields, missing fields, and type mismatches all fail loudly before the orchestrator opens any sockets.
+Both files are validated by Zod schemas at startup. Unknown fields, missing fields, or type mismatches cause the orchestrator to fail before it opens any sockets.
 
 ## Sections
 
@@ -38,7 +38,6 @@ code_host:
 defaults:
   polling_interval_ms: 30000
   max_concurrent: 2
-  model: claude-sonnet-4-6
   workspace_root: /tmp/local-agent-workspaces
 
 agent:
@@ -105,13 +104,12 @@ Operational settings shared across all runs.
 |------------------------|---------|-------------|
 | `polling_interval_ms`  | integer | How often the orchestrator ticks. |
 | `max_concurrent`       | integer | Maximum number of runs in flight at once across all repos. |
-| `model`                | string  | Default Claude model ID for steps. Steps may override this individually. |
 | `workspace_root`       | string  | Filesystem path where per-issue workspaces are created. |
 | `log_dir`              | string  | Directory for per-run agent tool-call logs (`<log_dir>/<run-id>.log`). Resolved relative to the orchestrator's working directory. Defaults to `./logs`. |
 
 ### Environment
 
-Tokens and credentials live in `.env`, not in `config.yaml`. The orchestrator validates them on the basis of the configured `kind` values:
+Tokens and credentials live in `.env` and are loaded from the process environment. The orchestrator validates them on the basis of the configured `kind` values:
 
 - `JIRA_EMAIL` and `JIRA_API_TOKEN` are required.
 - `GITHUB_TOKEN` is required when `code_host.kind` is `github`.
@@ -141,7 +139,7 @@ These are passed through automatically and do not need to appear in `include`:
 
 `HOME`, `PATH`, `SHELL`, `USER`, `LOGNAME`, `LANG`, `TZ`.
 
-Without `HOME` the SDK can't read `~/.claude/` credentials and the agent fails to authenticate; without `PATH` it can't find `git`, `node`, `pnpm`, or `fnm`. These are prerequisites, not opt-ins.
+Without `HOME` the SDK can't read `~/.claude/` credentials and the agent fails to authenticate; without `PATH` it can't find `git`, `node`, `pnpm`, or `fnm`. The orchestrator treats them as prerequisites and always passes them through.
 
 If you need to override one (for example, prepending to `PATH`), use `env.set`.
 
@@ -152,13 +150,13 @@ App secrets and project-specific vars the agent actually needs at runtime, for e
 - `ANTHROPIC_API_KEY` if you authenticate via API key instead of `claude login`.
 - Private package registry tokens like `GITLAB_PACKAGES_TOKEN`.
 
-Everything else on the host stays on the host.
+Anything else in the host environment is left behind when the agent subprocess starts.
 
 ---
 
 ## `workflow.yaml`
 
-The orchestrator loads `./workflow.yaml` once at startup. Restart the orchestrator to pick up workflow changes. The same workflow is used for every dispatched issue regardless of target repo, which is why repo-specific concerns belong in the repo rather than here.
+The orchestrator loads `./workflow.yaml` once at startup. Restart the orchestrator to pick up workflow changes. The same workflow is used for every dispatched issue regardless of target repo, so repo-specific concerns belong in the repo itself.
 
 A workflow has exactly three top-level fields:
 
@@ -190,6 +188,7 @@ A non-empty string, with the [template language](#template-language) available.
 
 ```yaml
 branch:
+  model: claude-haiku-4-5
   prompt: |
     Propose a branch name for issue {{ issue.key }}: {{ issue.title }}.
     Use kebab-case under a `<type>/` prefix.
@@ -204,6 +203,7 @@ branch:
 
 | Field    | Type    | Description |
 |----------|---------|-------------|
+| `model`  | string  | Claude model ID used for the branch-naming agent. Required. |
 | `prompt` | string  | Template rendered against `issue.*`. The branch agent runs at clone time, before any step. |
 | `schema` | object  | JSON Schema the agent's structured output must satisfy. Validated by the SDK; the orchestrator reads `name` from the result. |
 
@@ -216,17 +216,20 @@ A non-empty ordered array of step objects. Steps run sequentially.
 ```yaml
 steps:
   - name: implement
+    model: claude-sonnet-4-6
     prompt: |
       Work on {{ issue.key }}: {{ issue.title }}.
 ```
 
-| Field             | Type    | Default | Description |
-|-------------------|---------|---------|-------------|
-| `name`            | string  | —       | Identifier for the step. Letters, digits, underscores. Used in output references and event logs. |
-| `prompt`          | string  | —       | Prompt template, rendered against the [available variables](#template-language). |
-| `resume_previous` | boolean | `false` | When `true`, resume the previous step's Claude session instead of starting fresh. |
-| `output_schema`   | object  | —       | JSON Schema the step's structured output must satisfy. When set, the parsed output is stored under `steps.<name>.output`. |
-| `model`           | string  | inherits `defaults.model` | Override the model for this step. |
+| Field             | Type     | Default | Description |
+|-------------------|----------|---------|-------------|
+| `name`            | string   | —       | Identifier for the step. Letters, digits, underscores. Used in output references and event logs. |
+| `model`           | string   | —       | Claude model ID for this step. Required; every step picks its own model. |
+| `prompt`          | string   | —       | Prompt template, rendered against the [available variables](#template-language). |
+| `resume_previous` | boolean  | `false` | When `true`, resume the previous step's Claude session instead of starting fresh. |
+| `output_schema`   | object   | —       | JSON Schema the step's structured output must satisfy. When set, the parsed output is stored under `steps.<name>.output`. |
+| `allowed_tools`   | string[] | —       | Restrict the step to a specific set of Claude tool names (e.g. `[Read, Glob, Grep]` for a read-only summarisation step). When omitted, the step has full tool access. Must be non-empty if set. |
+| `measure_diff`    | boolean  | `false` | When `true`, the orchestrator records the step's git diff shortstat (files changed, insertions, deletions) as span attributes. Useful for telemetry on which steps actually write code. |
 
 #### Resuming a session
 
@@ -261,19 +264,24 @@ steps:
 
 Outputs are referenced as `{{ steps.<name>.output.<path> }}`. Object values are serialised with `JSON.stringify`; scalars are inserted directly.
 
-#### Per-step model
+#### Picking a model per step
 
 ```yaml
 steps:
   - name: implement
+    model: claude-sonnet-4-6
     prompt: ...
 
   - name: review
     model: claude-opus-4-7
     prompt: ...
+
+  - name: summarise
+    model: claude-haiku-4-5
+    prompt: ...
 ```
 
-Useful when you want a stronger model for a specific step (e.g. review or summarisation) while keeping the cheaper default elsewhere.
+Every step declares its own `model`. There is no workflow-wide default, so the cost and quality trade-off for each step has to be made explicitly in the workflow file itself.
 
 ### `change_request`
 
@@ -323,7 +331,9 @@ steps:
       </diff>
 ```
 
-A run fails immediately if any shell block exits non-zero, times out, is killed by a signal, fails to spawn, or overflows its output buffer.
+A run fails immediately if any shell block exits non-zero, times out, is killed by a signal, or fails to spawn.
+
+Outputs above 64 KiB are spilled to `.agent/shell-outputs/<step>-<n>.txt` in the workspace and the substituted text becomes a head/tail preview around a `... [truncated N bytes; full output at <path>] ...` marker. The agent can read the spill file directly if it needs the full output.
 
 Only blocks that exist in the raw workflow template are marked for execution. Issue fields, branch values, and step outputs interpolated through `{{ ... }}` are inert even if they contain `` !`...` `` syntax, so untrusted text cannot inject executable commands.
 
