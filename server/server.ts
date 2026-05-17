@@ -13,6 +13,7 @@ import { readLast24hStats } from "./db/stats-query.ts";
 import { env } from "./env.ts";
 import { createLogger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
+import { makeOrchestratorRuntime } from "./orchestrator/runtime.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
 import { shutdownOtel } from "./telemetry/otel.ts";
@@ -55,6 +56,8 @@ const runner = createRunner({
 const workflowRuntime = makeWorkflowRuntime();
 
 const workflow = await workflowRuntime.runPromise(loadWorkflow());
+
+const orchestratorRuntime = makeOrchestratorRuntime();
 
 const orchestrator = createOrchestrator({
 	runRepo: repo,
@@ -148,6 +151,7 @@ async function shutdown(signal: string) {
 		trackerRuntime.dispose(),
 		codeHostRuntime.dispose(),
 		workflowRuntime.dispose(),
+		orchestratorRuntime.dispose(),
 	]);
 	closeDb();
 	logger.info("shutdown.complete");

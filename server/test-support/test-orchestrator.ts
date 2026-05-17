@@ -1,6 +1,7 @@
 import { makeCodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { AgentInvoker } from "../orchestrator/agent-invoker.ts";
 import { createOrchestrator } from "../orchestrator/orchestrator.ts";
+import { makeOrchestratorRuntime } from "../orchestrator/runtime.ts";
 import { createRunRepository } from "../run-repository.ts";
 import { createRunner } from "../runner/runner.ts";
 import { makeTrackerRuntime } from "../trackers/runtime.ts";
@@ -44,6 +45,7 @@ export async function createTestOrchestrator(
 	const codeHost = createCodeHostStub();
 	const codeHostRuntime = makeCodeHostRuntime();
 	const workflowRuntime = makeWorkflowRuntime();
+	const orchestratorRuntime = makeOrchestratorRuntime();
 
 	const defaultBare = await workspace.setupRepoRemote(REPO);
 	codeHost.setCloneUrl(REPO, defaultBare);
@@ -95,6 +97,7 @@ export async function createTestOrchestrator(
 				trackerRuntime.dispose(),
 				codeHostRuntime.dispose(),
 				workflowRuntime.dispose(),
+				orchestratorRuntime.dispose(),
 			]);
 			await workspace[Symbol.asyncDispose]();
 		},
