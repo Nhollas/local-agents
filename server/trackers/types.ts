@@ -1,4 +1,6 @@
+import type { Effect } from "effect";
 import type { IssueKey, IssueNumber, RepoSlug } from "../types/brands.ts";
+import type { TrackerError } from "./errors.ts";
 
 export type Issue = {
 	key: IssueKey;
@@ -18,12 +20,17 @@ export type ActiveIssuesPage = {
 };
 
 export type TrackerAdapter = {
-	fetchActiveIssues(state: TrackerState): Promise<ActiveIssuesPage>;
+	fetchActiveIssues(
+		state: TrackerState,
+	): Effect.Effect<ActiveIssuesPage, TrackerError>;
 	transitionState(
 		repo: RepoSlug,
 		issueNumber: IssueNumber,
 		from: TrackerState,
 		to: TrackerState,
-	): Promise<void>;
-	markFailed(repo: RepoSlug, issueNumber: IssueNumber): Promise<void>;
+	): Effect.Effect<void, TrackerError>;
+	markFailed(
+		repo: RepoSlug,
+		issueNumber: IssueNumber,
+	): Effect.Effect<void, TrackerError>;
 };

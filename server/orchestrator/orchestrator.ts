@@ -6,6 +6,7 @@ import type { Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
+import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
@@ -30,6 +31,7 @@ const SKILLS_SOURCE_DIR = fileURLToPath(
 type OrchestratorConfig = {
 	runRepo: RunRepository;
 	tracker: TrackerAdapter;
+	trackerRuntime: TrackerRuntime;
 	codeHost: CodeHostAdapter;
 	config: Config;
 	workflow: RepoWorkflow;
@@ -84,6 +86,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	const {
 		runRepo,
 		tracker,
+		trackerRuntime,
 		codeHost,
 		config,
 		workflow,
@@ -118,6 +121,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		runner,
 		repo: runRepo,
 		tracker,
+		trackerRuntime,
 		codeHost,
 		agent,
 		clock,
@@ -142,7 +146,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 		let pending: Issue[];
 		try {
-			const result = await tracker.fetchActiveIssues("pending");
+			const result = await trackerRuntime.runPromise(
+				tracker.fetchActiveIssues("pending"),
+			);
 			pending = [...result.issues];
 		} catch (err) {
 			canonicalLog.append("warnings", {
@@ -179,7 +185,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				// push them back to "pending" so the next tick re-dispatches.
 				let runningIssues: readonly Issue[];
 				try {
-					const result = await tracker.fetchActiveIssues("running");
+					const result = await trackerRuntime.runPromise(
+						tracker.fetchActiveIssues("running"),
+					);
 					runningIssues = result.issues;
 				} catch (err) {
 					canonicalLog.append("warnings", {
@@ -192,11 +200,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 				const results = await Promise.allSettled(
 					runningIssues.map((issue) =>
-						tracker.transitionState(
-							issue.repo,
-							issue.number,
-							"running",
-							"pending",
+						trackerRuntime.runPromise(
+							tracker.transitionState(
+								issue.repo,
+								issue.number,
+								"running",
+								"pending",
+							),
 						),
 					),
 				);
@@ -258,7 +268,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 			const { repo } = issue;
 			try {
-				await tracker.transitionState(repo, issue.number, "pending", "running");
+				await trackerRuntime.runPromise(
+					tracker.transitionState(repo, issue.number, "pending", "running"),
+				);
 			} catch (err) {
 				logTransitionFailed(repo, issue.number, "pending", "running", err);
 				continue;
@@ -273,8 +285,10 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 					issue_key: issue.key,
 					error: err instanceof Error ? err.message : String(err),
 				});
-				await tracker
-					.transitionState(repo, issue.number, "running", "pending")
+				await trackerRuntime
+					.runPromise(
+						tracker.transitionState(repo, issue.number, "running", "pending"),
+					)
 					.catch((rollbackErr) => {
 						logTransitionFailed(
 							repo,

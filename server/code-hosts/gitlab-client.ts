@@ -54,7 +54,7 @@ export function createGitLabClient(
 	token: string,
 	options: GitLabClientOptions = {},
 ): GitLabClient {
-	const baseUrl = trimTrailingSlash(options.baseUrl ?? DEFAULT_BASE_URL);
+	const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
 	const request = createJsonRequester({
 		...options,
 		baseUrl: `${baseUrl}/api/v4`,
@@ -102,10 +102,6 @@ export function createGitLabClient(
 }
 
 const DEFAULT_BASE_URL = "https://gitlab.com";
-
-function trimTrailingSlash(value: string): string {
-	return value.replace(/\/+$/, "");
-}
 
 function encodeProjectPath(projectPath: RepoSlug): string {
 	return encodeURIComponent(projectPath);

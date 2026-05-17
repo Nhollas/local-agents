@@ -1,5 +1,5 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
 	createJiraIssue,
 	JIRA_API,
@@ -8,8 +8,11 @@ import {
 } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
 import { issueNumber, type RepoSlug, repoSlug } from "../types/brands.ts";
-import { jiraTrackerAdapter } from "./jira.ts";
-import { createJiraClient } from "./jira-client.ts";
+import { createJiraTracker, type JiraTrackerOptions } from "./jira-tracker.ts";
+import { makeTrackerRuntime } from "./runtime.ts";
+
+const runtime = makeTrackerRuntime();
+afterAll(() => runtime.dispose());
 
 const statuses = {
 	pending: "To Do",
@@ -17,25 +20,32 @@ const statuses = {
 	awaiting_review: "In Review",
 } as const;
 
-function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
-	return jiraTrackerAdapter(
-		createJiraClient({
-			baseUrl: JIRA_BASE_URL,
-			email: "agent@example.test",
-			apiToken: "jira-token",
-			maxAttempts: 1,
-		}),
-		{
-			project: "PROJ",
-			scopes,
-			baseUrl: JIRA_BASE_URL,
-			statuses,
-			triggerLabel: "agent",
-		},
-	);
+async function makeTracker(options: JiraTrackerOptions) {
+	const adapter = await runtime.runPromise(createJiraTracker(options));
+	return {
+		fetchActiveIssues: (
+			...args: Parameters<typeof adapter.fetchActiveIssues>
+		) => runtime.runPromise(adapter.fetchActiveIssues(...args)),
+		transitionState: (...args: Parameters<typeof adapter.transitionState>) =>
+			runtime.runPromise(adapter.transitionState(...args)),
+		markFailed: (...args: Parameters<typeof adapter.markFailed>) =>
+			runtime.runPromise(adapter.markFailed(...args)),
+	};
 }
 
-describe("jiraTrackerAdapter", () => {
+function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
+	return makeTracker({
+		project: "PROJ",
+		scopes,
+		baseUrl: JIRA_BASE_URL,
+		statuses,
+		triggerLabel: "agent",
+		email: "agent@example.test",
+		apiToken: "jira-token",
+	});
+}
+
+describe("createJiraTracker", () => {
 	describe("fetchActiveIssues", () => {
 		it("builds JQL constrained by project, status, trigger label, and the authenticated reporter", async () => {
 			const expectedFields = [
@@ -65,7 +75,7 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues.map((issue) => issue.key)).toEqual(["PROJ-1"]);
@@ -82,21 +92,15 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = jiraTrackerAdapter(
-				createJiraClient({
-					baseUrl: JIRA_BASE_URL,
-					email: "agent@example.test",
-					apiToken: "jira-token",
-					maxAttempts: 1,
-				}),
-				{
-					project: "PROJ",
-					scopes: [REPO],
-					baseUrl: JIRA_BASE_URL,
-					statuses,
-					triggerLabel: "local-agents",
-				},
-			);
+			const tracker = await makeTracker({
+				project: "PROJ",
+				scopes: [REPO],
+				baseUrl: JIRA_BASE_URL,
+				statuses,
+				triggerLabel: "local-agents",
+				email: "agent@example.test",
+				apiToken: "jira-token",
+			});
 			await tracker.fetchActiveIssues("pending");
 
 			expect(capturedJql).toBe(
@@ -118,7 +122,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues).toHaveLength(1);
@@ -136,7 +140,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues.map((i) => i.key)).toEqual(["PROJ-3"]);
@@ -152,7 +156,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues).toEqual([]);
@@ -171,7 +175,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues).toEqual([]);
@@ -192,7 +196,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker([REPO, REPO_B]);
+			const tracker = await createTracker([REPO, REPO_B]);
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues).toEqual([]);
@@ -212,7 +216,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker([repoSlug("test-owner")]);
+			const tracker = await createTracker([repoSlug("test-owner")]);
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues.map((i) => i.repo)).toEqual([childRepo]);
@@ -232,24 +236,18 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = jiraTrackerAdapter(
-				createJiraClient({
-					baseUrl: JIRA_BASE_URL,
-					email: "agent@example.test",
-					apiToken: "jira-token",
-					maxAttempts: 1,
-				}),
-				{
-					project: "PROJ",
-					scopes: [REPO],
-					baseUrl: JIRA_BASE_URL,
-					statuses: {
-						...statuses,
-						pending: 'Ready "Now" \\ Backlog',
-					},
-					triggerLabel: "agent",
+			const tracker = await makeTracker({
+				project: "PROJ",
+				scopes: [REPO],
+				baseUrl: JIRA_BASE_URL,
+				statuses: {
+					...statuses,
+					pending: 'Ready "Now" \\ Backlog',
 				},
-			);
+				triggerLabel: "agent",
+				email: "agent@example.test",
+				apiToken: "jira-token",
+			});
 
 			const { issues } = await tracker.fetchActiveIssues("pending");
 			expect(issues).toEqual([]);
@@ -282,7 +280,7 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 
 			await expect(
 				tracker.transitionState(
@@ -321,24 +319,18 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = jiraTrackerAdapter(
-				createJiraClient({
-					baseUrl: JIRA_BASE_URL,
-					email: "agent@example.test",
-					apiToken: "jira-token",
-					maxAttempts: 1,
-				}),
-				{
-					project: "PROJ",
-					scopes: [REPO],
-					baseUrl: JIRA_BASE_URL,
-					statuses: {
-						...statuses,
-						running: "IN PROGRESS",
-					},
-					triggerLabel: "agent",
+			const tracker = await makeTracker({
+				project: "PROJ",
+				scopes: [REPO],
+				baseUrl: JIRA_BASE_URL,
+				statuses: {
+					...statuses,
+					running: "IN PROGRESS",
 				},
-			);
+				triggerLabel: "agent",
+				email: "agent@example.test",
+				apiToken: "jira-token",
+			});
 
 			await expect(
 				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
@@ -382,7 +374,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 
 			await tracker.transitionState(
 				REPO,
@@ -429,7 +421,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 
 			await tracker.transitionState(
 				REPO,
@@ -465,7 +457,7 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 
 			await expect(
 				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
@@ -487,7 +479,7 @@ describe("jiraTrackerAdapter", () => {
 				),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 
 			await expect(
 				tracker.transitionState(
@@ -513,7 +505,7 @@ describe("jiraTrackerAdapter", () => {
 				}),
 			);
 
-			const tracker = createTracker();
+			const tracker = await createTracker();
 
 			await tracker.markFailed(REPO, issueNumber(42));
 

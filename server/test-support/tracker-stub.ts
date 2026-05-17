@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { JiraHttpError, type TrackerError } from "../trackers/errors.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "../trackers/types.ts";
 import {
 	type IssueNumber,
@@ -34,8 +36,8 @@ type TrackerStub = TrackerAdapter & {
 	readonly transitions: readonly TransitionRecord[];
 	readonly markedFailed: readonly FailedRecord[];
 	readonly fetchCalls: readonly TrackerState[];
-	failNextFetchActiveIssues(error?: Error): void;
-	failNextTransition(error?: Error): void;
+	failNextFetchActiveIssues(error?: TrackerError): void;
+	failNextTransition(error?: TrackerError): void;
 };
 
 export function createTrackerStub(
@@ -50,8 +52,8 @@ export function createTrackerStub(
 	const transitions: TransitionRecord[] = [];
 	const markedFailed: FailedRecord[] = [];
 	const fetchCalls: TrackerState[] = [];
-	let nextFetchError: Error | null = null;
-	let nextTransitionError: Error | null = null;
+	let nextFetchError: TrackerError | null = null;
+	let nextTransitionError: TrackerError | null = null;
 
 	function buildIssue(input: AddIssueInput): Issue {
 		const key = toIssueKey(`${project}-${input.number}`);
@@ -88,39 +90,55 @@ export function createTrackerStub(
 			return fetchCalls;
 		},
 
-		failNextFetchActiveIssues(error = new Error("tracker fetch failed")) {
+		failNextFetchActiveIssues(
+			error = new JiraHttpError({
+				message: "tracker fetch failed",
+				method: "POST",
+				url: "stub://fetch",
+			}),
+		) {
 			nextFetchError = error;
 		},
 
-		failNextTransition(error = new Error("tracker transition failed")) {
+		failNextTransition(
+			error = new JiraHttpError({
+				message: "tracker transition failed",
+				method: "POST",
+				url: "stub://transition",
+			}),
+		) {
 			nextTransitionError = error;
 		},
 
-		async fetchActiveIssues(state) {
-			fetchCalls.push(state);
-			if (nextFetchError) {
-				const e = nextFetchError;
-				nextFetchError = null;
-				throw e;
-			}
-			return {
-				issues: [...active[state]].sort((a, b) =>
-					a.createdAt.localeCompare(b.createdAt),
-				),
-			};
-		},
+		fetchActiveIssues: (state) =>
+			Effect.suspend(() => {
+				fetchCalls.push(state);
+				if (nextFetchError) {
+					const e = nextFetchError;
+					nextFetchError = null;
+					return Effect.fail(e);
+				}
+				return Effect.succeed({
+					issues: [...active[state]].sort((a, b) =>
+						a.createdAt.localeCompare(b.createdAt),
+					),
+				});
+			}),
 
-		async transitionState(repo, number, from, to) {
-			if (nextTransitionError) {
-				const e = nextTransitionError;
-				nextTransitionError = null;
-				throw e;
-			}
-			transitions.push({ repo, number, from, to });
-		},
+		transitionState: (repo, number, from, to) =>
+			Effect.suspend(() => {
+				if (nextTransitionError) {
+					const e = nextTransitionError;
+					nextTransitionError = null;
+					return Effect.fail(e);
+				}
+				transitions.push({ repo, number, from, to });
+				return Effect.void;
+			}),
 
-		async markFailed(repo, number) {
-			markedFailed.push({ repo, number });
-		},
+		markFailed: (repo, number) =>
+			Effect.sync(() => {
+				markedFailed.push({ repo, number });
+			}),
 	};
 }

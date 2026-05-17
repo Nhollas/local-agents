@@ -1,159 +1,238 @@
-import { z } from "zod";
-import { createJsonRequester, type HttpClientOptions } from "../http-client.ts";
+import {
+	HttpClient,
+	HttpClientRequest,
+	HttpClientResponse,
+} from "@effect/platform";
+import { Duration, Effect, Schedule, type Schema } from "effect";
+import { makeHttpInstrument } from "../http/instrument.ts";
+import { JiraHttpError, JiraParseError } from "./errors.ts";
+import {
+	JiraIssueSchema,
+	JiraMyselfSchema,
+	JiraSearchSchema,
+	JiraTransitionsSchema,
+} from "./schemas.ts";
 
-const jiraIssueSchema = z.object({
-	key: z.string(),
-	fields: z.object({
-		summary: z.string(),
-		description: z.string().nullable().optional(),
-		created: z.string(),
-		labels: z.array(z.string()),
-		status: z.object({
-			name: z.string(),
-		}),
-	}),
-});
+export type JiraClientOptions = {
+	readonly baseUrl: string;
+	readonly email: string;
+	readonly apiToken: string;
+};
 
-const jiraSearchSchema = z.object({
-	issues: z.array(jiraIssueSchema),
-});
+export const makeJiraClient = (options: JiraClientOptions) =>
+	Effect.gen(function* () {
+		const apiBase = `${options.baseUrl}/rest/api/2`;
+		const authHeader = `Basic ${basicAuth(options.email, options.apiToken)}`;
+		const requestTimeout = Duration.millis(DEFAULT_TIMEOUT_MS);
+		const instrument = makeHttpInstrument({ service: "jira" });
 
-const jiraTransitionsSchema = z.object({
-	transitions: z.array(
-		z.object({
-			id: z.string(),
-			name: z.string(),
-			to: z.object({
-				name: z.string(),
+		const defaultClient = yield* HttpClient.HttpClient;
+		const client = defaultClient.pipe(
+			HttpClient.mapRequest((req) =>
+				req.pipe(
+					HttpClientRequest.setHeader("Authorization", authHeader),
+					HttpClientRequest.acceptJson,
+				),
+			),
+			HttpClient.filterStatusOk,
+			HttpClient.retryTransient({
+				times: DEFAULT_MAX_ATTEMPTS - 1,
+				schedule: Schedule.exponential(Duration.millis(DEFAULT_BASE_DELAY_MS)),
 			}),
-		}),
-	),
-});
+		);
 
-const jiraMyselfSchema = z.object({
-	accountId: z.string(),
-});
+		const httpErrorTags = () => ({
+			ResponseError: (e: {
+				request: { method: string; url: string };
+				response: { status: number };
+				message: string;
+			}) =>
+				Effect.fail(
+					new JiraHttpError({
+						message: e.message,
+						method: e.request.method,
+						url: e.request.url,
+						status: e.response.status,
+						cause: e,
+					}),
+				),
+			RequestError: (e: {
+				request: { method: string; url: string };
+				message: string;
+			}) =>
+				Effect.fail(
+					new JiraHttpError({
+						message: e.message,
+						method: e.request.method,
+						url: e.request.url,
+						cause: e,
+					}),
+				),
+		});
 
-export type JiraIssue = z.infer<typeof jiraIssueSchema>;
+		const timeoutFail = (request: HttpClientRequest.HttpClientRequest) =>
+			Effect.timeoutFail({
+				duration: requestTimeout,
+				onTimeout: () =>
+					new JiraHttpError({
+						message: "request timed out",
+						method: request.method,
+						url: request.url,
+					}),
+			});
 
-export type JiraTransition = z.infer<
-	typeof jiraTransitionsSchema
->["transitions"][number];
+		const execute = (
+			endpoint: string,
+			request: HttpClientRequest.HttpClientRequest,
+		): Effect.Effect<HttpClientResponse.HttpClientResponse, JiraHttpError> =>
+			instrument(
+				endpoint,
+				request,
+				client
+					.execute(request)
+					.pipe(timeoutFail(request), Effect.catchTags(httpErrorTags())),
+			);
 
-type JiraMyself = z.infer<typeof jiraMyselfSchema>;
+		const executeJson = <A, I>(
+			endpoint: string,
+			request: HttpClientRequest.HttpClientRequest,
+			schema: Schema.Schema<A, I>,
+		): Effect.Effect<A, JiraHttpError | JiraParseError> =>
+			instrument(
+				endpoint,
+				request,
+				client.execute(request).pipe(
+					timeoutFail(request),
+					Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
+					Effect.catchTags({
+						...httpErrorTags(),
+						ParseError: (e) =>
+							Effect.fail(
+								new JiraParseError({
+									message: e.message,
+									method: request.method,
+									url: request.url,
+									cause: e,
+								}),
+							),
+					}),
+				),
+			);
 
-export type JiraClient = {
-	getIssue(key: string): Promise<JiraIssue>;
-	searchIssues(params: {
-		jql: string;
-		maxResults?: number;
-	}): Promise<JiraIssue[]>;
-	listTransitions(key: string): Promise<JiraTransition[]>;
-	transitionIssue(key: string, transitionId: string): Promise<void>;
-	updateLabels(
-		key: string,
-		changes: { add?: string[]; remove?: string[] },
-	): Promise<void>;
-	getMyself(): Promise<JiraMyself>;
-	assignIssue(key: string, accountId: string): Promise<void>;
-};
+		return {
+			getIssue: (key: string) => {
+				const query = new URLSearchParams({ fields: ISSUE_FIELDS.join(",") });
+				return executeJson(
+					"getIssue",
+					HttpClientRequest.get(
+						`${apiBase}/issue/${encodeIssueKey(key)}?${query}`,
+					),
+					JiraIssueSchema,
+				).pipe(Effect.annotateLogs({ "jira.issue.key": key }));
+			},
 
-type JiraClientOptions = HttpClientOptions & {
-	baseUrl: string;
-	email: string;
-	apiToken: string;
-};
+			searchIssues: (params: {
+				readonly jql: string;
+				readonly maxResults?: number;
+			}) =>
+				executeJson(
+					"searchIssues",
+					HttpClientRequest.post(`${apiBase}/search/jql`).pipe(
+						HttpClientRequest.bodyUnsafeJson({
+							jql: params.jql,
+							maxResults: params.maxResults ?? DEFAULT_SEARCH_MAX_RESULTS,
+							fields: [...ISSUE_FIELDS],
+						}),
+					),
+					JiraSearchSchema,
+				).pipe(
+					Effect.map((result) => result.issues),
+					Effect.annotateLogs({ "jira.jql": params.jql }),
+				),
 
-export function createJiraClient(options: JiraClientOptions): JiraClient {
-	const baseUrl = trimTrailingSlash(options.baseUrl);
-	const request = createJsonRequester({
-		...options,
-		baseUrl: `${baseUrl}/rest/api/2`,
-		serviceName: "Jira",
-		headers: {
-			Authorization: `Basic ${basicAuth(options.email, options.apiToken)}`,
-			Accept: "application/json",
-		},
+			listTransitions: (key: string) =>
+				executeJson(
+					"listTransitions",
+					HttpClientRequest.get(
+						`${apiBase}/issue/${encodeIssueKey(key)}/transitions`,
+					),
+					JiraTransitionsSchema,
+				).pipe(
+					Effect.map((result) => result.transitions),
+					Effect.annotateLogs({ "jira.issue.key": key }),
+				),
+
+			transitionIssue: (key: string, transitionId: string) =>
+				execute(
+					"transitionIssue",
+					HttpClientRequest.post(
+						`${apiBase}/issue/${encodeIssueKey(key)}/transitions`,
+					).pipe(
+						HttpClientRequest.bodyUnsafeJson({
+							transition: { id: transitionId },
+						}),
+					),
+				).pipe(
+					Effect.asVoid,
+					Effect.annotateLogs({
+						"jira.issue.key": key,
+						"jira.transition.id": transitionId,
+					}),
+				),
+
+			updateLabels: (
+				key: string,
+				changes: {
+					readonly add?: readonly string[];
+					readonly remove?: readonly string[];
+				},
+			) => {
+				const ops: Array<{ add: string } | { remove: string }> = [
+					...(changes.add ?? []).map((label) => ({ add: label })),
+					...(changes.remove ?? []).map((label) => ({ remove: label })),
+				];
+				if (ops.length === 0) return Effect.void;
+				return execute(
+					"updateLabels",
+					HttpClientRequest.put(`${apiBase}/issue/${encodeIssueKey(key)}`).pipe(
+						HttpClientRequest.bodyUnsafeJson({ update: { labels: ops } }),
+					),
+				).pipe(
+					Effect.asVoid,
+					Effect.annotateLogs({
+						"jira.issue.key": key,
+						"jira.labels.add": (changes.add ?? []).join(","),
+						"jira.labels.remove": (changes.remove ?? []).join(","),
+					}),
+				);
+			},
+
+			getMyself: () =>
+				executeJson(
+					"getMyself",
+					HttpClientRequest.get(`${apiBase}/myself`),
+					JiraMyselfSchema,
+				),
+
+			assignIssue: (key: string, accountId: string) =>
+				execute(
+					"assignIssue",
+					HttpClientRequest.put(
+						`${apiBase}/issue/${encodeIssueKey(key)}/assignee`,
+					).pipe(HttpClientRequest.bodyUnsafeJson({ accountId })),
+				).pipe(
+					Effect.asVoid,
+					Effect.annotateLogs({
+						"jira.issue.key": key,
+						"jira.assignee.account_id": accountId,
+					}),
+				),
+		};
 	});
 
-	let myselfCache: Promise<JiraMyself> | null = null;
-
-	return {
-		getIssue(key: string) {
-			const query = new URLSearchParams({
-				fields: ISSUE_FIELDS.join(","),
-			});
-			return request(`/issue/${encodeIssueKey(key)}?${query}`, {
-				schema: jiraIssueSchema,
-			});
-		},
-
-		async searchIssues(params: { jql: string; maxResults?: number }) {
-			const result = await request("/search/jql", {
-				method: "POST",
-				body: {
-					jql: params.jql,
-					maxResults: params.maxResults ?? DEFAULT_SEARCH_MAX_RESULTS,
-					fields: [...ISSUE_FIELDS],
-				},
-				schema: jiraSearchSchema,
-			});
-			return result.issues;
-		},
-
-		async listTransitions(key: string) {
-			const result = await request(
-				`/issue/${encodeIssueKey(key)}/transitions`,
-				{
-					schema: jiraTransitionsSchema,
-				},
-			);
-			return result.transitions;
-		},
-
-		transitionIssue(key: string, transitionId: string) {
-			return request(`/issue/${encodeIssueKey(key)}/transitions`, {
-				method: "POST",
-				body: {
-					transition: {
-						id: transitionId,
-					},
-				},
-			});
-		},
-
-		async updateLabels(key, changes) {
-			const ops: Array<{ add: string } | { remove: string }> = [
-				...(changes.add ?? []).map((label) => ({ add: label })),
-				...(changes.remove ?? []).map((label) => ({ remove: label })),
-			];
-			if (ops.length === 0) return;
-			await request(`/issue/${encodeIssueKey(key)}`, {
-				method: "PUT",
-				body: { update: { labels: ops } },
-			});
-		},
-
-		getMyself() {
-			if (!myselfCache) {
-				myselfCache = request("/myself", { schema: jiraMyselfSchema }).catch(
-					(err) => {
-						myselfCache = null;
-						throw err;
-					},
-				);
-			}
-			return myselfCache;
-		},
-
-		assignIssue(key, accountId) {
-			return request(`/issue/${encodeIssueKey(key)}/assignee`, {
-				method: "PUT",
-				body: { accountId },
-			});
-		},
-	};
-}
+export type JiraClient = Effect.Effect.Success<
+	ReturnType<typeof makeJiraClient>
+>;
 
 const ISSUE_FIELDS = [
 	"summary",
@@ -163,10 +242,9 @@ const ISSUE_FIELDS = [
 	"labels",
 ] as const;
 const DEFAULT_SEARCH_MAX_RESULTS = 100;
-
-function trimTrailingSlash(value: string): string {
-	return value.replace(/\/+$/, "");
-}
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_BASE_DELAY_MS = 1_000;
 
 function encodeIssueKey(key: string): string {
 	return encodeURIComponent(key);

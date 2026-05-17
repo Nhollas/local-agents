@@ -2,6 +2,7 @@ import type { AgentInvoker } from "../orchestrator/agent-invoker.ts";
 import { createOrchestrator } from "../orchestrator/orchestrator.ts";
 import { createRunRepository } from "../run-repository.ts";
 import { createRunner } from "../runner/runner.ts";
+import { makeTrackerRuntime } from "../trackers/runtime.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { createCodeHostStub } from "./code-host-stub.ts";
 import {
@@ -37,6 +38,7 @@ export async function createTestOrchestrator(
 	});
 
 	const tracker = createTrackerStub();
+	const trackerRuntime = makeTrackerRuntime();
 	const codeHost = createCodeHostStub();
 
 	const defaultBare = await workspace.setupRepoRemote(REPO);
@@ -47,6 +49,7 @@ export async function createTestOrchestrator(
 	const orchestrator = createOrchestrator({
 		runRepo: repo,
 		tracker,
+		trackerRuntime,
 		codeHost,
 		config: createTestConfig({
 			workspace_root: workspace.root,
@@ -81,6 +84,7 @@ export async function createTestOrchestrator(
 				runner.kill(run.id);
 			}
 			await runner.queue.waitForIdle();
+			await trackerRuntime.dispose();
 			await workspace[Symbol.asyncDispose]();
 		},
 	};

@@ -10,6 +10,7 @@ import type {
 	RunResult,
 } from "../runner/runner.ts";
 import { runRunSpan } from "../telemetry/spans.ts";
+import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
@@ -43,6 +44,7 @@ type RunLifecycleDeps = {
 	runner: Runner;
 	repo: RunRepository;
 	tracker: TrackerAdapter;
+	trackerRuntime: TrackerRuntime;
 	codeHost: CodeHostAdapter;
 	agent: AgentInvoker;
 	clock: Clock;
@@ -76,6 +78,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		runner,
 		repo: runRepo,
 		tracker,
+		trackerRuntime,
 		codeHost,
 		agent,
 		clock,
@@ -384,11 +387,13 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		}
 
 		try {
-			await tracker.transitionState(
-				repo,
-				issue.number,
-				"running",
-				"awaiting_review",
+			await trackerRuntime.runPromise(
+				tracker.transitionState(
+					repo,
+					issue.number,
+					"running",
+					"awaiting_review",
+				),
 			);
 		} catch (err) {
 			return finalizeFailure("tracker_transition", err);
@@ -406,13 +411,15 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	}
 
 	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {
-		await tracker.markFailed(repo, issue.number).catch((err) => {
-			canonicalLog.append("warnings", {
-				kind: "mark_failed_failed",
-				issue: `${repo}#${issue.number}`,
-				error: formatExecError(err),
+		await trackerRuntime
+			.runPromise(tracker.markFailed(repo, issue.number))
+			.catch((err) => {
+				canonicalLog.append("warnings", {
+					kind: "mark_failed_failed",
+					issue: `${repo}#${issue.number}`,
+					error: formatExecError(err),
+				});
 			});
-		});
 	}
 
 	return { dispatch };

@@ -16,6 +16,7 @@ import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
 import { shutdownOtel } from "./telemetry/otel.ts";
 import { createTracker } from "./trackers/create-tracker.ts";
+import { makeTrackerRuntime } from "./trackers/runtime.ts";
 import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
 const config = loadConfig(env.CONFIG_PATH);
@@ -24,10 +25,14 @@ const logger = createLogger(env.LOG_LEVEL);
 const db = getDb();
 migrate(db);
 
-const tracker = createTracker(config.tracker, config.code_host.scopes, {
-	jiraEmail: env.JIRA_EMAIL,
-	jiraApiToken: env.JIRA_API_TOKEN,
-});
+const trackerRuntime = makeTrackerRuntime();
+
+const tracker = await trackerRuntime.runPromise(
+	createTracker(config.tracker, config.code_host.scopes, {
+		jiraEmail: env.JIRA_EMAIL,
+		jiraApiToken: env.JIRA_API_TOKEN,
+	}),
+);
 
 const codeHost = createCodeHost(config.code_host, {
 	gitlab: env.GITLAB_TOKEN,
@@ -46,6 +51,7 @@ const workflow = loadWorkflow();
 const orchestrator = createOrchestrator({
 	runRepo: repo,
 	tracker,
+	trackerRuntime,
 	codeHost,
 	config,
 	workflow,
@@ -127,6 +133,7 @@ async function shutdown(signal: string) {
 	}
 
 	await shutdownOtel();
+	await trackerRuntime.dispose();
 	closeDb();
 	logger.info("shutdown.complete");
 	process.exit(drainResult === "timeout" ? 1 : 0);
