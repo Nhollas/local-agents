@@ -68,7 +68,7 @@ describe("GET /events", () => {
 				handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 			});
 
-			await runner.queue.waitForIdle();
+			await runner.waitForIdle();
 
 			let collected = "";
 			for (let i = 0; i < 20; i++) {
@@ -94,7 +94,7 @@ describe("GET /events", () => {
 	it("replays only events with seq > Last-Event-ID's seq on reconnect", async () => {
 		const { app, runner } = createTestApi();
 
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: repoSlug("test/repo"),
 			issueKey: issueKey("test/repo#100"),
 			issueTitle: "Replay test",

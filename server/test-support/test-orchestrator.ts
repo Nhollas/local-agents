@@ -89,10 +89,13 @@ export async function createTestOrchestrator(
 			for (const run of repo.getRunningSnapshot()) {
 				runner.kill(run.id);
 			}
-			await runner.queue.waitForIdle();
-			await trackerRuntime.dispose();
-			await codeHostRuntime.dispose();
-			await workflowRuntime.dispose();
+			await runner.waitForIdle();
+			await Promise.all([
+				runner.dispose(),
+				trackerRuntime.dispose(),
+				codeHostRuntime.dispose(),
+				workflowRuntime.dispose(),
+			]);
 			await workspace[Symbol.asyncDispose]();
 		},
 	};

@@ -286,7 +286,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 			try {
 				const handle = await lifecycle.dispatch({ issue, repo, workflow });
-				trackPostRun(handle.done);
+				trackPostRun(handle.result);
 			} catch (err) {
 				canonicalLog.append("warnings", {
 					kind: "dispatch_failed",

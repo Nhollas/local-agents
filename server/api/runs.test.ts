@@ -429,7 +429,7 @@ describe("GET /runs/:id/events", () => {
 
 	it("returns events ordered oldest → newest with monotonic seq", async () => {
 		const { app, runner } = createTestApi();
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: repoSlug("test/repo"),
 			issueKey: issueKey("test/repo#1"),
 			issueTitle: "Event ordering",
@@ -471,7 +471,7 @@ describe("GET /runs/:id/events", () => {
 
 	it("filters events by since cursor (strictly greater seq)", async () => {
 		const { app, runner } = createTestApi();
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: repoSlug("test/repo"),
 			issueKey: issueKey("test/repo#2"),
 			issueTitle: "Since cursor",

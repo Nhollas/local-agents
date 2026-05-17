@@ -152,7 +152,7 @@ describe("Orchestrator scheduling", () => {
 		codeHost.setCloneUrl(REPO, "/nonexistent/repo.git");
 
 		await orchestrator.tick();
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 		await orchestrator.settled();
 
 		const allRuns = db.select().from(runs).all();

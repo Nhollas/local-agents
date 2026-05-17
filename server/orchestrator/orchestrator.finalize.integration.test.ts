@@ -50,7 +50,7 @@ describe("Orchestrator success-path finalization", () => {
 		tracker.addIssue("pending", { number: 11, repo: REPO });
 
 		await orchestrator.tick();
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 		await orchestrator.settled();
 
 		const remoteBranches = await listRemoteBranches(
@@ -75,7 +75,7 @@ describe("Orchestrator success-path finalization", () => {
 		tracker.addIssue("pending", { number: 12, repo: REPO });
 
 		await orchestrator.tick();
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 		await orchestrator.settled();
 
 		expect(codeHost.changeRequests).toEqual([]);
@@ -93,7 +93,7 @@ describe("Orchestrator success-path finalization", () => {
 		ctx.tracker.addIssue("pending", { number: 13, repo: REPO });
 
 		await orchestrator.tick();
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 		await orchestrator.settled();
 
 		const [run] = runRepo.getRuns({ limit: 1 });

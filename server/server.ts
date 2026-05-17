@@ -143,9 +143,12 @@ async function shutdown(signal: string) {
 	}
 
 	await shutdownOtel();
-	await trackerRuntime.dispose();
-	await codeHostRuntime.dispose();
-	await workflowRuntime.dispose();
+	await Promise.all([
+		runner.dispose(),
+		trackerRuntime.dispose(),
+		codeHostRuntime.dispose(),
+		workflowRuntime.dispose(),
+	]);
 	closeDb();
 	logger.info("shutdown.complete");
 	process.exit(drainResult === "timeout" ? 1 : 0);

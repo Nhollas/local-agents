@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../db/db.ts";
 import { createRunRepository, type RunRepository } from "../run-repository.ts";
 import { createTestDb, getEvents, getRun } from "../test-support/test-db.ts";
@@ -7,7 +7,12 @@ import {
 	runId as rid,
 	repoSlug as rs,
 } from "../types/brands.ts";
-import { ABORT_ERROR, createRunner, type RunResult } from "./runner.ts";
+import {
+	ABORT_ERROR,
+	createRunner,
+	type Runner,
+	type RunResult,
+} from "./runner.ts";
 
 /** Helper: a handler that completes immediately. */
 const completedHandler = async (): Promise<RunResult> => ({
@@ -42,15 +47,28 @@ const baseRunRow = {
 describe("Runner integration", () => {
 	let db: Db;
 	let repo: RunRepository;
+	const runners: Runner[] = [];
+	const makeRunner = (opts: { maxConcurrency?: number } = {}): Runner => {
+		const runner = createRunner({ repo, ...opts });
+		runners.push(runner);
+		return runner;
+	};
 
 	beforeEach(() => {
 		db = createTestDb();
 		repo = createRunRepository(db);
 	});
 
+	afterEach(async () => {
+		await Promise.all(runners.splice(0).map((r) => r.dispose()));
+	});
+
 	it("records a running status when a job is enqueued", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 		let resolveHandler!: (result: RunResult) => void;
+		const handlerResult = new Promise<RunResult>((r) => {
+			resolveHandler = r;
+		});
 
 		const { runId } = runner.enqueue({
 			repo: rs("acme/widgets"),
@@ -58,10 +76,7 @@ describe("Runner integration", () => {
 			issueTitle: "Test issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
-			handler: () =>
-				new Promise((r) => {
-					resolveHandler = r;
-				}),
+			handler: () => handlerResult,
 		});
 
 		// DB insert is synchronous — status is already "running"
@@ -80,12 +95,15 @@ describe("Runner integration", () => {
 		});
 
 		resolveHandler({ status: "completed", durationMs: 0 });
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 	});
 
 	it("records a running status even when the queue is at capacity", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 		let resolveBlocker!: (result: RunResult) => void;
+		const blockerResult = new Promise<RunResult>((r) => {
+			resolveBlocker = r;
+		});
 
 		// Fill the single slot with a blocking job
 		runner.enqueue({
@@ -94,10 +112,7 @@ describe("Runner integration", () => {
 			issueTitle: "Blocker",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
-			handler: () =>
-				new Promise((r) => {
-					resolveBlocker = r;
-				}),
+			handler: () => blockerResult,
 		});
 
 		// Second job sits in the pending queue — not yet executing
@@ -109,8 +124,6 @@ describe("Runner integration", () => {
 			repoUrl: "https://code-host.example.test/acme/widgets",
 			handler: async () => ({ status: "completed" as const, durationMs: 0 }),
 		});
-
-		expect(runner.queue.pendingCount).toBe(1);
 
 		// DB record must exist even though the job hasn't started executing
 		const run = getRun(db, runId);
@@ -128,13 +141,13 @@ describe("Runner integration", () => {
 		});
 
 		resolveBlocker({ status: "completed", durationMs: 0 });
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 	});
 
 	it("marks run as completed with duration on success", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#2"),
 			issueTitle: "Fast issue",
@@ -165,9 +178,9 @@ describe("Runner integration", () => {
 	});
 
 	it("done promise never rejects", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
-		const { done } = runner.enqueue({
+		const { result: done } = runner.enqueue({
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#99"),
 			issueTitle: "Crash issue",
@@ -186,7 +199,7 @@ describe("Runner integration", () => {
 	});
 
 	it("persists lifecycle events in order", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			repo: rs("acme/widgets"),
@@ -197,7 +210,7 @@ describe("Runner integration", () => {
 			handler: completedHandler,
 		});
 
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 
 		const events = getEvents(db, runId);
 		expect(events).toEqual([
@@ -227,7 +240,7 @@ describe("Runner integration", () => {
 	});
 
 	it("persists failure events", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			repo: rs("acme/widgets"),
@@ -238,7 +251,7 @@ describe("Runner integration", () => {
 			handler: failedHandler("boom"),
 		});
 
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 
 		const events = getEvents(db, runId);
 		expect(events).toEqual([
@@ -267,7 +280,7 @@ describe("Runner integration", () => {
 	});
 
 	it("records typed tool events when ctx.emit is called", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
 			repo: rs("acme/widgets"),
@@ -295,7 +308,7 @@ describe("Runner integration", () => {
 			},
 		});
 
-		await runner.queue.waitForIdle();
+		await runner.waitForIdle();
 
 		const events = getEvents(db, runId);
 		expect(events).toEqual([
@@ -343,9 +356,9 @@ describe("Runner integration", () => {
 	});
 
 	it("flips in-flight tool:bash events to aborted on kill", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#8"),
 			issueTitle: "Killed mid-bash",
@@ -383,9 +396,9 @@ describe("Runner integration", () => {
 	});
 
 	it("flips in-flight tool:bash events to exited on normal completion", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#9"),
 			issueTitle: "Bash exits normally",
@@ -414,9 +427,9 @@ describe("Runner integration", () => {
 	});
 
 	it("aborts a running job when killed", async () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#7"),
 			issueTitle: "Killable issue",
@@ -451,15 +464,15 @@ describe("Runner integration", () => {
 	});
 
 	it("kill returns false for unknown runId", () => {
-		const runner = createRunner({ repo, maxConcurrency: 1 });
+		const runner = makeRunner({ maxConcurrency: 1 });
 
 		expect(runner.kill(rid("nonexistent-id"))).toBe(false);
 	});
 
 	it("uses default maxConcurrency when not specified", async () => {
-		const runner = createRunner({ repo });
+		const runner = makeRunner();
 
-		const { runId, done } = runner.enqueue({
+		const { runId, result: done } = runner.enqueue({
 			repo: rs("acme/widgets"),
 			issueKey: ik("acme/widgets#10"),
 			issueTitle: "Default concurrency",
