@@ -66,6 +66,7 @@ const orchestrator = createOrchestrator({
 	codeHost,
 	codeHostRuntime,
 	workflowRuntime,
+	orchestratorRuntime,
 	config,
 	workflow,
 	runner,

@@ -1,7 +1,7 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect } from "effect";
 import type { CodeHostError } from "./errors.ts";
-import { makeGitHubClient } from "./github-client.ts";
+import { githubClient } from "./github-client.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
 type GitHubAdapterOptions = {
@@ -13,7 +13,7 @@ export const createGitHubAdapter = (
 	options: GitHubAdapterOptions,
 ): Effect.Effect<CodeHostAdapter, never, HttpClient.HttpClient> =>
 	Effect.gen(function* () {
-		const client = yield* makeGitHubClient({ token: options.token });
+		const client = yield* githubClient({ token: options.token });
 		const cloneToken = options.cloneToken;
 
 		return {

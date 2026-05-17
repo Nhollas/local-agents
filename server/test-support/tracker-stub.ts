@@ -93,7 +93,6 @@ export function createTrackerStub(
 
 		failNextFetchActiveIssues(
 			error = new HttpServiceError({
-				service: "stub",
 				message: "tracker fetch failed",
 				method: "POST",
 				url: "stub://fetch",
@@ -104,7 +103,6 @@ export function createTrackerStub(
 
 		failNextTransition(
 			error = new HttpServiceError({
-				service: "stub",
 				message: "tracker transition failed",
 				method: "POST",
 				url: "stub://transition",

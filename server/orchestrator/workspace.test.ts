@@ -11,22 +11,39 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seedBareRepoMain } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
+import { makeOrchestratorRuntime } from "./runtime.ts";
 import {
 	createWorkspace,
 	installSkills,
 	pushBranch,
-	realRunShell,
 	removeWorkspace,
 	resolveWorkspaceEnvironment,
 	runRepoSetup,
 	sweepWorkspaces,
+	WorkspaceCommandError,
 } from "./workspace.ts";
 
 const exec = promisify(execFile);
+
+const runtime = makeOrchestratorRuntime();
+const run = <A, E>(
+	eff: Effect.Effect<
+		A,
+		E,
+		Parameters<typeof runtime.runPromise>[0] extends Effect.Effect<
+			unknown,
+			unknown,
+			infer R
+		>
+			? R
+			: never
+	>,
+): Promise<A> => runtime.runPromise(eff as never) as Promise<A>;
 
 function createIssue(num: number): Issue {
 	return {
@@ -55,6 +72,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
 	await rm(bareRepo, { recursive: true, force: true });
+	await runtime.dispose();
 });
 
 async function createWorkspaceRoot() {
@@ -75,7 +93,9 @@ describe("createWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(1);
 
-		const path = await createWorkspace(issue, ws.root, bareRepo, "run-abc");
+		const path = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-abc"),
+		);
 
 		expect(path).toBe(join(ws.root, "test-owner_test-repo_1-run-abc"));
 		await expect(access(join(path, ".git"))).resolves.toBeUndefined();
@@ -85,10 +105,12 @@ describe("createWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(2);
 
-		const first = await createWorkspace(issue, ws.root, bareRepo, "run-1");
+		const first = await run(createWorkspace(issue, ws.root, bareRepo, "run-1"));
 		await writeFile(join(first, "leftover.txt"), "from prior run");
 
-		const second = await createWorkspace(issue, ws.root, bareRepo, "run-2");
+		const second = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-2"),
+		);
 
 		expect(second).not.toBe(first);
 		await expect(access(join(second, "leftover.txt"))).rejects.toThrow();
@@ -100,7 +122,9 @@ describe("pushBranch", () => {
 	it("force-pushes the branch to origin so the remote tip matches local HEAD", async () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(7);
-		const wsPath = await createWorkspace(issue, ws.root, bareRepo, "run-7");
+		const wsPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-7"),
+		);
 		await exec("git", ["config", "user.email", "test@example.test"], {
 			cwd: wsPath,
 		});
@@ -110,7 +134,7 @@ describe("pushBranch", () => {
 			cwd: wsPath,
 		});
 
-		await pushBranch(wsPath, "agent/issue-7");
+		await run(pushBranch(wsPath, "agent/issue-7"));
 
 		const { stdout: localSha } = await exec("git", ["rev-parse", "HEAD"], {
 			cwd: wsPath,
@@ -126,7 +150,9 @@ describe("pushBranch", () => {
 	it("overwrites a divergent branch on the remote (re-run reuses the branch name)", async () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(8);
-		const firstPath = await createWorkspace(issue, ws.root, bareRepo, "run-a");
+		const firstPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-a"),
+		);
 		await exec("git", ["config", "user.email", "test@example.test"], {
 			cwd: firstPath,
 		});
@@ -135,12 +161,14 @@ describe("pushBranch", () => {
 		await exec("git", ["commit", "--allow-empty", "-m", "first attempt"], {
 			cwd: firstPath,
 		});
-		await pushBranch(firstPath, "agent/issue-8");
+		await run(pushBranch(firstPath, "agent/issue-8"));
 		const { stdout: firstSha } = await exec("git", ["rev-parse", "HEAD"], {
 			cwd: firstPath,
 		});
 
-		const secondPath = await createWorkspace(issue, ws.root, bareRepo, "run-b");
+		const secondPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-b"),
+		);
 		await exec("git", ["config", "user.email", "test@example.test"], {
 			cwd: secondPath,
 		});
@@ -149,7 +177,7 @@ describe("pushBranch", () => {
 		await exec("git", ["commit", "--allow-empty", "-m", "second attempt"], {
 			cwd: secondPath,
 		});
-		await pushBranch(secondPath, "agent/issue-8");
+		await run(pushBranch(secondPath, "agent/issue-8"));
 
 		const { stdout: secondSha } = await exec("git", ["rev-parse", "HEAD"], {
 			cwd: secondPath,
@@ -163,10 +191,12 @@ describe("pushBranch", () => {
 		expect(remoteSha.trim()).toBe(secondSha.trim());
 	});
 
-	it("rejects when the remote is unreachable", async () => {
+	it("fails with WorkspaceCommandError when the remote is unreachable", async () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(9);
-		const wsPath = await createWorkspace(issue, ws.root, bareRepo, "run-9");
+		const wsPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-9"),
+		);
 		await exec(
 			"git",
 			["remote", "set-url", "origin", "/nonexistent/path.git"],
@@ -174,7 +204,11 @@ describe("pushBranch", () => {
 		);
 		await exec("git", ["checkout", "-B", "agent/issue-9"], { cwd: wsPath });
 
-		await expect(pushBranch(wsPath, "agent/issue-9")).rejects.toThrow();
+		const err = await run(
+			pushBranch(wsPath, "agent/issue-9").pipe(Effect.flip),
+		);
+		expect(err).toBeInstanceOf(WorkspaceCommandError);
+		expect((err as WorkspaceCommandError).exitCode).not.toBe(0);
 	});
 });
 
@@ -183,9 +217,11 @@ describe("removeWorkspace", () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(4);
 
-		const wsPath = await createWorkspace(issue, ws.root, bareRepo, "run-4");
+		const wsPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-4"),
+		);
 
-		await removeWorkspace(wsPath);
+		await run(removeWorkspace(wsPath));
 		await expect(access(wsPath)).rejects.toThrow();
 	});
 });
@@ -204,7 +240,9 @@ describe("sweepWorkspaces", () => {
 		const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000);
 		await utimes(stale, eightDaysAgo, eightDaysAgo);
 
-		const result = await sweepWorkspaces(ws.root, 7 * 24 * 60 * 60 * 1000, now);
+		const result = await run(
+			sweepWorkspaces(ws.root, 7 * 24 * 60 * 60 * 1000, now),
+		);
 
 		expect(result.removed).toEqual([stale]);
 		await expect(access(stale)).rejects.toThrow();
@@ -217,7 +255,7 @@ describe("sweepWorkspaces", () => {
 			`ws-missing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 		);
 
-		const result = await sweepWorkspaces(path, 1000);
+		const result = await run(sweepWorkspaces(path, 1000));
 
 		expect(result.removed).toEqual([]);
 	});
@@ -248,30 +286,7 @@ async function writeSetupScript(wsPath: string, body: string) {
 }
 
 describe("runRepoSetup", () => {
-	it("invokes the script via the runShell when present", async () => {
-		await using ws = await withWorkspace();
-		await writeSetupScript(ws.path, "#!/usr/bin/env bash\necho hi\n");
-
-		const calls: {
-			script: string;
-			cwd: string;
-			env: Record<string, string>;
-		}[] = [];
-		const env = { PATH: "/bin", TOKEN: "secret" };
-		await runRepoSetup(
-			ws.path,
-			async (script, cwd, passedEnv) => {
-				calls.push({ script, cwd, env: passedEnv });
-			},
-			env,
-		);
-
-		expect(calls).toEqual([
-			{ script: "bash .agent/setup.sh", cwd: ws.path, env },
-		]);
-	});
-
-	it("realRunShell executes the script in the workspace and a non-zero exit rejects", async () => {
+	it("executes the setup script in the workspace when present", async () => {
 		await using ws = await withWorkspace();
 		await writeSetupScript(
 			ws.path,
@@ -279,46 +294,30 @@ describe("runRepoSetup", () => {
 		);
 
 		const realEnv = { PATH: process.env["PATH"] ?? "" };
-		await runRepoSetup(ws.path, realRunShell, realEnv);
+		const ran = await run(runRepoSetup(ws.path, realEnv));
 
+		expect(ran).toBe(true);
 		await expect(
 			access(join(ws.path, "setup_output")),
 		).resolves.toBeUndefined();
+	});
 
+	it("fails with WorkspaceCommandError when the setup script exits non-zero", async () => {
+		await using ws = await withWorkspace();
 		await writeSetupScript(ws.path, "#!/usr/bin/env bash\nexit 1\n");
-		await expect(
-			runRepoSetup(ws.path, realRunShell, realEnv),
-		).rejects.toThrow();
+
+		const realEnv = { PATH: process.env["PATH"] ?? "" };
+		const err = await run(runRepoSetup(ws.path, realEnv).pipe(Effect.flip));
+		expect(err).toBeInstanceOf(WorkspaceCommandError);
+		expect((err as WorkspaceCommandError).exitCode).toBe(1);
 	});
 
 	it("is a no-op when the script is absent", async () => {
 		await using ws = await withWorkspace();
-		const calls: { script: string; cwd: string }[] = [];
 
-		await runRepoSetup(
-			ws.path,
-			async (script, cwd) => {
-				calls.push({ script, cwd });
-			},
-			{},
-		);
+		const ran = await run(runRepoSetup(ws.path, {}));
 
-		expect(calls).toEqual([]);
-	});
-
-	it("rethrows when the runShell rejects", async () => {
-		await using ws = await withWorkspace();
-		await writeSetupScript(ws.path, "#!/usr/bin/env bash\nexit 1\n");
-
-		await expect(
-			runRepoSetup(
-				ws.path,
-				async () => {
-					throw new Error("setup.sh exit 1");
-				},
-				{},
-			),
-		).rejects.toThrow(/setup.sh exit 1/);
+		expect(ran).toBe(false);
 	});
 });
 
@@ -327,7 +326,7 @@ describe("resolveWorkspaceEnvironment", () => {
 		await using ws = await withWorkspace();
 		const baseEnv = { PATH: "/bin", TOKEN: "secret" };
 
-		const resolved = await resolveWorkspaceEnvironment(ws.path, baseEnv);
+		const resolved = await run(resolveWorkspaceEnvironment(ws.path, baseEnv));
 
 		expect(resolved).toBe(baseEnv);
 	});
@@ -360,10 +359,12 @@ describe("resolveWorkspaceEnvironment", () => {
 		);
 		await chmod(fnmPath, 0o755);
 
-		const resolved = await resolveWorkspaceEnvironment(ws.path, {
-			PATH: `${fakeToolBin}:${process.env["PATH"] ?? ""}`,
-			TOKEN: "secret",
-		});
+		const resolved = await run(
+			resolveWorkspaceEnvironment(ws.path, {
+				PATH: `${fakeToolBin}:${process.env["PATH"] ?? ""}`,
+				TOKEN: "secret",
+			}),
+		);
 
 		expect(resolved["PATH"]?.split(":")[0]).toBe(fakeNodeBin);
 		expect(resolved["TOKEN"]).toBe("secret");
@@ -373,9 +374,13 @@ describe("resolveWorkspaceEnvironment", () => {
 		await using ws = await withWorkspace();
 		await writeFile(join(ws.path, ".nvmrc"), "24.10.0\n");
 
-		await expect(
-			resolveWorkspaceEnvironment(ws.path, { PATH: "/bin" }),
-		).rejects.toThrow(/fnm is not available on PATH/);
+		const err = await run(
+			resolveWorkspaceEnvironment(ws.path, { PATH: "/bin" }).pipe(Effect.flip),
+		);
+		expect(err).toBeInstanceOf(WorkspaceCommandError);
+		expect((err as WorkspaceCommandError).stderr).toMatch(
+			/fnm is not available on PATH/,
+		);
 	});
 });
 
@@ -414,7 +419,9 @@ describe("installSkills", () => {
 			implement: "implement body",
 		});
 
-		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+		const result = await run(
+			installSkills(ws.path, src.path, TEST_RENDER_VARS),
+		);
 
 		expect(result.installed.sort()).toEqual(["implement", "review"]);
 		expect(result.skipped).toEqual([]);
@@ -438,7 +445,9 @@ describe("installSkills", () => {
 			implement: "LA implement",
 		});
 
-		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+		const result = await run(
+			installSkills(ws.path, src.path, TEST_RENDER_VARS),
+		);
 
 		expect(result.installed).toEqual(["implement"]);
 		expect(result.skipped).toEqual(["review"]);
@@ -454,7 +463,7 @@ describe("installSkills", () => {
 			`missing-skills-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 		);
 
-		const result = await installSkills(ws.path, missing, TEST_RENDER_VARS);
+		const result = await run(installSkills(ws.path, missing, TEST_RENDER_VARS));
 
 		expect(result).toEqual({ installed: [], skipped: [] });
 		await expect(access(join(ws.path, ".claude/skills"))).rejects.toThrow();
@@ -465,7 +474,9 @@ describe("installSkills", () => {
 		await using src = await makeSkillsSource({ review: "review" });
 		await writeFile(join(src.path, "README.md"), "not a skill");
 
-		const result = await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+		const result = await run(
+			installSkills(ws.path, src.path, TEST_RENDER_VARS),
+		);
 
 		expect(result.installed).toEqual(["review"]);
 	});
@@ -477,7 +488,7 @@ describe("installSkills", () => {
 				"<commits>\n!`git log origin/{{ base_branch }}..HEAD --oneline`\n</commits>\n\nIssue: {{ issue.key }}, Branch: {{ branch }}.",
 		});
 
-		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+		await run(installSkills(ws.path, src.path, TEST_RENDER_VARS));
 
 		const rendered = await readFile(
 			join(ws.path, ".claude/skills/advisor/SKILL.md"),
@@ -499,7 +510,7 @@ describe("installSkills", () => {
 			"detail for {{ branch }}",
 		);
 
-		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+		await run(installSkills(ws.path, src.path, TEST_RENDER_VARS));
 
 		await expect(
 			readFile(join(ws.path, ".claude/skills/review/SKILL.md"), "utf8"),
@@ -512,18 +523,15 @@ describe("installSkills", () => {
 	it("adds installed skills to .git/info/exclude so they stay out of git status", async () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(100);
-		const wsPath = await createWorkspace(
-			issue,
-			ws.root,
-			bareRepo,
-			"run-skills-exclude",
+		const wsPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-skills-exclude"),
 		);
 		await using src = await makeSkillsSource({
 			review: "review body",
 			implement: "implement body",
 		});
 
-		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+		await run(installSkills(wsPath, src.path, TEST_RENDER_VARS));
 
 		const { stdout: status } = await exec(
 			"git",
@@ -541,17 +549,14 @@ describe("installSkills", () => {
 	it("does not duplicate exclude entries on repeated installs", async () => {
 		await using ws = await createWorkspaceRoot();
 		const issue = createIssue(101);
-		const wsPath = await createWorkspace(
-			issue,
-			ws.root,
-			bareRepo,
-			"run-skills-idempotent",
+		const wsPath = await run(
+			createWorkspace(issue, ws.root, bareRepo, "run-skills-idempotent"),
 		);
 		await using src = await makeSkillsSource({ review: "review" });
 
-		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+		await run(installSkills(wsPath, src.path, TEST_RENDER_VARS));
 		await rm(join(wsPath, ".claude/skills/review"), { recursive: true });
-		await installSkills(wsPath, src.path, TEST_RENDER_VARS);
+		await run(installSkills(wsPath, src.path, TEST_RENDER_VARS));
 
 		const exclude = await readFile(join(wsPath, ".git/info/exclude"), "utf8");
 		const matches = exclude.match(/\.claude\/skills\/review\//g) ?? [];
@@ -568,7 +573,7 @@ describe("installSkills", () => {
 			"literal {{ base_branch }} stays",
 		);
 
-		await installSkills(ws.path, src.path, TEST_RENDER_VARS);
+		await run(installSkills(ws.path, src.path, TEST_RENDER_VARS));
 
 		await expect(
 			readFile(join(ws.path, ".claude/skills/advisor/SKILL.md"), "utf8"),

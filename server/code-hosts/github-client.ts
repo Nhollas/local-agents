@@ -1,6 +1,10 @@
 import { HttpClientRequest } from "@effect/platform";
 import { Effect } from "effect";
-import { makeServiceHttpClient } from "../http/service-client.ts";
+import type { HttpClientError } from "../http/errors.ts";
+import {
+	parseResponseBody,
+	platformHttpClient,
+} from "../http/platform-client.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import {
 	GitHubPullRequestSchema,
@@ -12,11 +16,13 @@ type GitHubClientOptions = {
 	readonly token: string;
 };
 
-export const makeGitHubClient = (options: GitHubClientOptions) =>
+export const githubClient = (options: GitHubClientOptions) =>
 	Effect.gen(function* () {
 		const authHeader = `Bearer ${options.token}`;
-		const { executeJson } = yield* makeServiceHttpClient({
+
+		const { http, instrument } = yield* platformHttpClient({
 			service: "github",
+			baseUrl: "https://api.github.com",
 			mapRequest: (req) =>
 				req.pipe(
 					HttpClientRequest.setHeader("Authorization", authHeader),
@@ -25,47 +31,59 @@ export const makeGitHubClient = (options: GitHubClientOptions) =>
 				),
 		});
 
-		return {
-			getRepo: (repo: RepoSlug) =>
-				executeJson(
-					"getRepo",
-					HttpClientRequest.get(`${BASE_URL}/repos/${repo}`),
-					GitHubRepoSchema,
-				).pipe(Effect.annotateLogs({ "code_host.repo": repo })),
+		const getRepo = (
+			repo: RepoSlug,
+		): Effect.Effect<{ default_branch: string }, HttpClientError> =>
+			http
+				.execute(HttpClientRequest.get(`/repos/${repo}`))
+				.pipe(
+					parseResponseBody(GitHubRepoSchema),
+					instrument("getRepo", { "code_host.repo": repo }),
+				);
 
-			listPullRequests: (
-				repo: RepoSlug,
-				params: { readonly head: string; readonly base: string },
-			) => {
-				const query = new URLSearchParams({
-					head: params.head,
-					base: params.base,
-					state: "open",
-				});
-				return executeJson(
-					"listPullRequests",
-					HttpClientRequest.get(`${BASE_URL}/repos/${repo}/pulls?${query}`),
-					GitHubPullRequestsSchema,
-				).pipe(Effect.annotateLogs({ "code_host.repo": repo }));
+		const listPullRequests = (
+			repo: RepoSlug,
+			params: { readonly head: string; readonly base: string },
+		): Effect.Effect<
+			ReadonlyArray<{ number: number; html_url: string }>,
+			HttpClientError
+		> => {
+			const query = new URLSearchParams({
+				head: params.head,
+				base: params.base,
+				state: "open",
+			});
+			return http
+				.execute(HttpClientRequest.get(`/repos/${repo}/pulls?${query}`))
+				.pipe(
+					parseResponseBody(GitHubPullRequestsSchema),
+					instrument("listPullRequests", { "code_host.repo": repo }),
+				);
+		};
+
+		const createPullRequest = (
+			repo: RepoSlug,
+			params: {
+				readonly title: string;
+				readonly body: string;
+				readonly head: string;
+				readonly base: string;
 			},
-
-			createPullRequest: (
-				repo: RepoSlug,
-				params: {
-					readonly title: string;
-					readonly body: string;
-					readonly head: string;
-					readonly base: string;
-				},
-			) =>
-				executeJson(
-					"createPullRequest",
-					HttpClientRequest.post(`${BASE_URL}/repos/${repo}/pulls`).pipe(
+		): Effect.Effect<{ number: number; html_url: string }, HttpClientError> =>
+			http
+				.execute(
+					HttpClientRequest.post(`/repos/${repo}/pulls`).pipe(
 						HttpClientRequest.bodyUnsafeJson(params),
 					),
-					GitHubPullRequestSchema,
-				).pipe(Effect.annotateLogs({ "code_host.repo": repo })),
+				)
+				.pipe(
+					parseResponseBody(GitHubPullRequestSchema),
+					instrument("createPullRequest", { "code_host.repo": repo }),
+				);
+
+		return {
+			getRepo,
+			listPullRequests,
+			createPullRequest,
 		};
 	});
-
-const BASE_URL = "https://api.github.com";

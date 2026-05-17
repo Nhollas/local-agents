@@ -1,7 +1,12 @@
 import { HttpClientRequest } from "@effect/platform";
 import { Effect } from "effect";
-import { makeServiceHttpClient } from "../http/service-client.ts";
+import type { HttpClientError } from "../http/errors.ts";
 import {
+	parseResponseBody,
+	platformHttpClient,
+} from "../http/platform-client.ts";
+import {
+	type JiraIssue,
 	JiraIssueSchema,
 	JiraMyselfSchema,
 	JiraSearchSchema,
@@ -14,13 +19,13 @@ type JiraClientOptions = {
 	readonly apiToken: string;
 };
 
-export const makeJiraClient = (options: JiraClientOptions) =>
+export const jiraClient = (options: JiraClientOptions) =>
 	Effect.gen(function* () {
-		const apiBase = `${options.baseUrl}/rest/api/2`;
 		const authHeader = `Basic ${basicAuth(options.email, options.apiToken)}`;
 
-		const { execute, executeJson } = yield* makeServiceHttpClient({
+		const { http, instrument } = yield* platformHttpClient({
 			service: "jira",
+			baseUrl: `${options.baseUrl}/rest/api/2`,
 			mapRequest: (req) =>
 				req.pipe(
 					HttpClientRequest.setHeader("Authorization", authHeader),
@@ -28,114 +33,144 @@ export const makeJiraClient = (options: JiraClientOptions) =>
 				),
 		});
 
-		return {
-			getIssue: (key: string) => {
-				const query = new URLSearchParams({ fields: ISSUE_FIELDS.join(",") });
-				return executeJson(
-					"getIssue",
-					HttpClientRequest.get(
-						`${apiBase}/issue/${encodeIssueKey(key)}?${query}`,
-					),
-					JiraIssueSchema,
-				).pipe(Effect.annotateLogs({ "jira.issue.key": key }));
-			},
+		const getIssue = (
+			key: string,
+		): Effect.Effect<JiraIssue, HttpClientError> => {
+			const query = new URLSearchParams({ fields: ISSUE_FIELDS.join(",") });
+			return http
+				.execute(
+					HttpClientRequest.get(`/issue/${encodeIssueKey(key)}?${query}`),
+				)
+				.pipe(
+					parseResponseBody(JiraIssueSchema),
+					instrument("getIssue", { "jira.issue.key": key }),
+				);
+		};
 
-			searchIssues: (params: {
-				readonly jql: string;
-				readonly maxResults?: number;
-			}) =>
-				executeJson(
-					"searchIssues",
-					HttpClientRequest.post(`${apiBase}/search/jql`).pipe(
+		const searchIssues = (params: {
+			readonly jql: string;
+			readonly maxResults?: number;
+		}): Effect.Effect<ReadonlyArray<JiraIssue>, HttpClientError> =>
+			http
+				.execute(
+					HttpClientRequest.post("/search/jql").pipe(
 						HttpClientRequest.bodyUnsafeJson({
 							jql: params.jql,
 							maxResults: params.maxResults ?? DEFAULT_SEARCH_MAX_RESULTS,
 							fields: [...ISSUE_FIELDS],
 						}),
 					),
-					JiraSearchSchema,
-				).pipe(
+				)
+				.pipe(
+					parseResponseBody(JiraSearchSchema),
 					Effect.map((result) => result.issues),
-					Effect.annotateLogs({ "jira.jql": params.jql }),
-				),
+					instrument("searchIssues", { "jira.jql": params.jql }),
+				);
 
-			listTransitions: (key: string) =>
-				executeJson(
-					"listTransitions",
-					HttpClientRequest.get(
-						`${apiBase}/issue/${encodeIssueKey(key)}/transitions`,
-					),
-					JiraTransitionsSchema,
-				).pipe(
+		const listTransitions = (
+			key: string,
+		): Effect.Effect<
+			ReadonlyArray<{
+				id: string;
+				name: string;
+				to: { name: string };
+			}>,
+			HttpClientError
+		> =>
+			http
+				.execute(
+					HttpClientRequest.get(`/issue/${encodeIssueKey(key)}/transitions`),
+				)
+				.pipe(
+					parseResponseBody(JiraTransitionsSchema),
 					Effect.map((result) => result.transitions),
-					Effect.annotateLogs({ "jira.issue.key": key }),
-				),
+					instrument("listTransitions", { "jira.issue.key": key }),
+				);
 
-			transitionIssue: (key: string, transitionId: string) =>
-				execute(
-					"transitionIssue",
+		const transitionIssue = (
+			key: string,
+			transitionId: string,
+		): Effect.Effect<void, HttpClientError> =>
+			http
+				.execute(
 					HttpClientRequest.post(
-						`${apiBase}/issue/${encodeIssueKey(key)}/transitions`,
+						`/issue/${encodeIssueKey(key)}/transitions`,
 					).pipe(
 						HttpClientRequest.bodyUnsafeJson({
 							transition: { id: transitionId },
 						}),
 					),
-				).pipe(
+				)
+				.pipe(
 					Effect.asVoid,
-					Effect.annotateLogs({
+					instrument("transitionIssue", {
 						"jira.issue.key": key,
 						"jira.transition.id": transitionId,
 					}),
-				),
+				);
 
-			updateLabels: (
-				key: string,
-				changes: {
-					readonly add?: readonly string[];
-					readonly remove?: readonly string[];
-				},
-			) => {
-				const ops: Array<{ add: string } | { remove: string }> = [
-					...(changes.add ?? []).map((label) => ({ add: label })),
-					...(changes.remove ?? []).map((label) => ({ remove: label })),
-				];
-				if (ops.length === 0) return Effect.void;
-				return execute(
-					"updateLabels",
-					HttpClientRequest.put(`${apiBase}/issue/${encodeIssueKey(key)}`).pipe(
+		const updateLabels = (
+			key: string,
+			changes: {
+				readonly add?: readonly string[];
+				readonly remove?: readonly string[];
+			},
+		): Effect.Effect<void, HttpClientError> => {
+			const ops: Array<{ add: string } | { remove: string }> = [
+				...(changes.add ?? []).map((label) => ({ add: label })),
+				...(changes.remove ?? []).map((label) => ({ remove: label })),
+			];
+			if (ops.length === 0) return Effect.void;
+			return http
+				.execute(
+					HttpClientRequest.put(`/issue/${encodeIssueKey(key)}`).pipe(
 						HttpClientRequest.bodyUnsafeJson({ update: { labels: ops } }),
 					),
-				).pipe(
+				)
+				.pipe(
 					Effect.asVoid,
-					Effect.annotateLogs({
+					instrument("updateLabels", {
 						"jira.issue.key": key,
 						"jira.labels.add": (changes.add ?? []).join(","),
 						"jira.labels.remove": (changes.remove ?? []).join(","),
 					}),
 				);
-			},
+		};
 
-			getMyself: () =>
-				executeJson(
-					"getMyself",
-					HttpClientRequest.get(`${apiBase}/myself`),
-					JiraMyselfSchema,
-				),
+		const getMyself = (): Effect.Effect<
+			{ accountId: string },
+			HttpClientError
+		> =>
+			http
+				.execute(HttpClientRequest.get("/myself"))
+				.pipe(parseResponseBody(JiraMyselfSchema), instrument("getMyself", {}));
 
-			assignIssue: (key: string, accountId: string) =>
-				execute(
-					"assignIssue",
-					HttpClientRequest.put(
-						`${apiBase}/issue/${encodeIssueKey(key)}/assignee`,
-					).pipe(HttpClientRequest.bodyUnsafeJson({ accountId })),
-				).pipe(
+		const assignIssue = (
+			key: string,
+			accountId: string,
+		): Effect.Effect<void, HttpClientError> =>
+			http
+				.execute(
+					HttpClientRequest.put(`/issue/${encodeIssueKey(key)}/assignee`).pipe(
+						HttpClientRequest.bodyUnsafeJson({ accountId }),
+					),
+				)
+				.pipe(
 					Effect.asVoid,
-					Effect.annotateLogs({
+					instrument("assignIssue", {
 						"jira.issue.key": key,
 						"jira.assignee.account_id": accountId,
 					}),
-				),
+				);
+
+		return {
+			getIssue,
+			searchIssues,
+			listTransitions,
+			transitionIssue,
+			updateLabels,
+			getMyself,
+			assignIssue,
 		};
 	});
 

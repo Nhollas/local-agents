@@ -1,7 +1,7 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect } from "effect";
 import type { CodeHostError } from "./errors.ts";
-import { makeGitLabClient } from "./gitlab-client.ts";
+import { gitlabClient } from "./gitlab-client.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
 export type GitLabAdapterOptions = {
@@ -14,7 +14,7 @@ export const createGitLabAdapter = (
 	options: GitLabAdapterOptions,
 ): Effect.Effect<CodeHostAdapter, never, HttpClient.HttpClient> =>
 	Effect.gen(function* () {
-		const client = yield* makeGitLabClient(
+		const client = yield* gitlabClient(
 			options.baseUrl !== undefined
 				? { token: options.token, baseUrl: options.baseUrl }
 				: { token: options.token },

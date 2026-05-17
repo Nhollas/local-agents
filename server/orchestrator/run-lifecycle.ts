@@ -1,3 +1,4 @@
+import { Cause, type Effect, Exit, Option } from "effect";
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
@@ -20,13 +21,13 @@ import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
 import { renderChangeRequest } from "./change-request-renderer.ts";
 import type { Clock } from "./clock.ts";
+import type { OrchestratorRuntime } from "./runtime.ts";
 import { runWorkflowSteps } from "./step-runner.ts";
 import {
 	createWorkspace,
 	ensureBranch,
 	installSkills,
 	pushBranch,
-	type RunShell,
 	removeWorkspace,
 	resolveWorkspaceEnvironment,
 	runRepoSetup,
@@ -50,9 +51,9 @@ type RunLifecycleDeps = {
 	codeHost: CodeHostAdapter;
 	codeHostRuntime: CodeHostRuntime;
 	workflowRuntime: WorkflowRuntime;
+	orchestratorRuntime: OrchestratorRuntime;
 	agent: AgentInvoker;
 	clock: Clock;
-	runShell: RunShell;
 	logger: Logger;
 	workspaceRoot: string;
 	skillsSourceDir: string;
@@ -86,9 +87,9 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		codeHost,
 		codeHostRuntime,
 		workflowRuntime,
+		orchestratorRuntime,
 		agent,
 		clock,
-		runShell,
 		logger,
 		workspaceRoot,
 		skillsSourceDir,
@@ -96,6 +97,19 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		langfuseHost,
 		langfuseProjectId,
 	} = deps;
+
+	type OrchR = Parameters<typeof orchestratorRuntime.runPromise>[0] extends
+		| Effect.Effect<unknown, unknown, infer R>
+		| infer _
+		? R
+		: never;
+	async function runOrch<A, E>(eff: Effect.Effect<A, E, OrchR>): Promise<A> {
+		const exit = await orchestratorRuntime.runPromiseExit(eff);
+		if (Exit.isSuccess(exit)) return exit.value;
+		const failure = Cause.failureOption(exit.cause);
+		if (Option.isSome(failure)) throw failure.value;
+		throw Cause.squash(exit.cause);
+	}
 
 	async function dispatch(req: RunRequest): Promise<RunHandle> {
 		const { issue, repo, workflow } = req;
@@ -147,11 +161,13 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 
 									let wsPath: string;
 									try {
-										wsPath = await createWorkspace(
-											issue,
-											workspaceRoot,
-											cloneUrl,
-											ctx.runId,
+										wsPath = await runOrch(
+											createWorkspace(
+												issue,
+												workspaceRoot,
+												cloneUrl,
+												ctx.runId,
+											),
 										);
 									} catch (err) {
 										const error =
@@ -206,13 +222,15 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 											},
 										});
 
-										await ensureBranch(wsPath, branch);
+										await runOrch(ensureBranch(wsPath, branch));
 
 										phase = "skills";
-										const skillsResult = await installSkills(
-											wsPath,
-											skillsSourceDir,
-											{ issue, branch, base_branch: baseBranch },
+										const skillsResult = await runOrch(
+											installSkills(wsPath, skillsSourceDir, {
+												issue,
+												branch,
+												base_branch: baseBranch,
+											}),
 										);
 										canonicalLog.set({
 											skills_installed: skillsResult.installed,
@@ -235,14 +253,11 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 										}
 
 										phase = "setup";
-										const workspaceEnv = await resolveWorkspaceEnvironment(
-											wsPath,
-											agentEnv,
+										const workspaceEnv = await runOrch(
+											resolveWorkspaceEnvironment(wsPath, agentEnv),
 										);
-										const repoSetupRan = await runRepoSetup(
-											wsPath,
-											runShell,
-											workspaceEnv,
+										const repoSetupRan = await runOrch(
+											runRepoSetup(wsPath, workspaceEnv),
 										);
 										canonicalLog.set({ repo_setup_ran: repoSetupRan });
 										if (repoSetupRan) {
@@ -327,7 +342,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 									// Keep the workspace on any failure so the run can be inspected;
 									// only fully successful runs (agent + push + change-request) clean up.
 									if (result.status === "completed") {
-										await removeWorkspace(wsPath);
+										await runOrch(removeWorkspace(wsPath));
 									} else {
 										await markIssueFailed(repo, issue);
 									}
@@ -355,7 +370,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	): Promise<FinalizeOutcome> {
 		// Pinned order per ADR 0001: push → change-request → tracker.
 		try {
-			await pushBranch(wsPath, branch);
+			await runOrch(pushBranch(wsPath, branch));
 		} catch (err) {
 			return finalizeFailure("push", err);
 		}

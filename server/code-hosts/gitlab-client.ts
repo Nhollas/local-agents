@@ -1,8 +1,10 @@
-import type { HttpClient } from "@effect/platform";
 import { HttpClientRequest } from "@effect/platform";
 import { Effect } from "effect";
 import type { HttpClientError } from "../http/errors.ts";
-import { makeServiceHttpClient } from "../http/service-client.ts";
+import {
+	parseResponseBody,
+	platformHttpClient,
+} from "../http/platform-client.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import {
 	GitLabMergeRequestSchema,
@@ -15,82 +17,81 @@ type GitLabClientOptions = {
 	readonly baseUrl?: string;
 };
 
-type GitLabClient = {
-	readonly baseUrl: string;
-	getProject(
-		repo: RepoSlug,
-	): Effect.Effect<{ default_branch: string }, HttpClientError>;
-	listMergeRequests(
-		repo: RepoSlug,
-		params: { readonly source_branch: string; readonly target_branch: string },
-	): Effect.Effect<
-		ReadonlyArray<{ iid: number; web_url: string }>,
-		HttpClientError
-	>;
-	createMergeRequest(
-		repo: RepoSlug,
-		params: {
-			readonly source_branch: string;
-			readonly target_branch: string;
-			readonly title: string;
-			readonly description: string;
-		},
-	): Effect.Effect<{ iid: number; web_url: string }, HttpClientError>;
-};
-
-export const makeGitLabClient = (
-	options: GitLabClientOptions,
-): Effect.Effect<GitLabClient, never, HttpClient.HttpClient> =>
+export const gitlabClient = (options: GitLabClientOptions) =>
 	Effect.gen(function* () {
-		const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
-		const apiBase = `${baseUrl}/api/v4`;
+		const baseUrl = options.baseUrl ?? "https://gitlab.com";
 
-		const { executeJson } = yield* makeServiceHttpClient({
+		const { http, instrument } = yield* platformHttpClient({
 			service: "gitlab",
+			baseUrl: `${baseUrl}/api/v4`,
 			mapRequest: (req) =>
 				req.pipe(HttpClientRequest.setHeader("PRIVATE-TOKEN", options.token)),
 		});
 
+		const getProject = (
+			repo: RepoSlug,
+		): Effect.Effect<{ default_branch: string }, HttpClientError> =>
+			http
+				.execute(HttpClientRequest.get(`/projects/${encodeProjectPath(repo)}`))
+				.pipe(
+					parseResponseBody(GitLabProjectSchema),
+					instrument("getProject", { "code_host.repo": repo }),
+				);
+
+		const listMergeRequests = (
+			repo: RepoSlug,
+			params: {
+				readonly source_branch: string;
+				readonly target_branch: string;
+			},
+		): Effect.Effect<
+			ReadonlyArray<{ iid: number; web_url: string }>,
+			HttpClientError
+		> => {
+			const query = new URLSearchParams({
+				source_branch: params.source_branch,
+				target_branch: params.target_branch,
+				state: "opened",
+			});
+			return http
+				.execute(
+					HttpClientRequest.get(
+						`/projects/${encodeProjectPath(repo)}/merge_requests?${query}`,
+					),
+				)
+				.pipe(
+					parseResponseBody(GitLabMergeRequestsSchema),
+					instrument("listMergeRequests", { "code_host.repo": repo }),
+				);
+		};
+
+		const createMergeRequest = (
+			repo: RepoSlug,
+			params: {
+				readonly source_branch: string;
+				readonly target_branch: string;
+				readonly title: string;
+				readonly description: string;
+			},
+		): Effect.Effect<{ iid: number; web_url: string }, HttpClientError> =>
+			http
+				.execute(
+					HttpClientRequest.post(
+						`/projects/${encodeProjectPath(repo)}/merge_requests`,
+					).pipe(HttpClientRequest.bodyUnsafeJson(params)),
+				)
+				.pipe(
+					parseResponseBody(GitLabMergeRequestSchema),
+					instrument("createMergeRequest", { "code_host.repo": repo }),
+				);
+
 		return {
 			baseUrl,
-
-			getProject: (repo) =>
-				executeJson(
-					"getProject",
-					HttpClientRequest.get(
-						`${apiBase}/projects/${encodeProjectPath(repo)}`,
-					),
-					GitLabProjectSchema,
-				).pipe(Effect.annotateLogs({ "code_host.repo": repo })),
-
-			listMergeRequests: (repo, params) => {
-				const query = new URLSearchParams({
-					source_branch: params.source_branch,
-					target_branch: params.target_branch,
-					state: "opened",
-				});
-				return executeJson(
-					"listMergeRequests",
-					HttpClientRequest.get(
-						`${apiBase}/projects/${encodeProjectPath(repo)}/merge_requests?${query}`,
-					),
-					GitLabMergeRequestsSchema,
-				).pipe(Effect.annotateLogs({ "code_host.repo": repo }));
-			},
-
-			createMergeRequest: (repo, params) =>
-				executeJson(
-					"createMergeRequest",
-					HttpClientRequest.post(
-						`${apiBase}/projects/${encodeProjectPath(repo)}/merge_requests`,
-					).pipe(HttpClientRequest.bodyUnsafeJson(params)),
-					GitLabMergeRequestSchema,
-				).pipe(Effect.annotateLogs({ "code_host.repo": repo })),
+			getProject,
+			listMergeRequests,
+			createMergeRequest,
 		};
 	});
 
-const DEFAULT_BASE_URL = "https://gitlab.com";
-
-function encodeProjectPath(projectPath: RepoSlug): string {
-	return encodeURIComponent(projectPath);
-}
+const encodeProjectPath = (projectPath: RepoSlug): string =>
+	encodeURIComponent(projectPath);

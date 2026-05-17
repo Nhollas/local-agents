@@ -37,7 +37,6 @@ export function createCodeHostStub(): CodeHostStub {
 		},
 		failNextChangeRequest(
 			error = new HttpServiceError({
-				service: "stub",
 				message: "code host change request failed",
 				method: "POST",
 				url: "https://code-host.example.test/stub",

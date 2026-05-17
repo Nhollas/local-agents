@@ -1,7 +1,6 @@
 import { Data } from "effect";
 
 export class HttpServiceError extends Data.TaggedError("HttpServiceError")<{
-	readonly service: string;
 	readonly message: string;
 	readonly method: string;
 	readonly url: string;
@@ -10,7 +9,6 @@ export class HttpServiceError extends Data.TaggedError("HttpServiceError")<{
 }> {}
 
 export class HttpParseError extends Data.TaggedError("HttpParseError")<{
-	readonly service: string;
 	readonly message: string;
 	readonly method: string;
 	readonly url: string;

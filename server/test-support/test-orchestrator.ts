@@ -59,6 +59,7 @@ export async function createTestOrchestrator(
 		codeHost,
 		codeHostRuntime,
 		workflowRuntime,
+		orchestratorRuntime,
 		config: createTestConfig({
 			workspace_root: workspace.root,
 			...options.configOverrides,

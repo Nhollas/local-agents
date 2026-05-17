@@ -2,7 +2,7 @@ import type { HttpClient } from "@effect/platform";
 import { Effect, Metric } from "effect";
 import { HttpServiceError } from "../http/errors.ts";
 import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
-import { makeJiraClient } from "./jira-client.ts";
+import { jiraClient } from "./jira-client.ts";
 import type { JiraIssue } from "./schemas.ts";
 import { resolveRepo } from "./scope-resolver.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
@@ -23,7 +23,7 @@ export const createJiraTracker = (
 	options: JiraTrackerOptions,
 ): Effect.Effect<TrackerAdapter, never, HttpClient.HttpClient> =>
 	Effect.gen(function* () {
-		const jira = yield* makeJiraClient(options);
+		const jira = yield* jiraClient(options);
 		const failedLabel = `${options.triggerLabel}-failed`;
 
 		function buildIssue(issue: JiraIssue, repo: RepoSlug): Issue {
@@ -118,7 +118,6 @@ export const createJiraTracker = (
 					if (!transition) {
 						return yield* Effect.fail(
 							new HttpServiceError({
-								service: "jira",
 								message: `No Jira transition for ${key} to status ${options.statuses[to]}`,
 								method: "POST",
 								url: `${options.baseUrl}/rest/api/2/issue/${key}/transitions`,

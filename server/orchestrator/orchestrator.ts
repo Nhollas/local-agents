@@ -20,7 +20,8 @@ import {
 } from "./agent-invoker.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import { createRunLifecycle } from "./run-lifecycle.ts";
-import { type RunShell, realRunShell, sweepWorkspaces } from "./workspace.ts";
+import type { OrchestratorRuntime } from "./runtime.ts";
+import { sweepWorkspaces } from "./workspace.ts";
 
 const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -37,6 +38,7 @@ type OrchestratorConfig = {
 	codeHost: CodeHostAdapter;
 	codeHostRuntime: CodeHostRuntime;
 	workflowRuntime: WorkflowRuntime;
+	orchestratorRuntime: OrchestratorRuntime;
 	config: Config;
 	workflow: RepoWorkflow;
 	runner: Runner;
@@ -44,7 +46,6 @@ type OrchestratorConfig = {
 	langfuse: LangfuseConfig;
 	agent?: AgentInvoker;
 	clock?: Clock;
-	runShell?: RunShell;
 };
 
 export type QueuedItem = {
@@ -94,13 +95,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		codeHost,
 		codeHostRuntime,
 		workflowRuntime,
+		orchestratorRuntime,
 		config,
 		workflow,
 		runner,
 		logger,
 		langfuse,
 		clock = systemClock(),
-		runShell = realRunShell,
 	} = opts;
 	const { defaults } = config;
 	const agentEnv = resolveAgentEnvironment(config.agent.env);
@@ -131,9 +132,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		codeHost,
 		codeHostRuntime,
 		workflowRuntime,
+		orchestratorRuntime,
 		agent,
 		clock,
-		runShell,
 		logger,
 		workspaceRoot: defaults.workspace_root,
 		skillsSourceDir: SKILLS_SOURCE_DIR,
@@ -355,17 +356,19 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 				{ interval: defaults.polling_interval_ms },
 				"orchestrator.starting",
 			);
-			sweepWorkspaces(defaults.workspace_root, WORKSPACE_TTL_MS).then(
-				(swept) => {
-					if (swept.removed.length > 0) {
-						logger.info(
-							{ count: swept.removed.length },
-							"orchestrator.workspaces_swept",
-						);
-					}
-				},
-				(err) => logger.warn({ err }, "orchestrator.workspace_sweep_failed"),
-			);
+			orchestratorRuntime
+				.runPromise(sweepWorkspaces(defaults.workspace_root, WORKSPACE_TTL_MS))
+				.then(
+					(swept) => {
+						if (swept.removed.length > 0) {
+							logger.info(
+								{ count: swept.removed.length },
+								"orchestrator.workspaces_swept",
+							);
+						}
+					},
+					(err) => logger.warn({ err }, "orchestrator.workspace_sweep_failed"),
+				);
 			void (async () => {
 				try {
 					await recover();
