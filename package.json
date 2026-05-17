@@ -5,7 +5,7 @@
 	"type": "module",
 	"packageManager": "pnpm@9.15.2",
 	"scripts": {
-		"prepare": "husky",
+		"prepare": "husky && effect-tsgo patch",
 		"start": "node server/server.ts",
 		"dev": "concurrently -k -n orchestrator,dashboard -c blue,magenta \"node --watch server/server.ts\" \"vite --config dashboard/vite.config.ts\"",
 		"lint": "biome check .",
@@ -15,7 +15,7 @@
 		"test:unit": "vitest run --project unit",
 		"test:integration": "vitest run --project integration",
 		"test:dashboard": "vitest run --project dashboard",
-		"typecheck": "tsc --noEmit && tsc --noEmit -p dashboard/tsconfig.json",
+		"typecheck": "tsgo --noEmit && tsgo --noEmit -p dashboard/tsconfig.json",
 		"knip": "knip",
 		"db:generate": "drizzle-kit generate",
 		"langfuse:up": "docker compose -f infra/langfuse/docker-compose.yml --env-file infra/langfuse/.env up -d",
@@ -81,6 +81,8 @@
 		"typescript": "^6.0.2",
 		"vite": "^8.0.7",
 		"vitest": "^4.1.3",
-		"vitest-browser-react": "^2.2.0"
+		"vitest-browser-react": "^2.2.0",
+		"@typescript/native-preview": "latest",
+		"@effect/tsgo": "0.7.2"
 	}
 }

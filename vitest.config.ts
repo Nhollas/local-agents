@@ -25,6 +25,7 @@ export default defineConfig({
 						"**/*.integration.test.ts",
 						"node_modules/**",
 						"dashboard/**",
+						"repos/**",
 					],
 				},
 			},
@@ -32,7 +33,7 @@ export default defineConfig({
 				test: {
 					name: "integration",
 					include: ["**/*.integration.test.ts"],
-					exclude: ["node_modules/**", "dashboard/**"],
+					exclude: ["node_modules/**", "dashboard/**", "repos/**"],
 					setupFiles: ["server/test-support/integration-setup.ts"],
 				},
 			},

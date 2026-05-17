@@ -29,6 +29,12 @@
 		"indentStyle": "tab"
 	},
 	"files": {
-		"includes": ["**/*.ts", "**/*.tsx", "**/*.json"]
+		"includes": [
+			"**/*.ts",
+			"**/*.tsx",
+			"**/*.json",
+			"!repos",
+			"!**/node_modules"
+		]
 	}
 }

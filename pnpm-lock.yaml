@@ -84,6 +84,9 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^21.0.1
         version: 21.0.1
+      '@effect/tsgo':
+        specifier: 0.7.2
+        version: 0.7.2
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -96,6 +99,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.14)
+      '@typescript/native-preview':
+        specifier: latest
+        version: 7.0.0-dev.20260517.1
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.1(vite@8.0.7(@types/node@25.5.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
@@ -376,6 +382,45 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
+
+  '@effect/tsgo-darwin-arm64@0.7.2':
+    resolution: {integrity: sha512-0cdsRVRarDKk+huPH71M0aDNs6WKTzZL8wMkLBKFLqqW9re4QHcduOc+pF7OSze1u/n+ksdP+h+GM6xP7aF7Bw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@effect/tsgo-darwin-x64@0.7.2':
+    resolution: {integrity: sha512-QpwhdZhZ/ZqFDejP9wu5zTm0CYSxsLqbSMUp7YvwBqKHucrM26nJTtn1kRby1+cBtHJHPEd8JyfHAuvTdM4/ZA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@effect/tsgo-linux-arm64@0.7.2':
+    resolution: {integrity: sha512-MB+LHRbPeFo8IvTSmu6GR3isrw5fllRNR/xJccjUgIfRcBet+bCJEhc12mwEAp6c0EizZ/+DMIxaSSrX5VxqyA==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@effect/tsgo-linux-arm@0.7.2':
+    resolution: {integrity: sha512-dmGBTShzcWY945Wu3Xj72Awgj5vgxR13W93PiwcAvYhZeRXWYQIkVlgAFfHQT9YspGC1R9lNnXVDILknN2BEzw==}
+    cpu: [arm]
+    os: [linux]
+
+  '@effect/tsgo-linux-x64@0.7.2':
+    resolution: {integrity: sha512-q/JSGD5BA1yd8/k9i94T/osiDGcMal8bvoEfrg4BfNOfPpxbpOg7jfP/MzzarqkYbLfco6+TBZomMpQabE16ZQ==}
+    cpu: [x64]
+    os: [linux]
+
+  '@effect/tsgo-win32-arm64@0.7.2':
+    resolution: {integrity: sha512-pUez9e/OfMSWI7EZuzJG/g+v+Cnz7n3rW4IHlZvSR3saSmN0UVNrRHebwL2fQnKbUk6l5MaZWM9NNS2ysmQYEw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@effect/tsgo-win32-x64@0.7.2':
+    resolution: {integrity: sha512-X1VIA/Y2buqKi1se3sgGlUTWFPTXCI0xR7fIOXe1D6FTDFFXWBmWCHvxeDuxWPnSewBVFM0mjOAQSIpTarxdow==}
+    cpu: [x64]
+    os: [win32]
+
+  '@effect/tsgo@0.7.2':
+    resolution: {integrity: sha512-ZTpfpJvn4IPykmCDsPQiZ4RvhCagQfuYL4zlIk77gSf5AyxmUYjrtDshHB2RK9fnEI8qyQ9abWVmVRkVwnjHyw==}
+    hasBin: true
 
   '@emnapi/core@1.9.1':
     resolution: {integrity: sha512-mukuNALVsoix/w1BJwFzwXBN/dHeejQtuVzcDsfOEsdpCumXb/E9j8w11h5S54tT1xhifGfbbSm/ICrObRb3KA==}
@@ -1558,6 +1603,53 @@ packages:
 
   '@types/statuses@2.0.6':
     resolution: {integrity: sha512-xMAgYwceFhRA2zY+XbEA7mxYbA093wdiW8Vu6gZPGWy9cmOyU9XesH1tNcEWsKFd5Vzrqx5T3D38PWx1FIIXkA==}
+
+  '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-YjoHUk4g7ayc8328Wt/JU9T+ChfOO1hNc5qGmkkygL4J4Q3/Wp+EqCNcFinYRSca0Yl5WdcVngd8xyGFeTlwUA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@typescript/native-preview-darwin-x64@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-E/xAkhVaWaoU/u5itoRc1WD8M+A/JPmNbb4SiBexTZDQ3h/5xWU0HRwq/drRiLjFlcm0e1i66MzB8tbc2icctQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@typescript/native-preview-linux-arm64@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-u+xY12IarGGRFXh7hbN/cxW5aYNdwa84mG0pyXglvThXT0rzzPGUEJdxVkNBo6UHqnc4FJihdcaioWpXBxQe9w==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@typescript/native-preview-linux-arm@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-CJZJ21rSBtBxmfebMh8K/kH+e3Z+s8hM2+4ud0ZesEBgkBjePBo6FR4/1IJl38i4OvYnpbZerANR0yCRytv/Pw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm]
+    os: [linux]
+
+  '@typescript/native-preview-linux-x64@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-yRnlMPugNitsW9lBBQVfy8NgeUrgenjspq2LKeYmaAlvw6uf1bkbSHw6hJeCpl1oh7kH+RAHUx0yzm/RlfFdKg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@typescript/native-preview-win32-arm64@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-fomiKzxtXrrasjJWbwaC8BGbzVQQv0VYVWijF0yKdXqxXjDRD01zT72Z1sjQGz0QJ19TVTVhJiNa7nI3wUaEsw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@typescript/native-preview-win32-x64@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-ekFca6XpdGIfLwqaRSm0GzYvI1COhoN+a62KeSwmaZN8EGWN/Rwrp/Tm9VjWGrdHSOLQFdEAGNibmp4bRB4HyA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@typescript/native-preview@7.0.0-dev.20260517.1':
+    resolution: {integrity: sha512-RSenvv0X4Uubpqyq9Z28xucCqpt5Gm/YaBs04b2Chps+qxYH+sRhYlLoiRkCx9x7Kxx6WLK3mjP+Xj6YNxHZjg==}
+    engines: {node: '>=16.20.0'}
+    hasBin: true
 
   '@vitejs/plugin-react@6.0.1':
     resolution: {integrity: sha512-l9X/E3cDb+xY3SWzlG1MOGt2usfEHGMNIaegaUGFsLkb3RCn/k8/TOXBcab+OndDI4TBtktT8/9BwwW8Vi9KUQ==}
@@ -3502,6 +3594,37 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
+  '@effect/tsgo-darwin-arm64@0.7.2':
+    optional: true
+
+  '@effect/tsgo-darwin-x64@0.7.2':
+    optional: true
+
+  '@effect/tsgo-linux-arm64@0.7.2':
+    optional: true
+
+  '@effect/tsgo-linux-arm@0.7.2':
+    optional: true
+
+  '@effect/tsgo-linux-x64@0.7.2':
+    optional: true
+
+  '@effect/tsgo-win32-arm64@0.7.2':
+    optional: true
+
+  '@effect/tsgo-win32-x64@0.7.2':
+    optional: true
+
+  '@effect/tsgo@0.7.2':
+    optionalDependencies:
+      '@effect/tsgo-darwin-arm64': 0.7.2
+      '@effect/tsgo-darwin-x64': 0.7.2
+      '@effect/tsgo-linux-arm': 0.7.2
+      '@effect/tsgo-linux-arm64': 0.7.2
+      '@effect/tsgo-linux-x64': 0.7.2
+      '@effect/tsgo-win32-arm64': 0.7.2
+      '@effect/tsgo-win32-x64': 0.7.2
+
   '@emnapi/core@1.9.1':
     dependencies:
       '@emnapi/wasi-threads': 1.2.0
@@ -4402,6 +4525,37 @@ snapshots:
   '@types/shimmer@1.2.0': {}
 
   '@types/statuses@2.0.6': {}
+
+  '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview-darwin-x64@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview-linux-arm64@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview-linux-arm@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview-linux-x64@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview-win32-arm64@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview-win32-x64@7.0.0-dev.20260517.1':
+    optional: true
+
+  '@typescript/native-preview@7.0.0-dev.20260517.1':
+    optionalDependencies:
+      '@typescript/native-preview-darwin-arm64': 7.0.0-dev.20260517.1
+      '@typescript/native-preview-darwin-x64': 7.0.0-dev.20260517.1
+      '@typescript/native-preview-linux-arm': 7.0.0-dev.20260517.1
+      '@typescript/native-preview-linux-arm64': 7.0.0-dev.20260517.1
+      '@typescript/native-preview-linux-x64': 7.0.0-dev.20260517.1
+      '@typescript/native-preview-win32-arm64': 7.0.0-dev.20260517.1
+      '@typescript/native-preview-win32-x64': 7.0.0-dev.20260517.1
 
   '@vitejs/plugin-react@6.0.1(vite@8.0.7(@types/node@25.5.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
