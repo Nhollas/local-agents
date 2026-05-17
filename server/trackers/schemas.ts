@@ -32,12 +32,11 @@ export const JiraSearchSchema = Schema.Struct({
 	issues: Schema.Array(JiraIssueSchema),
 });
 
-export const JiraTransitionSchema = Schema.Struct({
+const JiraTransitionSchema = Schema.Struct({
 	id: Schema.String,
 	name: Schema.String,
 	to: Schema.Struct({ name: Schema.String }),
 });
-export type JiraTransition = typeof JiraTransitionSchema.Type;
 
 export const JiraTransitionsSchema = Schema.Struct({
 	transitions: Schema.Array(JiraTransitionSchema),
@@ -46,4 +45,3 @@ export const JiraTransitionsSchema = Schema.Struct({
 export const JiraMyselfSchema = Schema.Struct({
 	accountId: Schema.String,
 });
-export type JiraMyself = typeof JiraMyselfSchema.Type;

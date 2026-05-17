@@ -13,7 +13,7 @@ import {
 	JiraTransitionsSchema,
 } from "./schemas.ts";
 
-export type JiraClientOptions = {
+type JiraClientOptions = {
 	readonly baseUrl: string;
 	readonly email: string;
 	readonly apiToken: string;
@@ -229,10 +229,6 @@ export const makeJiraClient = (options: JiraClientOptions) =>
 				),
 		};
 	});
-
-export type JiraClient = Effect.Effect.Success<
-	ReturnType<typeof makeJiraClient>
->;
 
 const ISSUE_FIELDS = [
 	"summary",

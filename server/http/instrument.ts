@@ -1,7 +1,7 @@
 import type { HttpClientRequest } from "@effect/platform";
 import { Duration, Effect, Metric, MetricBoundaries } from "effect";
 
-export type HttpInstrument = <A, E, R>(
+type HttpInstrument = <A, E, R>(
 	endpoint: string,
 	request: HttpClientRequest.HttpClientRequest,
 	effect: Effect.Effect<A, E, R>,
