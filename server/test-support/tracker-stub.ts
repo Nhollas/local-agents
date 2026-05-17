@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { JiraHttpError, type TrackerError } from "../trackers/errors.ts";
+import { HttpServiceError } from "../http/errors.ts";
+import type { TrackerError } from "../trackers/errors.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "../trackers/types.ts";
 import {
 	type IssueNumber,
@@ -91,7 +92,8 @@ export function createTrackerStub(
 		},
 
 		failNextFetchActiveIssues(
-			error = new JiraHttpError({
+			error = new HttpServiceError({
+				service: "stub",
 				message: "tracker fetch failed",
 				method: "POST",
 				url: "stub://fetch",
@@ -101,7 +103,8 @@ export function createTrackerStub(
 		},
 
 		failNextTransition(
-			error = new JiraHttpError({
+			error = new HttpServiceError({
+				service: "stub",
 				message: "tracker transition failed",
 				method: "POST",
 				url: "stub://transition",

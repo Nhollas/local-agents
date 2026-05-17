@@ -1,6 +1,7 @@
 import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as canonicalLog from "../canonical-log.ts";
+import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { Config } from "../config.ts";
 import type { Logger } from "../logger.ts";
@@ -33,6 +34,7 @@ type OrchestratorConfig = {
 	tracker: TrackerAdapter;
 	trackerRuntime: TrackerRuntime;
 	codeHost: CodeHostAdapter;
+	codeHostRuntime: CodeHostRuntime;
 	config: Config;
 	workflow: RepoWorkflow;
 	runner: Runner;
@@ -88,6 +90,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		tracker,
 		trackerRuntime,
 		codeHost,
+		codeHostRuntime,
 		config,
 		workflow,
 		runner,
@@ -123,6 +126,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		tracker,
 		trackerRuntime,
 		codeHost,
+		codeHostRuntime,
 		agent,
 		clock,
 		runShell,

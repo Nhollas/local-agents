@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
+import { HttpServiceError } from "../http/errors.ts";
 import type { RepoSlug } from "../types/brands.ts";
 
 type ChangeRequestRecord = {
@@ -13,14 +15,14 @@ type CodeHostStub = CodeHostAdapter & {
 	readonly changeRequests: readonly ChangeRequestRecord[];
 	setCloneUrl(repo: RepoSlug, url: string): void;
 	setDefaultBranch(repo: RepoSlug, branch: string): void;
-	failNextChangeRequest(error?: Error): void;
+	failNextChangeRequest(error?: HttpServiceError): void;
 };
 
 export function createCodeHostStub(): CodeHostStub {
 	const cloneUrls = new Map<RepoSlug, string>();
 	const defaultBranches = new Map<RepoSlug, string>();
 	const changeRequests: ChangeRequestRecord[] = [];
-	let nextChangeRequestError: Error | null = null;
+	let nextChangeRequestError: HttpServiceError | null = null;
 
 	return {
 		get changeRequests() {
@@ -34,7 +36,12 @@ export function createCodeHostStub(): CodeHostStub {
 			defaultBranches.set(repo, branch);
 		},
 		failNextChangeRequest(
-			error = new Error("code host change request failed"),
+			error = new HttpServiceError({
+				service: "stub",
+				message: "code host change request failed",
+				method: "POST",
+				url: "https://code-host.example.test/stub",
+			}),
 		) {
 			nextChangeRequestError = error;
 		},
@@ -49,22 +56,24 @@ export function createCodeHostStub(): CodeHostStub {
 			return `https://code-host.example.test/${repo}`;
 		},
 
-		async defaultBranch(repo) {
-			return defaultBranches.get(repo) ?? "main";
+		defaultBranch(repo) {
+			return Effect.succeed(defaultBranches.get(repo) ?? "main");
 		},
 
-		async createChangeRequest(repo, head, base, title, body) {
-			if (nextChangeRequestError) {
-				const e = nextChangeRequestError;
-				nextChangeRequestError = null;
-				throw e;
-			}
-			const number = changeRequests.length + 1;
-			changeRequests.push({ repo, head, base, title, body });
-			return {
-				number,
-				url: `https://code-host.example.test/${repo}/-/merge_requests/${number}`,
-			};
+		createChangeRequest(repo, head, base, title, body) {
+			return Effect.suspend(() => {
+				if (nextChangeRequestError) {
+					const e = nextChangeRequestError;
+					nextChangeRequestError = null;
+					return Effect.fail(e);
+				}
+				const number = changeRequests.length + 1;
+				changeRequests.push({ repo, head, base, title, body });
+				return Effect.succeed({
+					number,
+					url: `https://code-host.example.test/${repo}/-/merge_requests/${number}`,
+				});
+			});
 		},
 	};
 }

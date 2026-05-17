@@ -1,4 +1,6 @@
+import type { Effect } from "effect";
 import type { RepoSlug } from "../types/brands.ts";
+import type { CodeHostError } from "./errors.ts";
 
 export type ChangeRequest = {
 	number: number;
@@ -8,12 +10,12 @@ export type ChangeRequest = {
 export type CodeHostAdapter = {
 	cloneUrl(repo: RepoSlug): string;
 	repoUrl(repo: RepoSlug): string;
-	defaultBranch(repo: RepoSlug): Promise<string>;
+	defaultBranch(repo: RepoSlug): Effect.Effect<string, CodeHostError>;
 	createChangeRequest(
 		repo: RepoSlug,
 		head: string,
 		base: string,
 		title: string,
 		body: string,
-	): Promise<ChangeRequest>;
+	): Effect.Effect<ChangeRequest, CodeHostError>;
 };

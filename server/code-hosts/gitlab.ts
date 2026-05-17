@@ -1,55 +1,69 @@
-import type { GitLabClient } from "./gitlab-client.ts";
-import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
+import type { HttpClient } from "@effect/platform";
+import { Effect } from "effect";
+import type { CodeHostError } from "./errors.ts";
+import { makeGitLabClient } from "./gitlab-client.ts";
+import type { CodeHostAdapter } from "./types.ts";
 
-export function gitlabCodeHostAdapter(
-	client: GitLabClient,
-	cloneToken?: string,
-): CodeHostAdapter {
-	return {
-		cloneUrl(repo): string {
-			const url = `${client.baseUrl}/${repo}.git`;
-			if (!cloneToken) return url;
-			// Embed the token as HTTP basic auth so `git clone` (and later
-			// push/fetch from the same remote) authenticate to GitLab.
-			return url.replace(
-				/^(https?:\/\/)/,
-				`$1oauth2:${encodeURIComponent(cloneToken)}@`,
-			);
-		},
+export type GitLabAdapterOptions = {
+	readonly token: string;
+	readonly baseUrl?: string;
+	readonly cloneToken?: string;
+};
 
-		repoUrl(repo): string {
-			return `${client.baseUrl}/${repo}`;
-		},
+export const createGitLabAdapter = (
+	options: GitLabAdapterOptions,
+): Effect.Effect<CodeHostAdapter, never, HttpClient.HttpClient> =>
+	Effect.gen(function* () {
+		const client = yield* makeGitLabClient(
+			options.baseUrl !== undefined
+				? { token: options.token, baseUrl: options.baseUrl }
+				: { token: options.token },
+		);
+		const cloneToken = options.cloneToken;
+		const baseUrl = client.baseUrl;
 
-		async defaultBranch(repo) {
-			const project = await client.getProject(repo);
-			return project.default_branch;
-		},
+		return {
+			cloneUrl(repo) {
+				const url = `${baseUrl}/${repo}.git`;
+				if (!cloneToken) return url;
+				// Embed the token as HTTP basic auth so `git clone` (and later
+				// push/fetch from the same remote) authenticate to GitLab.
+				return url.replace(
+					/^(https?:\/\/)/,
+					`$1oauth2:${encodeURIComponent(cloneToken)}@`,
+				);
+			},
 
-		async createChangeRequest(
-			repo,
-			head,
-			base,
-			title,
-			body,
-		): Promise<ChangeRequest> {
-			const [existing] = await client.listMergeRequests(repo, {
-				source_branch: head,
-				target_branch: base,
-				state: "opened",
-			});
+			repoUrl(repo) {
+				return `${baseUrl}/${repo}`;
+			},
 
-			if (existing) {
-				return { number: existing.iid, url: existing.web_url };
-			}
+			defaultBranch: (repo) =>
+				client.getProject(repo).pipe(Effect.map((p) => p.default_branch)),
 
-			const mr = await client.createMergeRequest(repo, {
-				source_branch: head,
-				target_branch: base,
+			createChangeRequest: (
+				repo,
+				head,
+				base,
 				title,
-				description: body,
-			});
-			return { number: mr.iid, url: mr.web_url };
-		},
-	};
-}
+				body,
+			): Effect.Effect<{ number: number; url: string }, CodeHostError> =>
+				Effect.gen(function* () {
+					const existing = yield* client.listMergeRequests(repo, {
+						source_branch: head,
+						target_branch: base,
+					});
+					const [first] = existing;
+					if (first) {
+						return { number: first.iid, url: first.web_url };
+					}
+					const mr = yield* client.createMergeRequest(repo, {
+						source_branch: head,
+						target_branch: base,
+						title,
+						description: body,
+					});
+					return { number: mr.iid, url: mr.web_url };
+				}),
+		};
+	});

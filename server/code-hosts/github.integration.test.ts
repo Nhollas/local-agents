@@ -1,24 +1,36 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { GITHUB_API, REPO } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
-import { githubCodeHostAdapter } from "./github.ts";
-import { createGitHubClient } from "./github-client.ts";
+import { createGitHubAdapter } from "./github.ts";
+import { makeCodeHostRuntime } from "./runtime.ts";
+import type { CodeHostAdapter } from "./types.ts";
 
-const adapter = githubCodeHostAdapter(createGitHubClient("test-token"));
+const runtime = makeCodeHostRuntime();
+afterAll(() => runtime.dispose());
+
+async function makeAdapter(cloneToken?: string): Promise<CodeHostAdapter> {
+	return runtime.runPromise(
+		createGitHubAdapter(
+			cloneToken !== undefined
+				? { token: "test-token", cloneToken }
+				: { token: "test-token" },
+		),
+	);
+}
+
+const adapterPromise = makeAdapter();
 
 describe("cloneUrl", () => {
-	it("targets github.com", () => {
+	it("targets github.com", async () => {
+		const adapter = await adapterPromise;
 		expect(adapter.cloneUrl(REPO)).toBe(
 			"https://github.com/test-owner/test-repo.git",
 		);
 	});
 
-	it("embeds the configured token as x-access-token basic auth when provided", () => {
-		const tokenAdapter = githubCodeHostAdapter(
-			createGitHubClient("test-token"),
-			"token-with/special:chars",
-		);
+	it("embeds the configured token as x-access-token basic auth when provided", async () => {
+		const tokenAdapter = await makeAdapter("token-with/special:chars");
 
 		expect(tokenAdapter.cloneUrl(REPO)).toBe(
 			"https://x-access-token:token-with%2Fspecial%3Achars@github.com/test-owner/test-repo.git",
@@ -34,7 +46,10 @@ describe("defaultBranch", () => {
 			),
 		);
 
-		await expect(adapter.defaultBranch(REPO)).resolves.toBe("develop");
+		const adapter = await adapterPromise;
+		await expect(runtime.runPromise(adapter.defaultBranch(REPO))).resolves.toBe(
+			"develop",
+		);
 	});
 });
 
@@ -71,12 +86,15 @@ describe("createChangeRequest", () => {
 			}),
 		);
 
-		const result = await adapter.createChangeRequest(
-			REPO,
-			"agent/issue-1",
-			"main",
-			"Fix issue 1",
-			"Closes TEST-1",
+		const adapter = await adapterPromise;
+		const result = await runtime.runPromise(
+			adapter.createChangeRequest(
+				REPO,
+				"agent/issue-1",
+				"main",
+				"Fix issue 1",
+				"Closes TEST-1",
+			),
 		);
 
 		expect(result).toEqual({
@@ -100,12 +118,15 @@ describe("createChangeRequest", () => {
 			),
 		);
 
-		const result = await adapter.createChangeRequest(
-			REPO,
-			"agent/issue-1",
-			"main",
-			"Fix issue 1",
-			"Closes TEST-1",
+		const adapter = await adapterPromise;
+		const result = await runtime.runPromise(
+			adapter.createChangeRequest(
+				REPO,
+				"agent/issue-1",
+				"main",
+				"Fix issue 1",
+				"Closes TEST-1",
+			),
 		);
 
 		expect(result).toEqual({

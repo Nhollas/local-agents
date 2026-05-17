@@ -1,11 +1,6 @@
-import {
-	HttpClient,
-	HttpClientRequest,
-	HttpClientResponse,
-} from "@effect/platform";
-import { Duration, Effect, Schedule, type Schema } from "effect";
-import { makeHttpInstrument } from "../http/instrument.ts";
-import { JiraHttpError, JiraParseError } from "./errors.ts";
+import { HttpClientRequest } from "@effect/platform";
+import { Effect } from "effect";
+import { makeServiceHttpClient } from "../http/service-client.ts";
 import {
 	JiraIssueSchema,
 	JiraMyselfSchema,
@@ -23,101 +18,15 @@ export const makeJiraClient = (options: JiraClientOptions) =>
 	Effect.gen(function* () {
 		const apiBase = `${options.baseUrl}/rest/api/2`;
 		const authHeader = `Basic ${basicAuth(options.email, options.apiToken)}`;
-		const requestTimeout = Duration.millis(DEFAULT_TIMEOUT_MS);
-		const instrument = makeHttpInstrument({ service: "jira" });
 
-		const defaultClient = yield* HttpClient.HttpClient;
-		const client = defaultClient.pipe(
-			HttpClient.mapRequest((req) =>
+		const { execute, executeJson } = yield* makeServiceHttpClient({
+			service: "jira",
+			mapRequest: (req) =>
 				req.pipe(
 					HttpClientRequest.setHeader("Authorization", authHeader),
 					HttpClientRequest.acceptJson,
 				),
-			),
-			HttpClient.filterStatusOk,
-			HttpClient.retryTransient({
-				times: DEFAULT_MAX_ATTEMPTS - 1,
-				schedule: Schedule.exponential(Duration.millis(DEFAULT_BASE_DELAY_MS)),
-			}),
-		);
-
-		const httpErrorTags = () => ({
-			ResponseError: (e: {
-				request: { method: string; url: string };
-				response: { status: number };
-				message: string;
-			}) =>
-				Effect.fail(
-					new JiraHttpError({
-						message: e.message,
-						method: e.request.method,
-						url: e.request.url,
-						status: e.response.status,
-						cause: e,
-					}),
-				),
-			RequestError: (e: {
-				request: { method: string; url: string };
-				message: string;
-			}) =>
-				Effect.fail(
-					new JiraHttpError({
-						message: e.message,
-						method: e.request.method,
-						url: e.request.url,
-						cause: e,
-					}),
-				),
 		});
-
-		const timeoutFail = (request: HttpClientRequest.HttpClientRequest) =>
-			Effect.timeoutFail({
-				duration: requestTimeout,
-				onTimeout: () =>
-					new JiraHttpError({
-						message: "request timed out",
-						method: request.method,
-						url: request.url,
-					}),
-			});
-
-		const execute = (
-			endpoint: string,
-			request: HttpClientRequest.HttpClientRequest,
-		): Effect.Effect<HttpClientResponse.HttpClientResponse, JiraHttpError> =>
-			instrument(
-				endpoint,
-				request,
-				client
-					.execute(request)
-					.pipe(timeoutFail(request), Effect.catchTags(httpErrorTags())),
-			);
-
-		const executeJson = <A, I>(
-			endpoint: string,
-			request: HttpClientRequest.HttpClientRequest,
-			schema: Schema.Schema<A, I>,
-		): Effect.Effect<A, JiraHttpError | JiraParseError> =>
-			instrument(
-				endpoint,
-				request,
-				client.execute(request).pipe(
-					timeoutFail(request),
-					Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
-					Effect.catchTags({
-						...httpErrorTags(),
-						ParseError: (e) =>
-							Effect.fail(
-								new JiraParseError({
-									message: e.message,
-									method: request.method,
-									url: request.url,
-									cause: e,
-								}),
-							),
-					}),
-				),
-			);
 
 		return {
 			getIssue: (key: string) => {
@@ -238,9 +147,6 @@ const ISSUE_FIELDS = [
 	"labels",
 ] as const;
 const DEFAULT_SEARCH_MAX_RESULTS = 100;
-const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_ATTEMPTS = 3;
-const DEFAULT_BASE_DELAY_MS = 1_000;
 
 function encodeIssueKey(key: string): string {
 	return encodeURIComponent(key);

@@ -5,6 +5,7 @@ import "./telemetry/otel.ts";
 import { serve } from "@hono/node-server";
 import { createApi, type HealthCheck } from "./api/api.ts";
 import { createCodeHost } from "./code-hosts/create-code-host.ts";
+import { makeCodeHostRuntime } from "./code-hosts/runtime.ts";
 import { loadConfig } from "./config.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
@@ -34,10 +35,14 @@ const tracker = await trackerRuntime.runPromise(
 	}),
 );
 
-const codeHost = createCodeHost(config.code_host, {
-	gitlab: env.GITLAB_TOKEN,
-	github: env.GITHUB_TOKEN,
-});
+const codeHostRuntime = makeCodeHostRuntime();
+
+const codeHost = await codeHostRuntime.runPromise(
+	createCodeHost(config.code_host, {
+		gitlab: env.GITLAB_TOKEN,
+		github: env.GITHUB_TOKEN,
+	}),
+);
 
 const repo = createRunRepository(db);
 
@@ -53,6 +58,7 @@ const orchestrator = createOrchestrator({
 	tracker,
 	trackerRuntime,
 	codeHost,
+	codeHostRuntime,
 	config,
 	workflow,
 	runner,
@@ -134,6 +140,7 @@ async function shutdown(signal: string) {
 
 	await shutdownOtel();
 	await trackerRuntime.dispose();
+	await codeHostRuntime.dispose();
 	closeDb();
 	logger.info("shutdown.complete");
 	process.exit(drainResult === "timeout" ? 1 : 0);

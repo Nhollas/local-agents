@@ -1,52 +1,60 @@
-import type { GitHubClient } from "./github-client.ts";
-import type { ChangeRequest, CodeHostAdapter } from "./types.ts";
+import type { HttpClient } from "@effect/platform";
+import { Effect } from "effect";
+import type { CodeHostError } from "./errors.ts";
+import { makeGitHubClient } from "./github-client.ts";
+import type { CodeHostAdapter } from "./types.ts";
 
-export function githubCodeHostAdapter(
-	client: GitHubClient,
-	cloneToken?: string,
-): CodeHostAdapter {
-	return {
-		cloneUrl(repo): string {
-			if (!cloneToken) return `https://github.com/${repo}.git`;
-			// GitHub's documented PAT-over-HTTPS form: the literal username
-			// `x-access-token`, with the token in the password slot.
-			return `https://x-access-token:${encodeURIComponent(cloneToken)}@github.com/${repo}.git`;
-		},
+type GitHubAdapterOptions = {
+	readonly token: string;
+	readonly cloneToken?: string;
+};
 
-		repoUrl(repo): string {
-			return `https://github.com/${repo}`;
-		},
+export const createGitHubAdapter = (
+	options: GitHubAdapterOptions,
+): Effect.Effect<CodeHostAdapter, never, HttpClient.HttpClient> =>
+	Effect.gen(function* () {
+		const client = yield* makeGitHubClient({ token: options.token });
+		const cloneToken = options.cloneToken;
 
-		async defaultBranch(repo) {
-			const project = await client.getRepo(repo);
-			return project.default_branch;
-		},
+		return {
+			cloneUrl(repo) {
+				if (!cloneToken) return `https://github.com/${repo}.git`;
+				// GitHub's documented PAT-over-HTTPS form: the literal username
+				// `x-access-token`, with the token in the password slot.
+				return `https://x-access-token:${encodeURIComponent(cloneToken)}@github.com/${repo}.git`;
+			},
 
-		async createChangeRequest(
-			repo,
-			head,
-			base,
-			title,
-			body,
-		): Promise<ChangeRequest> {
-			const owner = repo.split("/")[0];
-			const [existing] = await client.listPullRequests(repo, {
-				head: `${owner}:${head}`,
-				base,
-				state: "open",
-			});
+			repoUrl(repo) {
+				return `https://github.com/${repo}`;
+			},
 
-			if (existing) {
-				return { number: existing.number, url: existing.html_url };
-			}
+			defaultBranch: (repo) =>
+				client.getRepo(repo).pipe(Effect.map((r) => r.default_branch)),
 
-			const pr = await client.createPullRequest(repo, {
-				title,
-				body,
+			createChangeRequest: (
+				repo,
 				head,
 				base,
-			});
-			return { number: pr.number, url: pr.html_url };
-		},
-	};
-}
+				title,
+				body,
+			): Effect.Effect<{ number: number; url: string }, CodeHostError> =>
+				Effect.gen(function* () {
+					const owner = repo.split("/")[0];
+					const existing = yield* client.listPullRequests(repo, {
+						head: `${owner}:${head}`,
+						base,
+					});
+					const [first] = existing;
+					if (first) {
+						return { number: first.number, url: first.html_url };
+					}
+					const pr = yield* client.createPullRequest(repo, {
+						title,
+						body,
+						head,
+						base,
+					});
+					return { number: pr.number, url: pr.html_url };
+				}),
+		};
+	});

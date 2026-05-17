@@ -1,7 +1,7 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect, Metric } from "effect";
+import { HttpServiceError } from "../http/errors.ts";
 import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
-import { JiraHttpError } from "./errors.ts";
 import { makeJiraClient } from "./jira-client.ts";
 import type { JiraIssue } from "./schemas.ts";
 import { resolveRepo } from "./scope-resolver.ts";
@@ -117,7 +117,8 @@ export const createJiraTracker = (
 					);
 					if (!transition) {
 						return yield* Effect.fail(
-							new JiraHttpError({
+							new HttpServiceError({
+								service: "jira",
 								message: `No Jira transition for ${key} to status ${options.statuses[to]}`,
 								method: "POST",
 								url: `${options.baseUrl}/rest/api/2/issue/${key}/transitions`,

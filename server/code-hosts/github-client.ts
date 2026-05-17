@@ -1,89 +1,71 @@
-import { z } from "zod";
-import { createJsonRequester, type HttpClientOptions } from "../http-client.ts";
+import { HttpClientRequest } from "@effect/platform";
+import { Effect } from "effect";
+import { makeServiceHttpClient } from "../http/service-client.ts";
 import type { RepoSlug } from "../types/brands.ts";
+import {
+	GitHubPullRequestSchema,
+	GitHubPullRequestsSchema,
+	GitHubRepoSchema,
+} from "./schemas.ts";
 
-const githubRepoSchema = z.object({
-	default_branch: z.string().min(1),
-});
-
-const githubContentSchema = z.object({
-	content: z.string(),
-});
-
-const githubPullRequestSchema = z.object({
-	number: z.number(),
-	html_url: z.string(),
-});
-
-type GitHubRepo = z.infer<typeof githubRepoSchema>;
-type GitHubContent = z.infer<typeof githubContentSchema>;
-type GitHubPullRequest = z.infer<typeof githubPullRequestSchema>;
-
-export type GitHubClient = {
-	getRepo(repo: RepoSlug): Promise<GitHubRepo>;
-	getFileContent(
-		repo: RepoSlug,
-		path: string,
-		ref?: string,
-	): Promise<GitHubContent>;
-	listPullRequests(
-		repo: RepoSlug,
-		params: { head: string; base: string; state: string },
-	): Promise<GitHubPullRequest[]>;
-	createPullRequest(
-		repo: RepoSlug,
-		params: {
-			title: string;
-			body: string;
-			head: string;
-			base: string;
-		},
-	): Promise<GitHubPullRequest>;
+type GitHubClientOptions = {
+	readonly token: string;
 };
 
-export function createGitHubClient(
-	token: string,
-	options: HttpClientOptions = {},
-): GitHubClient {
-	const request = createJsonRequester({
-		...options,
-		baseUrl: BASE_URL,
-		serviceName: "GitHub",
-		headers: {
-			Authorization: `Bearer ${token}`,
-			Accept: "application/vnd.github+json",
-			"X-GitHub-Api-Version": "2022-11-28",
-		},
+export const makeGitHubClient = (options: GitHubClientOptions) =>
+	Effect.gen(function* () {
+		const authHeader = `Bearer ${options.token}`;
+		const { executeJson } = yield* makeServiceHttpClient({
+			service: "github",
+			mapRequest: (req) =>
+				req.pipe(
+					HttpClientRequest.setHeader("Authorization", authHeader),
+					HttpClientRequest.setHeader("Accept", "application/vnd.github+json"),
+					HttpClientRequest.setHeader("X-GitHub-Api-Version", "2022-11-28"),
+				),
+		});
+
+		return {
+			getRepo: (repo: RepoSlug) =>
+				executeJson(
+					"getRepo",
+					HttpClientRequest.get(`${BASE_URL}/repos/${repo}`),
+					GitHubRepoSchema,
+				).pipe(Effect.annotateLogs({ "code_host.repo": repo })),
+
+			listPullRequests: (
+				repo: RepoSlug,
+				params: { readonly head: string; readonly base: string },
+			) => {
+				const query = new URLSearchParams({
+					head: params.head,
+					base: params.base,
+					state: "open",
+				});
+				return executeJson(
+					"listPullRequests",
+					HttpClientRequest.get(`${BASE_URL}/repos/${repo}/pulls?${query}`),
+					GitHubPullRequestsSchema,
+				).pipe(Effect.annotateLogs({ "code_host.repo": repo }));
+			},
+
+			createPullRequest: (
+				repo: RepoSlug,
+				params: {
+					readonly title: string;
+					readonly body: string;
+					readonly head: string;
+					readonly base: string;
+				},
+			) =>
+				executeJson(
+					"createPullRequest",
+					HttpClientRequest.post(`${BASE_URL}/repos/${repo}/pulls`).pipe(
+						HttpClientRequest.bodyUnsafeJson(params),
+					),
+					GitHubPullRequestSchema,
+				).pipe(Effect.annotateLogs({ "code_host.repo": repo })),
+		};
 	});
-
-	return {
-		getRepo(repo) {
-			return request(`/repos/${repo}`, { schema: githubRepoSchema });
-		},
-
-		getFileContent(repo, path, ref) {
-			const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-			const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-			return request(`/repos/${repo}/contents/${encodedPath}${query}`, {
-				schema: githubContentSchema,
-			});
-		},
-
-		listPullRequests(repo, params) {
-			const query = new URLSearchParams(params);
-			return request(`/repos/${repo}/pulls?${query}`, {
-				schema: z.array(githubPullRequestSchema),
-			});
-		},
-
-		createPullRequest(repo, params) {
-			return request(`/repos/${repo}/pulls`, {
-				method: "POST",
-				body: params,
-				schema: githubPullRequestSchema,
-			});
-		},
-	};
-}
 
 const BASE_URL = "https://api.github.com";

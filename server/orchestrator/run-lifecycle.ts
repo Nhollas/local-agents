@@ -1,4 +1,5 @@
 import * as canonicalLog from "../canonical-log.ts";
+import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { FinalizeFailurePhase } from "../db/schema.ts";
 import type { Logger } from "../logger.ts";
@@ -46,6 +47,7 @@ type RunLifecycleDeps = {
 	tracker: TrackerAdapter;
 	trackerRuntime: TrackerRuntime;
 	codeHost: CodeHostAdapter;
+	codeHostRuntime: CodeHostRuntime;
 	agent: AgentInvoker;
 	clock: Clock;
 	runShell: RunShell;
@@ -80,6 +82,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		tracker,
 		trackerRuntime,
 		codeHost,
+		codeHostRuntime,
 		agent,
 		clock,
 		runShell,
@@ -95,7 +98,9 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		const { issue, repo, workflow } = req;
 
 		const cloneUrl = codeHost.cloneUrl(repo);
-		const baseBranch = await codeHost.defaultBranch(repo);
+		const baseBranch = await codeHostRuntime.runPromise(
+			codeHost.defaultBranch(repo),
+		);
 
 		return runner.enqueue({
 			repo,
@@ -358,12 +363,8 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			outputs,
 		});
 		try {
-			const pr = await codeHost.createChangeRequest(
-				repo,
-				branch,
-				baseBranch,
-				title,
-				body,
+			const pr = await codeHostRuntime.runPromise(
+				codeHost.createChangeRequest(repo, branch, baseBranch, title, body),
 			);
 			runRepo.setRunPr(ctx.runId, {
 				repo,

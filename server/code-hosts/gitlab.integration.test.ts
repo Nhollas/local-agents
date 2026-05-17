@@ -1,39 +1,50 @@
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { GITLAB_API, GITLAB_BASE_URL } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
 import { repoSlug } from "../types/brands.ts";
-import { gitlabCodeHostAdapter } from "./gitlab.ts";
-import { createGitLabClient } from "./gitlab-client.ts";
+import { createGitLabAdapter, type GitLabAdapterOptions } from "./gitlab.ts";
+import { makeCodeHostRuntime } from "./runtime.ts";
+import type { CodeHostAdapter } from "./types.ts";
 
 const REPO = repoSlug("group/subgroup/project");
-const adapter = gitlabCodeHostAdapter(
-	createGitLabClient("test-token", { baseUrl: GITLAB_BASE_URL }),
-);
+const runtime = makeCodeHostRuntime();
+afterAll(() => runtime.dispose());
+
+async function makeAdapter(
+	overrides: Partial<GitLabAdapterOptions> = {},
+): Promise<CodeHostAdapter> {
+	const options: GitLabAdapterOptions = {
+		token: "test-token",
+		baseUrl: GITLAB_BASE_URL,
+		...overrides,
+	};
+	return runtime.runPromise(createGitLabAdapter(options));
+}
+
+const adapterPromise = makeAdapter();
 
 describe("cloneUrl", () => {
-	it("uses the configured base URL", () => {
+	it("uses the configured base URL", async () => {
+		const adapter = await adapterPromise;
 		expect(adapter.cloneUrl(REPO)).toBe(
 			"https://gitlab.example.test/group/subgroup/project.git",
 		);
 	});
 
-	it("embeds the configured token as HTTP basic auth when provided", () => {
-		const tokenAdapter = gitlabCodeHostAdapter(
-			createGitLabClient("test-token", {
-				baseUrl: GITLAB_BASE_URL,
-			}),
-			"token-with/special:chars",
-		);
+	it("embeds the configured token as HTTP basic auth when provided", async () => {
+		const tokenAdapter = await makeAdapter({
+			cloneToken: "token-with/special:chars",
+		});
 
 		expect(tokenAdapter.cloneUrl(REPO)).toBe(
 			"https://oauth2:token-with%2Fspecial%3Achars@gitlab.example.test/group/subgroup/project.git",
 		);
 	});
 
-	it("defaults to gitlab.com when no base URL is configured", () => {
-		const defaultAdapter = gitlabCodeHostAdapter(
-			createGitLabClient("test-token"),
+	it("defaults to gitlab.com when no base URL is configured", async () => {
+		const defaultAdapter = await runtime.runPromise(
+			createGitLabAdapter({ token: "test-token" }),
 		);
 
 		expect(defaultAdapter.cloneUrl(REPO)).toBe(
@@ -59,7 +70,10 @@ describe("defaultBranch", () => {
 			}),
 		);
 
-		await expect(adapter.defaultBranch(REPO)).resolves.toBe("develop");
+		const adapter = await adapterPromise;
+		await expect(runtime.runPromise(adapter.defaultBranch(REPO))).resolves.toBe(
+			"develop",
+		);
 	});
 });
 
@@ -102,12 +116,15 @@ describe("createChangeRequest", () => {
 			),
 		);
 
-		const result = await adapter.createChangeRequest(
-			REPO,
-			"agent/issue-1",
-			"main",
-			"Fix issue 1",
-			"Closes TEST-1",
+		const adapter = await adapterPromise;
+		const result = await runtime.runPromise(
+			adapter.createChangeRequest(
+				REPO,
+				"agent/issue-1",
+				"main",
+				"Fix issue 1",
+				"Closes TEST-1",
+			),
 		);
 
 		expect(result).toEqual({
@@ -131,12 +148,15 @@ describe("createChangeRequest", () => {
 			),
 		);
 
-		const result = await adapter.createChangeRequest(
-			REPO,
-			"agent/issue-1",
-			"main",
-			"Fix issue 1",
-			"Closes TEST-1",
+		const adapter = await adapterPromise;
+		const result = await runtime.runPromise(
+			adapter.createChangeRequest(
+				REPO,
+				"agent/issue-1",
+				"main",
+				"Fix issue 1",
+				"Closes TEST-1",
+			),
 		);
 
 		expect(result).toEqual({
