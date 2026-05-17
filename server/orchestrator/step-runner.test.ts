@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import * as canonicalLog from "../canonical-log.ts";
 import type { RunEvent } from "../event-schema.ts";
 import type { RunRepository } from "../run-repository.ts";
@@ -17,7 +17,12 @@ import {
 	repoSlug,
 	runId,
 } from "../types/brands.ts";
+import { makeWorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
+
+const workflowRuntime = makeWorkflowRuntime();
+afterAll(() => workflowRuntime.dispose());
+
 import type {
 	AgentInvokeOptions,
 	AgentInvoker,
@@ -171,6 +176,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(agent.calls[0]?.outputFormat).toBeUndefined();
@@ -206,6 +212,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 			env,
 		});
 
@@ -249,6 +256,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(agent.calls[0]?.outputFormat).toEqual({
@@ -314,6 +322,7 @@ describe("runWorkflowSteps", () => {
 				branch: "agent/issue-1",
 				baseBranch: "main",
 				logger: testLogger,
+				workflowRuntime,
 			}),
 		).rejects.toThrow(/error_max_structured_output_retries/);
 
@@ -371,6 +380,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(recorder.stepOutputs).toEqual([]);
@@ -415,6 +425,7 @@ describe("runWorkflowSteps", () => {
 			cwd: "/work",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(agent.calls[0]?.prompt).toBe("Working on feat/proposed");
@@ -463,6 +474,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(agent.calls.map((c) => c.prompt)).toEqual([
@@ -509,6 +521,7 @@ describe("runWorkflowSteps", () => {
 					branch: "agent/issue-1",
 					baseBranch: "main",
 					logger: testLogger,
+					workflowRuntime,
 				}),
 			logger,
 		);
@@ -560,6 +573,7 @@ describe("runWorkflowSteps", () => {
 					branch: "agent/issue-1",
 					baseBranch: "main",
 					logger: testLogger,
+					workflowRuntime,
 				}),
 			logger,
 		);
@@ -613,6 +627,7 @@ describe("runWorkflowSteps", () => {
 						branch: "agent/issue-1",
 						baseBranch: "main",
 						logger: testLogger,
+						workflowRuntime,
 					}),
 				logger,
 			),
@@ -682,6 +697,7 @@ describe("runWorkflowSteps", () => {
 					branch: "agent/issue-1",
 					baseBranch: "main",
 					logger: testLogger,
+					workflowRuntime,
 				}),
 			logger,
 		);
@@ -755,6 +771,7 @@ describe("runWorkflowSteps", () => {
 						branch: "agent/issue-1",
 						baseBranch: "main",
 						logger: testLogger,
+						workflowRuntime,
 					}),
 				logger,
 			),
@@ -804,6 +821,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(agent.calls[0]?.allowedTools).toEqual(["Read", "Glob", "Grep"]);
@@ -844,6 +862,7 @@ describe("runWorkflowSteps", () => {
 			branch: "agent/issue-1",
 			baseBranch: "main",
 			logger: testLogger,
+			workflowRuntime,
 		});
 
 		expect(agent.calls.map((c) => c.model)).toEqual([

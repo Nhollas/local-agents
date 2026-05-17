@@ -1,6 +1,6 @@
 import { access, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { createTestWorkspaceRoot } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
@@ -10,7 +10,16 @@ import {
 	SHELL_BLOCK_MARKER,
 	SHELL_BLOCK_SPILL_DIR,
 } from "./prompt-preprocessor.ts";
+import { makeWorkflowRuntime } from "./runtime.ts";
 import { renderPrompt } from "./workflow.ts";
+
+const runtime = makeWorkflowRuntime();
+afterAll(() => runtime.dispose());
+
+const expand = (
+	prompt: string,
+	options: Parameters<typeof expandMarkedShellBlocks>[1],
+) => runtime.runPromise(expandMarkedShellBlocks(prompt, options));
 
 const baseIssue: Issue = {
 	key: issueKey("owner/repo#1"),
@@ -31,7 +40,7 @@ describe("shell block preprocessing", () => {
 			"issue={{ issue.number }} pwd=!`pwd`",
 		);
 		const rendered = renderPrompt(marked, { issue: baseIssue });
-		const result = await expandMarkedShellBlocks(rendered, {
+		const result = await expand(rendered, {
 			cwd: workspace.root,
 		});
 
@@ -54,7 +63,7 @@ describe("shell block preprocessing", () => {
 			].join("\n"),
 		);
 
-		const result = await expandMarkedShellBlocks(marked, {
+		const result = await expand(marked, {
 			cwd: workspace.root,
 			timeoutMs: 2_000,
 		});
@@ -66,7 +75,7 @@ describe("shell block preprocessing", () => {
 		await using workspace = await createTestWorkspaceRoot();
 
 		const marked = markTrustedShellBlocks('!`printf "$TOOLCHAIN_BIN"`');
-		const result = await expandMarkedShellBlocks(marked, {
+		const result = await expand(marked, {
 			cwd: workspace.root,
 			env: { PATH: process.env["PATH"] ?? "", TOOLCHAIN_BIN: "node-24" },
 		});
@@ -86,7 +95,7 @@ describe("shell block preprocessing", () => {
 			"Title: {{ issue.title }}\nDescription: {{ issue.description }}",
 		);
 		const rendered = renderPrompt(marked, { issue });
-		const result = await expandMarkedShellBlocks(rendered, {
+		const result = await expand(rendered, {
 			cwd: workspace.root,
 		});
 
@@ -110,7 +119,7 @@ describe("shell block preprocessing", () => {
 
 		const marked = markTrustedShellBlocks("{{ issue.title }}");
 		const rendered = renderPrompt(marked, { issue });
-		const result = await expandMarkedShellBlocks(rendered, {
+		const result = await expand(rendered, {
 			cwd: workspace.root,
 		});
 
@@ -123,9 +132,9 @@ describe("shell block preprocessing", () => {
 
 		const marked = markTrustedShellBlocks("!`printf boom >&2; exit 7`");
 
-		await expect(
-			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/exited with code 7[\s\S]*stderr: boom/);
+		await expect(expand(marked, { cwd: workspace.root })).rejects.toThrow(
+			/exited with code 7[\s\S]*stderr: boom/,
+		);
 	});
 
 	it("fails on timeout", async () => {
@@ -134,7 +143,7 @@ describe("shell block preprocessing", () => {
 		const marked = markTrustedShellBlocks("!`sleep 5`");
 
 		await expect(
-			expandMarkedShellBlocks(marked, {
+			expand(marked, {
 				cwd: workspace.root,
 				timeoutMs: 20,
 			}),
@@ -147,9 +156,9 @@ describe("shell block preprocessing", () => {
 
 		const marked = markTrustedShellBlocks("!`printf nope`");
 
-		await expect(
-			expandMarkedShellBlocks(marked, { cwd: missingWorkspace }),
-		).rejects.toThrow(/failed to spawn/);
+		await expect(expand(marked, { cwd: missingWorkspace })).rejects.toThrow(
+			/failed to spawn/,
+		);
 	});
 
 	it("fails when the shell is terminated by signal", async () => {
@@ -157,9 +166,9 @@ describe("shell block preprocessing", () => {
 
 		const marked = markTrustedShellBlocks("!`kill -TERM $$`");
 
-		await expect(
-			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/terminated by signal SIGTERM/);
+		await expect(expand(marked, { cwd: workspace.root })).rejects.toThrow(
+			/terminated by signal SIGTERM/,
+		);
 	});
 
 	it("fails when shell output exceeds the buffer cap", async () => {
@@ -169,9 +178,9 @@ describe("shell block preprocessing", () => {
 			"!`yes x | head -c 2000000; printf done`",
 		);
 
-		await expect(
-			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/exceeded hard output ceiling/);
+		await expect(expand(marked, { cwd: workspace.root })).rejects.toThrow(
+			/exceeded hard output ceiling/,
+		);
 	});
 
 	it("fails when shell stderr exceeds the buffer cap", async () => {
@@ -181,9 +190,9 @@ describe("shell block preprocessing", () => {
 			"!`dd if=/dev/zero bs=1048577 count=1 1>&2 2>/dev/null`",
 		);
 
-		await expect(
-			expandMarkedShellBlocks(marked, { cwd: workspace.root }),
-		).rejects.toThrow(/exceeded hard output ceiling/);
+		await expect(expand(marked, { cwd: workspace.root })).rejects.toThrow(
+			/exceeded hard output ceiling/,
+		);
 	});
 
 	it("spills oversized output to disk and inlines a head + tail preview", async () => {
@@ -193,7 +202,7 @@ describe("shell block preprocessing", () => {
 			"!`yes hello | head -c 80000; printf END`",
 		);
 
-		const result = await expandMarkedShellBlocks(marked, {
+		const result = await expand(marked, {
 			cwd: workspace.root,
 			stepName: "review",
 		});
@@ -217,12 +226,9 @@ describe("shell block preprocessing", () => {
 	it("keeps literal unmarked shell-looking text in the final prompt", async () => {
 		await using workspace = await createTestWorkspaceRoot();
 
-		const result = await expandMarkedShellBlocks(
-			"Literal !`printf untouched`",
-			{
-				cwd: workspace.root,
-			},
-		);
+		const result = await expand("Literal !`printf untouched`", {
+			cwd: workspace.root,
+		});
 
 		expect(result).toBe("Literal !`printf untouched`");
 	});

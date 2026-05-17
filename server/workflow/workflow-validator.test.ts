@@ -1,6 +1,10 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { RepoWorkflow } from "./workflow.ts";
 import { validateOutputReferences } from "./workflow-validator.ts";
+
+const validate = (workflow: RepoWorkflow, sourcePath?: string) =>
+	Effect.runSync(validateOutputReferences(workflow, sourcePath));
 
 function workflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
 	return {
@@ -24,7 +28,7 @@ function workflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
 
 describe("validateOutputReferences", () => {
 	it("accepts a workflow with no step output references", () => {
-		expect(() => validateOutputReferences(workflow())).not.toThrow();
+		expect(() => validate(workflow())).not.toThrow();
 	});
 
 	it("rejects a step prompt referencing an unknown step", () => {
@@ -40,7 +44,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf, "workflow.yaml")).toThrow(
+		expect(() => validate(wf, "workflow.yaml")).toThrow(
 			/workflow\.yaml.*steps\.missing\.output\.title.*unknown step "missing"/s,
 		);
 	});
@@ -69,7 +73,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).toThrow(
+		expect(() => validate(wf)).toThrow(
 			/step "first"\.prompt.*forward reference to step "second"/s,
 		);
 	});
@@ -98,7 +102,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).not.toThrow();
+		expect(() => validate(wf)).not.toThrow();
 	});
 
 	it("allows change_request to reference any step regardless of order", () => {
@@ -129,7 +133,7 @@ describe("validateOutputReferences", () => {
 			},
 		});
 
-		expect(() => validateOutputReferences(wf)).not.toThrow();
+		expect(() => validate(wf)).not.toThrow();
 	});
 
 	it("rejects a change_request reference to an unknown step", () => {
@@ -140,7 +144,7 @@ describe("validateOutputReferences", () => {
 			},
 		});
 
-		expect(() => validateOutputReferences(wf, "workflow.yaml")).toThrow(
+		expect(() => validate(wf, "workflow.yaml")).toThrow(
 			/workflow\.yaml.*change_request\.body.*unknown step "missing"/s,
 		);
 	});
@@ -169,7 +173,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).toThrow(
+		expect(() => validate(wf)).toThrow(
 			/unknown field "missing".*step "summarise"/s,
 		);
 	});
@@ -198,7 +202,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).not.toThrow();
+		expect(() => validate(wf)).not.toThrow();
 	});
 
 	it("accepts a reference to a known nested field", () => {
@@ -230,7 +234,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).not.toThrow();
+		expect(() => validate(wf)).not.toThrow();
 	});
 
 	it("rejects a reference to an unknown nested field", () => {
@@ -262,7 +266,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).toThrow(
+		expect(() => validate(wf)).toThrow(
 			/unknown field "bogus".*step "summarise"/s,
 		);
 	});
@@ -287,7 +291,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).toThrow(
+		expect(() => validate(wf)).toThrow(
 			/step "plan" has no output_schema.*cannot resolve field "title"/s,
 		);
 	});
@@ -316,7 +320,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).toThrow(
+		expect(() => validate(wf)).toThrow(
 			/whole-output references are not supported/,
 		);
 	});
@@ -347,7 +351,7 @@ describe("validateOutputReferences", () => {
 			],
 		});
 
-		expect(() => validateOutputReferences(wf)).toThrow(
+		expect(() => validate(wf)).toThrow(
 			`unsupported composition keyword "${keyword}"`,
 		);
 	});

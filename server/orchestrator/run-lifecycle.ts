@@ -14,6 +14,7 @@ import { runRunSpan } from "../telemetry/spans.ts";
 import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
+import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
@@ -48,6 +49,7 @@ type RunLifecycleDeps = {
 	trackerRuntime: TrackerRuntime;
 	codeHost: CodeHostAdapter;
 	codeHostRuntime: CodeHostRuntime;
+	workflowRuntime: WorkflowRuntime;
 	agent: AgentInvoker;
 	clock: Clock;
 	runShell: RunShell;
@@ -83,6 +85,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		trackerRuntime,
 		codeHost,
 		codeHostRuntime,
+		workflowRuntime,
 		agent,
 		clock,
 		runShell,
@@ -267,6 +270,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 											cwd: wsPath,
 											env: workspaceEnv,
 											logger,
+											workflowRuntime,
 										});
 
 										result = {

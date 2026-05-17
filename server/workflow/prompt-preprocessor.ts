@@ -1,12 +1,10 @@
-import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { Command, type CommandExecutor, FileSystem } from "@effect/platform";
+import { Duration, Effect, Stream } from "effect";
+import { ShellExpansionError } from "./errors.ts";
 
 export const SHELL_BLOCK_MARKER = "";
 
-const SHELL_BLOCK_SOFT_CAP_BYTES = 64 * 1024;
-const SHELL_BLOCK_HARD_CEILING_BYTES = 1024 * 1024;
-const SHELL_BLOCK_PREVIEW_BYTES = 2 * 1024;
 export const SHELL_BLOCK_SPILL_DIR = join(".agent", "shell-outputs");
 
 type ExpandShellBlocksOptions = {
@@ -28,155 +26,211 @@ export function markTrustedShellBlocks(template: string): string {
 	);
 }
 
-export async function expandMarkedShellBlocks(
+export const expandMarkedShellBlocks = (
 	prompt: string,
 	options: ExpandShellBlocksOptions,
-): Promise<string> {
-	const commands: string[] = [];
-	for (const match of prompt.matchAll(markedShellBlockPattern)) {
-		commands.push(match[1]);
-	}
-	if (commands.length === 0) return prompt;
+): Effect.Effect<
+	string,
+	ShellExpansionError,
+	CommandExecutor.CommandExecutor | FileSystem.FileSystem
+> =>
+	Effect.gen(function* () {
+		const commands = Array.from(
+			prompt.matchAll(markedShellBlockPattern),
+			(match) => match[1],
+		);
+		if (commands.length === 0) return prompt;
 
-	const outputs = await Promise.all(
-		commands.map((command, index) =>
-			runShellBlock(command, index, options).then((rawOutput) =>
-				maybeSpillOversizedOutput(rawOutput, index, options),
+		const outputs = yield* Effect.all(
+			commands.map((command, index) =>
+				runShellBlock(command, options).pipe(
+					Effect.flatMap((rawOutput) =>
+						maybeSpillOversizedOutput(rawOutput, index, options),
+					),
+				),
 			),
-		),
-	);
+			{ concurrency: "unbounded" },
+		);
 
-	let i = 0;
-	return prompt.replace(markedShellBlockPattern, () => outputs[i++]);
-}
+		let i = 0;
+		return prompt.replace(markedShellBlockPattern, () => outputs[i++]);
+	});
 
+const SHELL_BLOCK_SOFT_CAP_BYTES = 64 * 1024;
+const SHELL_BLOCK_HARD_CEILING_BYTES = 1024 * 1024;
+const SHELL_BLOCK_PREVIEW_BYTES = 2 * 1024;
 const SHELL_EXPANSION_TIMEOUT_MS = 30_000;
 
 const unmarkedShellBlockPattern = /!`([^`]*)`/g;
-const markedShellBlockPattern = /!`([^`]*)`/g;
+const markedShellBlockPattern = new RegExp(
+	`!${SHELL_BLOCK_MARKER}\`([^\`]*)\``,
+	"g",
+);
 
-async function runShellBlock(
+type ShellChunk = { readonly kind: "stdout" | "stderr"; readonly text: string };
+type ShellBuffers = { readonly stdout: string; readonly stderr: string };
+
+const runShellBlock = (
 	command: string,
-	_index: number,
-	{
-		cwd,
-		env,
-		timeoutMs = SHELL_EXPANSION_TIMEOUT_MS,
-	}: ExpandShellBlocksOptions,
-): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const child = spawn("sh", ["-c", command], {
-			cwd,
-			env,
-			stdio: ["ignore", "pipe", "pipe"],
-		});
-		const { stdout: childStdout, stderr: childStderr } = child;
+	options: ExpandShellBlocksOptions,
+): Effect.Effect<
+	string,
+	ShellExpansionError,
+	CommandExecutor.CommandExecutor
+> => {
+	const timeoutMs = options.timeoutMs ?? SHELL_EXPANSION_TIMEOUT_MS;
+	const cmd = Command.make("sh", "-c", command).pipe(
+		Command.workingDirectory(options.cwd),
+		Command.env(options.env ?? {}),
+	);
 
-		let stdout = "";
-		let stderr = "";
-		let settled = false;
+	const exec = Effect.gen(function* () {
+		const proc = yield* Command.start(cmd).pipe(
+			Effect.mapError(
+				(err) =>
+					new ShellExpansionError({
+						message: formatShellFailure(
+							command,
+							`failed to spawn: ${err.message}`,
+						),
+					}),
+			),
+		);
 
-		function fail(error: Error) {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timeout);
-			child.kill("SIGTERM");
-			reject(error);
-		}
-
-		const timeout = setTimeout(() => {
-			fail(
-				new Error(
-					formatShellFailure(command, `timed out after ${timeoutMs}ms`, stderr),
-				),
+		const tagged = (kind: ShellChunk["kind"]) =>
+			Stream.map(
+				Stream.decodeText(kind === "stdout" ? proc.stdout : proc.stderr),
+				(text): ShellChunk => ({ kind, text }),
 			);
-		}, timeoutMs);
 
-		childStdout.setEncoding("utf8");
-		childStdout.on("data", (chunk: string) => {
-			stdout += chunk;
-			if (stdout.length + stderr.length > SHELL_BLOCK_HARD_CEILING_BYTES) {
-				fail(
-					new Error(
-						formatShellFailure(
+		const buffers = yield* Stream.merge(
+			tagged("stdout"),
+			tagged("stderr"),
+		).pipe(
+			Stream.mapError(
+				(err) =>
+					new ShellExpansionError({
+						message: formatShellFailure(
 							command,
-							`exceeded hard output ceiling of ${SHELL_BLOCK_HARD_CEILING_BYTES} bytes`,
-							stderr,
+							`stream error: ${err.message}`,
 						),
+					}),
+			),
+			Stream.runFoldEffect<
+				ShellBuffers,
+				ShellChunk,
+				ShellExpansionError,
+				never
+			>({ stdout: "", stderr: "" }, (state, { kind, text }) => {
+				const next: ShellBuffers =
+					kind === "stdout"
+						? { stdout: state.stdout + text, stderr: state.stderr }
+						: { stdout: state.stdout, stderr: state.stderr + text };
+				if (
+					next.stdout.length + next.stderr.length >
+					SHELL_BLOCK_HARD_CEILING_BYTES
+				) {
+					return Effect.fail(
+						new ShellExpansionError({
+							message: formatShellFailure(
+								command,
+								`exceeded hard output ceiling of ${SHELL_BLOCK_HARD_CEILING_BYTES} bytes`,
+								next.stderr,
+							),
+						}),
+					);
+				}
+				return Effect.succeed(next);
+			}),
+		);
+
+		const code = yield* proc.exitCode.pipe(
+			Effect.mapError((err) => {
+				const signalMatch = err.message.match(/signal: (SIG\w+)/);
+				const reason = signalMatch
+					? `terminated by signal ${signalMatch[1]}`
+					: `exit failed: ${err.message}`;
+				return new ShellExpansionError({
+					message: formatShellFailure(command, reason, buffers.stderr),
+				});
+			}),
+		);
+
+		if (code !== 0) {
+			return yield* Effect.fail(
+				new ShellExpansionError({
+					message: formatShellFailure(
+						command,
+						`exited with code ${code}`,
+						buffers.stderr,
 					),
-				);
-			}
-		});
-
-		childStderr.setEncoding("utf8");
-		childStderr.on("data", (chunk: string) => {
-			stderr += chunk;
-			if (stdout.length + stderr.length > SHELL_BLOCK_HARD_CEILING_BYTES) {
-				fail(
-					new Error(
-						formatShellFailure(
-							command,
-							`exceeded hard output ceiling of ${SHELL_BLOCK_HARD_CEILING_BYTES} bytes`,
-							stderr,
-						),
-					),
-				);
-			}
-		});
-
-		child.on("error", (err) => {
-			fail(formatSpawnError(command, err));
-		});
-
-		child.on("close", (code, signal) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timeout);
-
-			if (code === 0) {
-				resolve(stdout);
-				return;
-			}
-
-			const reason =
-				code == null
-					? `terminated by signal ${signal}`
-					: `exited with code ${code}`;
-			reject(new Error(formatShellFailure(command, reason, stderr)));
-		});
+				}),
+			);
+		}
+		return buffers.stdout;
 	});
-}
 
-async function maybeSpillOversizedOutput(
+	return exec.pipe(
+		Effect.scoped,
+		Effect.timeoutFail({
+			duration: Duration.millis(timeoutMs),
+			onTimeout: () =>
+				new ShellExpansionError({
+					message: formatShellFailure(
+						command,
+						`timed out after ${timeoutMs}ms`,
+					),
+				}),
+		}),
+	);
+};
+
+const maybeSpillOversizedOutput = (
 	output: string,
 	index: number,
 	{ cwd, stepName }: ExpandShellBlocksOptions,
-): Promise<string> {
-	if (Buffer.byteLength(output, "utf8") <= SHELL_BLOCK_SOFT_CAP_BYTES) {
-		return output;
-	}
+): Effect.Effect<string, ShellExpansionError, FileSystem.FileSystem> =>
+	Effect.gen(function* () {
+		const totalBytes = Buffer.byteLength(output, "utf8");
+		if (totalBytes <= SHELL_BLOCK_SOFT_CAP_BYTES) {
+			return output;
+		}
 
-	const filename = `${stepName ?? "shell"}-${index + 1}.txt`;
-	const relPath = join(SHELL_BLOCK_SPILL_DIR, filename);
-	const absPath = join(cwd, relPath);
+		const filename = `${stepName ?? "shell"}-${index + 1}.txt`;
+		const relPath = join(SHELL_BLOCK_SPILL_DIR, filename);
+		const absPath = join(cwd, relPath);
 
-	await mkdir(dirname(absPath), { recursive: true });
-	await writeFile(absPath, output, "utf8");
+		const fs = yield* FileSystem.FileSystem;
+		yield* fs.makeDirectory(dirname(absPath), { recursive: true }).pipe(
+			Effect.mapError(
+				(err) =>
+					new ShellExpansionError({
+						message: `failed to create spill directory: ${err.message}`,
+					}),
+			),
+		);
+		yield* fs.writeFileString(absPath, output).pipe(
+			Effect.mapError(
+				(err) =>
+					new ShellExpansionError({
+						message: `failed to write spill file: ${err.message}`,
+					}),
+			),
+		);
 
-	const head = takeUtf8Prefix(output, SHELL_BLOCK_PREVIEW_BYTES);
-	const tail = takeUtf8Suffix(output, SHELL_BLOCK_PREVIEW_BYTES);
-	const totalBytes = Buffer.byteLength(output, "utf8");
-	const omittedBytes =
-		totalBytes -
-		Buffer.byteLength(head, "utf8") -
-		Buffer.byteLength(tail, "utf8");
+		const head = takeUtf8Prefix(output, SHELL_BLOCK_PREVIEW_BYTES);
+		const tail = takeUtf8Suffix(output, SHELL_BLOCK_PREVIEW_BYTES);
+		const omittedBytes =
+			totalBytes -
+			Buffer.byteLength(head, "utf8") -
+			Buffer.byteLength(tail, "utf8");
 
-	return [
-		head,
-		`\n... [truncated ${omittedBytes} bytes; full output at ${relPath}] ...\n`,
-		tail,
-	].join("");
-}
+		return [
+			head,
+			`\n... [truncated ${omittedBytes} bytes; full output at ${relPath}] ...\n`,
+			tail,
+		].join("");
+	});
 
 function takeUtf8Prefix(value: string, maxBytes: number): string {
 	const buffer = Buffer.from(value, "utf8");
@@ -193,12 +247,6 @@ function takeUtf8Suffix(value: string, maxBytes: number): string {
 	while (start < buffer.byteLength && (buffer[start] & 0xc0) === 0x80)
 		start += 1;
 	return buffer.subarray(start).toString("utf8");
-}
-
-function formatSpawnError(command: string, err: Error): Error {
-	return new Error(
-		formatShellFailure(command, `failed to spawn: ${err.message}`),
-	);
 }
 
 function formatShellFailure(

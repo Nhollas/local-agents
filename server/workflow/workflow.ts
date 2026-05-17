@@ -1,72 +1,95 @@
-import { parse } from "yaml";
-import { z } from "zod";
+import { Effect, ParseResult, Schema } from "effect";
+import { parse as parseYaml } from "yaml";
 import type { Issue } from "../trackers/types.ts";
-import { modelIdSchema } from "../types/model-id.ts";
+import { ModelIdSchema } from "../types/model-id.ts";
+import { WorkflowParseError } from "./errors.ts";
 import { stripShellBlockMarkers } from "./prompt-preprocessor.ts";
 
-const jsonSchemaDocument = z.record(z.string(), z.unknown());
+const JsonSchemaDocument = Schema.Record({
+	key: Schema.String,
+	value: Schema.Unknown,
+});
 
-const workflowStepSchema = z
-	.object({
-		name: z
-			.string()
-			.regex(
-				/^\w+$/,
+const WorkflowStepSchema = Schema.Struct({
+	name: Schema.String.pipe(
+		Schema.pattern(/^\w+$/, {
+			message: () =>
 				"step name must contain only letters, digits, and underscores",
+		}),
+	),
+	prompt: Schema.String,
+	resume_previous: Schema.optionalWith(Schema.Boolean, {
+		exact: true,
+		default: () => false,
+	}),
+	output_schema: Schema.optional(JsonSchemaDocument),
+	model: ModelIdSchema,
+	allowed_tools: Schema.optional(
+		Schema.Array(Schema.String.pipe(Schema.minLength(1))).pipe(
+			Schema.minItems(1),
+		),
+	),
+	measure_diff: Schema.optionalWith(Schema.Boolean, {
+		exact: true,
+		default: () => false,
+	}),
+});
+
+export type WorkflowStep = typeof WorkflowStepSchema.Type;
+
+const ChangeRequestSchema = Schema.Struct({
+	title: Schema.String.pipe(Schema.minLength(1)),
+	body: Schema.String.pipe(Schema.minLength(1)),
+});
+
+export type ChangeRequestTemplate = typeof ChangeRequestSchema.Type;
+
+const BranchAgentSchema = Schema.Struct({
+	prompt: Schema.String.pipe(Schema.minLength(1)),
+	schema: JsonSchemaDocument,
+	model: ModelIdSchema,
+});
+
+const BranchSchema = Schema.Union(
+	Schema.String.pipe(Schema.minLength(1)),
+	BranchAgentSchema,
+);
+
+export type WorkflowBranch = typeof BranchSchema.Type;
+
+const RepoWorkflowSchema = Schema.Struct({
+	branch: BranchSchema,
+	steps: Schema.Array(WorkflowStepSchema).pipe(Schema.minItems(1)),
+	change_request: ChangeRequestSchema,
+});
+
+export type RepoWorkflow = typeof RepoWorkflowSchema.Type;
+
+const decodeRepoWorkflow = Schema.decodeUnknown(RepoWorkflowSchema, {
+	onExcessProperty: "error",
+});
+
+export const parseRepoWorkflow = (
+	yamlContent: string,
+): Effect.Effect<RepoWorkflow, WorkflowParseError> =>
+	Effect.gen(function* () {
+		const raw = yield* Effect.try({
+			try: () => parseYaml(yamlContent),
+			catch: (err) =>
+				new WorkflowParseError({
+					message: err instanceof Error ? err.message : String(err),
+				}),
+		});
+		return yield* decodeRepoWorkflow(raw).pipe(
+			Effect.mapError(
+				(err) =>
+					new WorkflowParseError({
+						message: ParseResult.TreeFormatter.formatErrorSync(err),
+					}),
 			),
-		prompt: z.string(),
-		resume_previous: z.boolean().optional().default(false),
-		output_schema: jsonSchemaDocument.optional(),
-		model: modelIdSchema,
-		allowed_tools: z.array(z.string().min(1)).min(1).optional(),
-		measure_diff: z.boolean().optional().default(false),
-	})
-	.strict();
+		);
+	});
 
-export type WorkflowStep = z.infer<typeof workflowStepSchema>;
-
-const changeRequestSchema = z
-	.object({
-		title: z.string().min(1),
-		body: z.string().min(1),
-	})
-	.strict();
-
-export type ChangeRequestTemplate = z.infer<typeof changeRequestSchema>;
-
-const branchAgentSchema = z
-	.object({
-		prompt: z.string().min(1),
-		schema: jsonSchemaDocument,
-		model: modelIdSchema,
-	})
-	.strict();
-
-const branchSchema = z.union([z.string().min(1), branchAgentSchema]);
-
-export type WorkflowBranch = z.infer<typeof branchSchema>;
-
-const repoWorkflowSchema = z
-	.object({
-		branch: branchSchema,
-		steps: z.array(workflowStepSchema).min(1),
-		change_request: changeRequestSchema,
-	})
-	.strict();
-
-export type RepoWorkflow = z.infer<typeof repoWorkflowSchema>;
-
-export function parseRepoWorkflow(yamlContent: string): RepoWorkflow {
-	return repoWorkflowSchema.parse(parse(yamlContent));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === "object";
-}
-
-/**
- * Render a prompt template with `{{ variable.path }}` interpolation.
- */
 export function renderPrompt(
 	template: string,
 	vars: {
@@ -76,39 +99,33 @@ export function renderPrompt(
 		outputs?: Record<string, unknown> | undefined;
 	},
 ): string {
+	const root: Record<string, unknown> = {
+		issue: vars.issue,
+		branch: vars.branch,
+		base_branch: vars.base_branch,
+		steps: Object.fromEntries(
+			Object.entries(vars.outputs ?? {}).map(([name, output]) => [
+				name,
+				{ output },
+			]),
+		),
+	};
 	return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
-		const parts = path.split(".");
-		if (parts[0] === "steps") {
-			return renderOutputReference(parts, vars.outputs ?? {});
-		}
-		let value: unknown = vars;
-		for (const part of parts) {
+		let value: unknown = root;
+		for (const part of path.split(".")) {
 			if (!isRecord(value)) return "";
 			value = value[part];
 		}
 		if (value == null) return "";
-		if (Array.isArray(value))
-			return stripShellBlockMarkers(
-				value.map((item) => String(item)).join(", "),
-			);
-		return stripShellBlockMarkers(String(value));
+		const rendered = Array.isArray(value)
+			? value.map((item) => String(item)).join(", ")
+			: typeof value === "object"
+				? JSON.stringify(value)
+				: String(value);
+		return stripShellBlockMarkers(rendered);
 	});
 }
 
-function renderOutputReference(
-	parts: string[],
-	outputs: Record<string, unknown>,
-): string {
-	const [, stepName, marker, ...rest] = parts;
-	if (stepName === undefined || marker !== "output" || rest.length === 0)
-		return "";
-	let value: unknown = outputs[stepName];
-	for (const key of rest) {
-		if (!isRecord(value)) return "";
-		value = value[key];
-	}
-	if (value == null) return "";
-	if (typeof value === "object")
-		return stripShellBlockMarkers(JSON.stringify(value));
-	return stripShellBlockMarkers(String(value));
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object";
 }

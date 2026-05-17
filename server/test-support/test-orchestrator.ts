@@ -4,6 +4,7 @@ import { createOrchestrator } from "../orchestrator/orchestrator.ts";
 import { createRunRepository } from "../run-repository.ts";
 import { createRunner } from "../runner/runner.ts";
 import { makeTrackerRuntime } from "../trackers/runtime.ts";
+import { makeWorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { createCodeHostStub } from "./code-host-stub.ts";
 import {
@@ -42,6 +43,7 @@ export async function createTestOrchestrator(
 	const trackerRuntime = makeTrackerRuntime();
 	const codeHost = createCodeHostStub();
 	const codeHostRuntime = makeCodeHostRuntime();
+	const workflowRuntime = makeWorkflowRuntime();
 
 	const defaultBare = await workspace.setupRepoRemote(REPO);
 	codeHost.setCloneUrl(REPO, defaultBare);
@@ -54,6 +56,7 @@ export async function createTestOrchestrator(
 		trackerRuntime,
 		codeHost,
 		codeHostRuntime,
+		workflowRuntime,
 		config: createTestConfig({
 			workspace_root: workspace.root,
 			...options.configOverrides,
@@ -89,6 +92,7 @@ export async function createTestOrchestrator(
 			await runner.queue.waitForIdle();
 			await trackerRuntime.dispose();
 			await codeHostRuntime.dispose();
+			await workflowRuntime.dispose();
 			await workspace[Symbol.asyncDispose]();
 		},
 	};

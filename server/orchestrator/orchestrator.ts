@@ -10,6 +10,7 @@ import type { Runner } from "../runner/runner.ts";
 import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
+import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/workflow.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
 import {
@@ -35,6 +36,7 @@ type OrchestratorConfig = {
 	trackerRuntime: TrackerRuntime;
 	codeHost: CodeHostAdapter;
 	codeHostRuntime: CodeHostRuntime;
+	workflowRuntime: WorkflowRuntime;
 	config: Config;
 	workflow: RepoWorkflow;
 	runner: Runner;
@@ -91,6 +93,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		trackerRuntime,
 		codeHost,
 		codeHostRuntime,
+		workflowRuntime,
 		config,
 		workflow,
 		runner,
@@ -127,6 +130,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		trackerRuntime,
 		codeHost,
 		codeHostRuntime,
+		workflowRuntime,
 		agent,
 		clock,
 		runShell,

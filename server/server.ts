@@ -18,6 +18,7 @@ import { createRunner } from "./runner/runner.ts";
 import { shutdownOtel } from "./telemetry/otel.ts";
 import { createTracker } from "./trackers/create-tracker.ts";
 import { makeTrackerRuntime } from "./trackers/runtime.ts";
+import { makeWorkflowRuntime } from "./workflow/runtime.ts";
 import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
 const config = loadConfig(env.CONFIG_PATH);
@@ -51,7 +52,9 @@ const runner = createRunner({
 	maxConcurrency: config.defaults.max_concurrent,
 });
 
-const workflow = loadWorkflow();
+const workflowRuntime = makeWorkflowRuntime();
+
+const workflow = await workflowRuntime.runPromise(loadWorkflow());
 
 const orchestrator = createOrchestrator({
 	runRepo: repo,
@@ -59,6 +62,7 @@ const orchestrator = createOrchestrator({
 	trackerRuntime,
 	codeHost,
 	codeHostRuntime,
+	workflowRuntime,
 	config,
 	workflow,
 	runner,
@@ -141,6 +145,7 @@ async function shutdown(signal: string) {
 	await shutdownOtel();
 	await trackerRuntime.dispose();
 	await codeHostRuntime.dispose();
+	await workflowRuntime.dispose();
 	closeDb();
 	logger.info("shutdown.complete");
 	process.exit(drainResult === "timeout" ? 1 : 0);

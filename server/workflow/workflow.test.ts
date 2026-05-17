@@ -1,7 +1,10 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import { parseRepoWorkflow, renderPrompt } from "./workflow.ts";
+
+const parse = (yaml: string) => Effect.runSync(parseRepoWorkflow(yaml));
 
 const baseIssue: Issue = {
 	key: issueKey("owner/repo#1"),
@@ -72,7 +75,7 @@ steps:
     model: claude-sonnet-4-6
 ${validChangeRequest}`;
 
-		const result = parseRepoWorkflow(yaml);
+		const result = parse(yaml);
 
 		expect(result).toEqual({
 			branch: "agent/issue-{{ issue.number }}",
@@ -105,7 +108,7 @@ steps:
     model: claude-sonnet-4-6
 ${validChangeRequest}`;
 
-		const result = parseRepoWorkflow(yaml);
+		const result = parse(yaml);
 
 		expect(result.steps).toEqual([
 			{
@@ -133,7 +136,7 @@ steps:
     prompt: Fix it
 `;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects change_request missing title", () => {
@@ -146,7 +149,7 @@ change_request:
   body: "Closes {{ issue.key }}"
 `;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects change_request missing body", () => {
@@ -159,7 +162,7 @@ change_request:
   title: "PR"
 `;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects change_request with unknown keys", () => {
@@ -174,25 +177,25 @@ change_request:
   labels: [bug]
 `;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects workflows missing branch", () => {
 		const yaml = "steps:\n  - name: x\n    prompt: Fix it\n";
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects workflows missing steps", () => {
 		const yaml = "branch: my-branch\n";
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects workflows with an empty steps array", () => {
 		const yaml = "branch: my-branch\nsteps: []\n";
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects unknown step keys", () => {
@@ -204,7 +207,7 @@ steps:
     bogus: value
 ${validChangeRequest}`;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("accepts a dynamic branch agent block", () => {
@@ -225,7 +228,7 @@ steps:
     model: claude-sonnet-4-6
 ${validChangeRequest}`;
 
-		const result = parseRepoWorkflow(yaml);
+		const result = parse(yaml);
 
 		expect(result.branch).toEqual({
 			prompt: "Propose a name for {{ issue.key }}",
@@ -248,7 +251,7 @@ steps:
     prompt: Fix it
 ${validChangeRequest}`;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects a branch object missing schema", () => {
@@ -260,7 +263,7 @@ steps:
     prompt: Fix it
 ${validChangeRequest}`;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects a branch object with unknown keys", () => {
@@ -274,7 +277,7 @@ steps:
     prompt: Fix it
 ${validChangeRequest}`;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("accepts a step with an output_schema (raw JSON Schema)", () => {
@@ -292,7 +295,7 @@ steps:
       required: [title]
 ${validChangeRequest}`;
 
-		const result = parseRepoWorkflow(yaml);
+		const result = parse(yaml);
 
 		expect(result.steps).toEqual([
 			{
@@ -320,7 +323,7 @@ steps:
     allowed_tools: [Read, Glob, Grep]
 ${validChangeRequest}`;
 
-		const result = parseRepoWorkflow(yaml);
+		const result = parse(yaml);
 
 		expect(result.steps).toEqual([
 			{
@@ -344,7 +347,7 @@ steps:
     allowed_tools: []
 ${validChangeRequest}`;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("rejects a step missing model", () => {
@@ -355,12 +358,12 @@ steps:
     prompt: Review it
 ${validChangeRequest}`;
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 
 	it("throws on invalid YAML", () => {
 		const yaml = ":\n  :\n    - ][";
 
-		expect(() => parseRepoWorkflow(yaml)).toThrow();
+		expect(() => parse(yaml)).toThrow();
 	});
 });

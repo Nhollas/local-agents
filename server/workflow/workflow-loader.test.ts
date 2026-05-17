@@ -1,8 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import { makeWorkflowRuntime } from "./runtime.ts";
 import { loadWorkflow } from "./workflow-loader.ts";
+
+const runtime = makeWorkflowRuntime();
+afterAll(() => runtime.dispose());
+
+const load = (path?: string) => runtime.runPromise(loadWorkflow(path));
 
 const validWorkflowYaml = `
 branch: "agent/issue-{{ issue.number }}"
@@ -33,10 +39,10 @@ function writeWorkflow(contents: string): TestWorkflowFile {
 }
 
 describe("loadWorkflow", () => {
-	it("loads and parses a local workflow file", () => {
+	it("loads and parses a local workflow file", async () => {
 		using workflowFile = writeWorkflow(validWorkflowYaml);
 
-		const workflow = loadWorkflow(workflowFile.path);
+		const workflow = await load(workflowFile.path);
 
 		expect(workflow).toEqual({
 			branch: "agent/issue-{{ issue.number }}",
@@ -56,19 +62,19 @@ describe("loadWorkflow", () => {
 		});
 	});
 
-	it("fails clearly when the local workflow is missing", () => {
-		expect(() =>
-			loadWorkflow(join(tmpdir(), "local-agents-missing-workflow.yaml")),
-		).toThrow(/ENOENT/);
+	it("fails clearly when the local workflow is missing", async () => {
+		await expect(
+			load(join(tmpdir(), "local-agents-missing-workflow.yaml")),
+		).rejects.toThrow(/ENOENT/);
 	});
 
-	it("fails clearly when the local workflow YAML is invalid", () => {
+	it("fails clearly when the local workflow YAML is invalid", async () => {
 		using workflowFile = writeWorkflow(":\n  :\n    - ][");
 
-		expect(() => loadWorkflow(workflowFile.path)).toThrow();
+		await expect(load(workflowFile.path)).rejects.toThrow();
 	});
 
-	it("rejects an output reference that points at a step the workflow doesn't define", () => {
+	it("rejects an output reference that points at a step the workflow doesn't define", async () => {
 		using workflowFile = writeWorkflow(`
 branch: agent
 steps:
@@ -80,7 +86,7 @@ change_request:
   body: "Closes"
 `);
 
-		expect(() => loadWorkflow(workflowFile.path)).toThrow(
+		await expect(load(workflowFile.path)).rejects.toThrow(
 			new RegExp(
 				`${workflowFile.path}.*steps\\.missing\\.output\\.title.*unknown step "missing"`,
 				"s",
@@ -88,7 +94,7 @@ change_request:
 		);
 	});
 
-	it("loads cleanly when output references resolve through the schema", () => {
+	it("loads cleanly when output references resolve through the schema", async () => {
 		using workflowFile = writeWorkflow(`
 branch: agent
 steps:
@@ -107,6 +113,6 @@ change_request:
   body: "Closes"
 `);
 
-		expect(() => loadWorkflow(workflowFile.path)).not.toThrow();
+		await expect(load(workflowFile.path)).resolves.toBeDefined();
 	});
 });

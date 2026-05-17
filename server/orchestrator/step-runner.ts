@@ -10,6 +10,7 @@ import {
 	expandMarkedShellBlocks,
 	markTrustedShellBlocks,
 } from "../workflow/prompt-preprocessor.ts";
+import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow, WorkflowStep } from "../workflow/workflow.ts";
 import { renderPrompt } from "../workflow/workflow.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
@@ -33,6 +34,7 @@ type RunWorkflowStepsParams = {
 	cwd: string;
 	env?: Record<string, string>;
 	logger: Logger;
+	workflowRuntime: WorkflowRuntime;
 };
 
 export async function runWorkflowSteps({
@@ -46,6 +48,7 @@ export async function runWorkflowSteps({
 	cwd,
 	env = {},
 	logger,
+	workflowRuntime,
 }: RunWorkflowStepsParams): Promise<Record<string, unknown>> {
 	const { steps } = workflow;
 	const outputs: Record<string, unknown> = {};
@@ -72,6 +75,7 @@ export async function runWorkflowSteps({
 			env,
 			model: step.model,
 			logger,
+			workflowRuntime,
 			...(stepResumeSessionId && { resumeSessionId: stepResumeSessionId }),
 		});
 
@@ -96,6 +100,7 @@ type RunWorkflowStepParams = {
 	env: Record<string, string>;
 	model: string;
 	logger: Logger;
+	workflowRuntime: WorkflowRuntime;
 	resumeSessionId?: string;
 };
 
@@ -114,6 +119,7 @@ async function runWorkflowStep({
 	env,
 	model,
 	logger,
+	workflowRuntime,
 	resumeSessionId,
 }: RunWorkflowStepParams): Promise<string | undefined> {
 	const startedAtMs = Date.now();
@@ -139,11 +145,13 @@ async function runWorkflowStep({
 				base_branch: baseBranch,
 				outputs,
 			});
-			const prompt = await expandMarkedShellBlocks(renderedPrompt, {
-				cwd,
-				stepName: step.name,
-				env,
-			});
+			const prompt = await workflowRuntime.runPromise(
+				expandMarkedShellBlocks(renderedPrompt, {
+					cwd,
+					stepName: step.name,
+					env,
+				}),
+			);
 
 			const outputFormat: OutputFormat | undefined = step.output_schema
 				? { type: "json_schema", schema: step.output_schema }
