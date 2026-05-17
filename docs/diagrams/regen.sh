@@ -12,7 +12,7 @@ structurizr-cli export -workspace workspace.dsl -format plantuml/c4plantuml
 # default Graphviz, which renders left-to-right step sequences cleanly.
 sed -i '' '2i\
 !pragma layout elk
-' structurizr-orchestrator-components.puml structurizr-containers.puml
+' structurizr-orchestrator-components.puml structurizr-containers.puml structurizr-production-containers.puml
 
 plantuml -tsvg structurizr-*.puml
 rm structurizr-*.puml
