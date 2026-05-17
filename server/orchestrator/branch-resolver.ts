@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import type { RunRepository } from "../run-repository.ts";
 import type { Issue } from "../trackers/types.ts";
 import type { RunId } from "../types/brands.ts";
@@ -8,7 +8,9 @@ import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { trackAgentToolUseBag } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 
-const branchOutputSchema = z.object({ name: z.string().min(1) });
+const decodeBranchOutput = Schema.decodeUnknownEither(
+	Schema.Struct({ name: Schema.String.pipe(Schema.minLength(1)) }),
+);
 
 type ResolveBranchParams = {
 	workflowBranch: WorkflowBranch;
@@ -65,13 +67,13 @@ export async function resolveBranch({
 				tokensOutput += usage.outputTokens;
 			}
 			if (msg.subtype === "success") {
-				const parsed = branchOutputSchema.safeParse(msg.structured_output);
-				if (!parsed.success) {
+				const parsed = decodeBranchOutput(msg.structured_output);
+				if (parsed._tag === "Left") {
 					throw new Error(
 						"branch agent returned no `name` field in structured output",
 					);
 				}
-				return parsed.data.name;
+				return parsed.right.name;
 			}
 			throw new Error(msg.subtype);
 		}
