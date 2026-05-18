@@ -17,8 +17,8 @@ import { createRunner } from "./runner/runner.ts";
 import { initOtel, shutdownOtel } from "./telemetry/otel.ts";
 import { createTracker } from "./trackers/create-tracker.ts";
 import { makeTrackerRuntime } from "./trackers/runtime.ts";
+import { loadWorkflow } from "./workflow/loader.ts";
 import { makeWorkflowRuntime } from "./workflow/runtime.ts";
-import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
 const env = await Effect.runPromise(processEnv);
 initOtel(env.langfuse);

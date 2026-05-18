@@ -7,7 +7,7 @@ import {
 } from "@effect/platform";
 import { Data, Effect, Option, Stream } from "effect";
 import type { Issue } from "../trackers/types.ts";
-import { renderPrompt } from "../workflow/workflow.ts";
+import { renderPrompt } from "../workflow/render-prompt.ts";
 
 export class WorkspaceCommandError extends Data.TaggedError(
 	"WorkspaceCommandError",

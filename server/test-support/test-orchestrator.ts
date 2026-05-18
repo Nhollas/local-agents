@@ -6,7 +6,7 @@ import { createRunRepository } from "../run-repository.ts";
 import { createRunner } from "../runner/runner.ts";
 import { makeTrackerRuntime } from "../trackers/runtime.ts";
 import { makeWorkflowRuntime } from "../workflow/runtime.ts";
-import type { RepoWorkflow } from "../workflow/workflow.ts";
+import type { RepoWorkflow } from "../workflow/types.ts";
 import { createCodeHostStub } from "./code-host-stub.ts";
 import {
 	adaptRunAgent,

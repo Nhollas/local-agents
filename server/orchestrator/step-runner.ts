@@ -6,13 +6,13 @@ import type { RunRepository } from "../run-repository.ts";
 import type { RunContext } from "../runner/runner.ts";
 import { runStepSpan, type Span } from "../telemetry/spans.ts";
 import type { Issue } from "../trackers/types.ts";
+import { renderPrompt } from "../workflow/render-prompt.ts";
+import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import {
 	expandMarkedShellBlocks,
 	markTrustedShellBlocks,
-} from "../workflow/prompt-preprocessor.ts";
-import type { WorkflowRuntime } from "../workflow/runtime.ts";
-import type { RepoWorkflow, WorkflowStep } from "../workflow/workflow.ts";
-import { renderPrompt } from "../workflow/workflow.ts";
+} from "../workflow/shell-expansion.ts";
+import type { RepoWorkflow, WorkflowStep } from "../workflow/types.ts";
 import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { emitAgentMessageEvents } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";

@@ -16,7 +16,7 @@ import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
-import type { RepoWorkflow } from "../workflow/workflow.ts";
+import type { RepoWorkflow } from "../workflow/types.ts";
 import type { AgentInvoker } from "./agent-invoker.ts";
 import { resolveBranch } from "./branch-resolver.ts";
 import { renderChangeRequest } from "./change-request-renderer.ts";

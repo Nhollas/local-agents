@@ -6,7 +6,7 @@ import {
 	DEFAULT_ALLOWED_TOOLS,
 } from "../orchestrator/agent-invoker.ts";
 import { repoSlug } from "../types/brands.ts";
-import type { RepoWorkflow } from "../workflow/workflow.ts";
+import type { RepoWorkflow } from "../workflow/types.ts";
 
 type QueryParams = Parameters<typeof query>[0];
 export type TestRunAgent = (params: QueryParams) => AsyncIterable<AgentMessage>;

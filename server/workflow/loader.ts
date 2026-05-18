@@ -1,9 +1,9 @@
 import { FileSystem } from "@effect/platform";
 import { Effect } from "effect";
 import { WorkflowParseError, type WorkflowValidationError } from "./errors.ts";
-import type { RepoWorkflow } from "./workflow.ts";
-import { parseRepoWorkflow } from "./workflow.ts";
-import { validateOutputReferences } from "./workflow-validator.ts";
+import { parseRepoWorkflow } from "./parse.ts";
+import type { RepoWorkflow } from "./types.ts";
+import { validateOutputReferences } from "./validator.ts";
 
 const WORKFLOW_PATH = "workflow.yaml";
 

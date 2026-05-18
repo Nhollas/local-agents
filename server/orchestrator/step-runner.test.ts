@@ -18,7 +18,7 @@ import {
 	runId,
 } from "../types/brands.ts";
 import { makeWorkflowRuntime } from "../workflow/runtime.ts";
-import type { RepoWorkflow } from "../workflow/workflow.ts";
+import type { RepoWorkflow } from "../workflow/types.ts";
 
 const workflowRuntime = makeWorkflowRuntime();
 afterAll(() => workflowRuntime.dispose());

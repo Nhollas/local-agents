@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import type { RepoWorkflow } from "./workflow.ts";
-import { validateOutputReferences } from "./workflow-validator.ts";
+import type { RepoWorkflow } from "./types.ts";
+import { validateOutputReferences } from "./validator.ts";
 
 const validate = (workflow: RepoWorkflow, sourcePath?: string) =>
 	Effect.runSync(validateOutputReferences(workflow, sourcePath));

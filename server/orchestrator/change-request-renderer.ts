@@ -1,6 +1,6 @@
 import type { Issue } from "../trackers/types.ts";
-import type { ChangeRequestTemplate } from "../workflow/workflow.ts";
-import { renderPrompt } from "../workflow/workflow.ts";
+import { renderPrompt } from "../workflow/render-prompt.ts";
+import type { ChangeRequestTemplate } from "../workflow/types.ts";
 
 type RenderChangeRequestParams = {
 	template: ChangeRequestTemplate;

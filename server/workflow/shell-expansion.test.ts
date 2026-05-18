@@ -4,14 +4,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import { createTestWorkspaceRoot } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
+import { renderPrompt } from "./render-prompt.ts";
+import { makeWorkflowRuntime } from "./runtime.ts";
 import {
 	expandMarkedShellBlocks,
 	markTrustedShellBlocks,
 	SHELL_BLOCK_MARKER,
 	SHELL_BLOCK_SPILL_DIR,
-} from "./prompt-preprocessor.ts";
-import { makeWorkflowRuntime } from "./runtime.ts";
-import { renderPrompt } from "./workflow.ts";
+} from "./shell-expansion.ts";
 
 const runtime = makeWorkflowRuntime();
 afterAll(() => runtime.dispose());

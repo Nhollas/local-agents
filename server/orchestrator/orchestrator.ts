@@ -11,7 +11,7 @@ import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
-import type { RepoWorkflow } from "../workflow/workflow.ts";
+import type { RepoWorkflow } from "../workflow/types.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
 import {
 	type AgentInvoker,

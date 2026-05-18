@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { WorkflowValidationError } from "./errors.ts";
-import type { RepoWorkflow, WorkflowStep } from "./workflow.ts";
+import type { RepoWorkflow, WorkflowStep } from "./types.ts";
 
 export const validateOutputReferences = (
 	workflow: RepoWorkflow,
