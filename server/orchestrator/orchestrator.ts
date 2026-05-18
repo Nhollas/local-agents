@@ -10,18 +10,20 @@ import type { Runner } from "../runner/runner.ts";
 import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
+import type { AgentInvokerService } from "../workflow/agent-invoker.ts";
+import { claudeSdkAgentInvoker } from "../workflow/agent-invoker-live.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/types.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
-import {
-	type AgentInvoker,
-	claudeSdkAgentInvoker,
-	type LangfuseConfig,
-} from "./agent-invoker.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import { createRunLifecycle } from "./run-lifecycle.ts";
 import type { OrchestratorRuntime } from "./runtime.ts";
 import { sweepWorkspaces } from "./workspace.ts";
+
+type LangfuseConfig = {
+	host: string;
+	projectId: string;
+};
 
 const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -44,7 +46,7 @@ type OrchestratorConfig = {
 	runner: Runner;
 	logger: Logger;
 	langfuse: LangfuseConfig;
-	agent?: AgentInvoker;
+	agent?: AgentInvokerService;
 	clock?: Clock;
 };
 

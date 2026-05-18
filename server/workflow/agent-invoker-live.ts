@@ -1,59 +1,23 @@
-import type { query } from "@anthropic-ai/claude-agent-sdk";
 import { context as otelContext, propagation } from "@opentelemetry/api";
+import { Layer } from "effect";
 import { instrumentedQuery } from "../telemetry/otel.ts";
-import type { IssueKey, RunId } from "../types/brands.ts";
 import { buildAgentHooks } from "./agent-hooks.ts";
+import {
+	AgentInvoker,
+	type AgentInvokerService,
+	DEFAULT_ALLOWED_TOOLS,
+} from "./agent-invoker.ts";
 import { createRunLogWriter } from "./run-log-file.ts";
 
-export type AgentMessage =
-	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never;
-
-export type OutputFormat = {
-	type: "json_schema";
-	schema: Record<string, unknown>;
-};
-
-export type AgentInvokeOptions = {
-	prompt: string;
-	cwd: string;
-	model: string;
-	runId: RunId;
-	issueKey?: IssueKey;
-	stepName?: string;
-	env?: Record<string, string>;
-	resumeSessionId?: string;
-	signal: AbortSignal;
-	outputFormat?: OutputFormat;
-	allowedTools?: readonly string[];
-	onToolFailure?: (toolName: string) => void;
-};
-
-export type AgentInvoker = {
-	invoke(opts: AgentInvokeOptions): AsyncIterable<AgentMessage>;
-};
-
-export const DEFAULT_ALLOWED_TOOLS = [
-	"Read",
-	"Write",
-	"Edit",
-	"Bash",
-	"Glob",
-	"Grep",
-	"Agent",
-] as const;
-
-export type LangfuseConfig = {
-	host: string;
-	projectId: string;
+type LiveParams = {
+	env: Record<string, string>;
+	logDir: string;
 };
 
 export function claudeSdkAgentInvoker({
 	env,
 	logDir,
-}: {
-	env: Record<string, string>;
-	logDir: string;
-}): AgentInvoker {
+}: LiveParams): AgentInvokerService {
 	return {
 		invoke({
 			prompt,
@@ -107,6 +71,12 @@ export function claudeSdkAgentInvoker({
 		},
 	};
 }
+
+/** @lintignore consumed once engine runs under a per-run runtime (slices 5/6) */
+export const AgentInvokerLive = (
+	params: LiveParams,
+): Layer.Layer<AgentInvoker> =>
+	Layer.succeed(AgentInvoker, claudeSdkAgentInvoker(params));
 
 function abortControllerFromSignal(signal: AbortSignal): AbortController {
 	const controller = new AbortController();

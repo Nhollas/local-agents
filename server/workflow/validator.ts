@@ -11,28 +11,13 @@ export const validateOutputReferences = (
 			workflow.steps.map((step) => [step.name, step] as const),
 		);
 
-		const allowedSteps = new Set<string>();
-		for (const step of workflow.steps) {
-			for (const reference of extractReferences(step.prompt)) {
+		for (const surface of surfaces(workflow)) {
+			for (const reference of extractReferences(surface.template)) {
 				yield* validateReference(reference, {
 					sourcePath,
-					location: `step "${step.name}".prompt`,
+					location: surface.label,
 					stepsByName,
-					allowedSteps,
-				});
-			}
-			allowedSteps.add(step.name);
-		}
-
-		for (const field of ["title", "body"] as const) {
-			for (const reference of extractReferences(
-				workflow.change_request[field],
-			)) {
-				yield* validateReference(reference, {
-					sourcePath,
-					location: `change_request.${field}`,
-					stepsByName,
-					allowedSteps,
+					allowedSteps: surface.allowedSteps,
 				});
 			}
 		}
@@ -55,6 +40,44 @@ type ValidationContext = {
 	stepsByName: Map<string, WorkflowStep>;
 	allowedSteps: Set<string>;
 };
+
+type Surface = {
+	label: string;
+	template: string;
+	allowedSteps: Set<string>;
+};
+
+function* surfaces(workflow: RepoWorkflow): Generator<Surface> {
+	if (typeof workflow.branch !== "string") {
+		yield {
+			label: "branch.agent.prompt",
+			template: workflow.branch.prompt,
+			allowedSteps: new Set(),
+		};
+	}
+
+	const seen = new Set<string>();
+	for (const step of workflow.steps) {
+		yield {
+			label: step.name,
+			template: step.prompt,
+			allowedSteps: new Set(seen),
+		};
+		seen.add(step.name);
+	}
+
+	const allSteps = new Set(workflow.steps.map((step) => step.name));
+	yield {
+		label: "change_request.title",
+		template: workflow.change_request.title,
+		allowedSteps: allSteps,
+	};
+	yield {
+		label: "change_request.body",
+		template: workflow.change_request.body,
+		allowedSteps: allSteps,
+	};
+}
 
 function extractReferences(template: string): StepReference[] {
 	const references: StepReference[] = [];

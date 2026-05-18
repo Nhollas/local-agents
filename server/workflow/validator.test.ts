@@ -74,7 +74,7 @@ describe("validateOutputReferences", () => {
 		});
 
 		expect(() => validate(wf)).toThrow(
-			/step "first"\.prompt.*forward reference to step "second"/s,
+			/^first: invalid reference.*forward reference to step "second"/s,
 		);
 	});
 
@@ -147,6 +147,77 @@ describe("validateOutputReferences", () => {
 		expect(() => validate(wf, "workflow.yaml")).toThrow(
 			/workflow\.yaml.*change_request\.body.*unknown step "missing"/s,
 		);
+	});
+
+	it("rejects a change_request.title typo against a real step's output_schema", () => {
+		const wf = workflow({
+			steps: [
+				{
+					name: "summarise",
+					prompt: "Write",
+					resume_previous: false,
+					measure_diff: false,
+					model: "claude-sonnet-4-6",
+					output_schema: {
+						type: "object",
+						properties: { title: { type: "string" } },
+					},
+				},
+			],
+			change_request: {
+				title: "PR: {{ steps.summarise.output.titel }}",
+				body: "Body",
+			},
+		});
+
+		expect(() => validate(wf, "workflow.yaml")).toThrow(
+			/workflow\.yaml.*change_request\.title.*unknown field "titel".*step "summarise"/s,
+		);
+	});
+
+	it("rejects a branch.agent.prompt reference to a step (none are visible in branch scope)", () => {
+		const wf = workflow({
+			branch: {
+				prompt: "Pick a slug for {{ steps.summarise.output.title }}",
+				schema: {
+					type: "object",
+					properties: { slug: { type: "string" } },
+				},
+				model: "claude-sonnet-4-6",
+			},
+			steps: [
+				{
+					name: "summarise",
+					prompt: "Write",
+					resume_previous: false,
+					measure_diff: false,
+					model: "claude-sonnet-4-6",
+					output_schema: {
+						type: "object",
+						properties: { title: { type: "string" } },
+					},
+				},
+			],
+		});
+
+		expect(() => validate(wf, "workflow.yaml")).toThrow(
+			/workflow\.yaml.*branch\.agent\.prompt.*forward reference to step "summarise"/s,
+		);
+	});
+
+	it("accepts a branch.agent.prompt with no step references", () => {
+		const wf = workflow({
+			branch: {
+				prompt: "Pick a slug for {{ issue.key }}",
+				schema: {
+					type: "object",
+					properties: { slug: { type: "string" } },
+				},
+				model: "claude-sonnet-4-6",
+			},
+		});
+
+		expect(() => validate(wf)).not.toThrow();
 	});
 
 	it("rejects a reference to a top-level field not in the step's output_schema", () => {

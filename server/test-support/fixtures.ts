@@ -1,17 +1,17 @@
 import type { query } from "@anthropic-ai/claude-agent-sdk";
+import { repoSlug } from "../types/brands.ts";
 import {
 	type AgentInvokeOptions,
-	type AgentInvoker,
+	type AgentInvokerService,
 	type AgentMessage,
 	DEFAULT_ALLOWED_TOOLS,
-} from "../orchestrator/agent-invoker.ts";
-import { repoSlug } from "../types/brands.ts";
+} from "../workflow/agent-invoker.ts";
 import type { RepoWorkflow } from "../workflow/types.ts";
 
 type QueryParams = Parameters<typeof query>[0];
 export type TestRunAgent = (params: QueryParams) => AsyncIterable<AgentMessage>;
 
-export function adaptRunAgent(runAgent: TestRunAgent): AgentInvoker {
+export function adaptRunAgent(runAgent: TestRunAgent): AgentInvokerService {
 	return {
 		invoke({ prompt, cwd, model, resumeSessionId }: AgentInvokeOptions) {
 			return runAgent({

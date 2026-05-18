@@ -1,10 +1,10 @@
 import { makeCodeHostRuntime } from "../code-hosts/runtime.ts";
-import type { AgentInvoker } from "../orchestrator/agent-invoker.ts";
 import { createOrchestrator } from "../orchestrator/orchestrator.ts";
 import { makeOrchestratorRuntime } from "../orchestrator/runtime.ts";
 import { createRunRepository } from "../run-repository.ts";
 import { createRunner } from "../runner/runner.ts";
 import { makeTrackerRuntime } from "../trackers/runtime.ts";
+import type { AgentInvokerService } from "../workflow/agent-invoker.ts";
 import { makeWorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/types.ts";
 import { createCodeHostStub } from "./code-host-stub.ts";
@@ -23,7 +23,7 @@ import { createTrackerStub } from "./tracker-stub.ts";
 
 type CreateTestOrchestratorOptions = {
 	runAgent?: TestRunAgent;
-	agent?: AgentInvoker;
+	agent?: AgentInvokerService;
 	configOverrides?: Parameters<typeof createTestConfig>[0];
 	workflow?: RepoWorkflow;
 	maxConcurrency?: number;

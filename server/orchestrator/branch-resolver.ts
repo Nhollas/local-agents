@@ -2,9 +2,12 @@ import { Schema } from "effect";
 import type { RunRepository } from "../run-repository.ts";
 import type { Issue } from "../trackers/types.ts";
 import type { RunId } from "../types/brands.ts";
+import type {
+	AgentInvokerService,
+	OutputFormat,
+} from "../workflow/agent-invoker.ts";
 import { renderPrompt } from "../workflow/render-prompt.ts";
 import type { WorkflowBranch } from "../workflow/types.ts";
-import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { trackAgentToolUseBag } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 
@@ -15,7 +18,7 @@ const decodeBranchOutput = Schema.decodeUnknownEither(
 type ResolveBranchParams = {
 	workflowBranch: WorkflowBranch;
 	issue: Issue;
-	agent: AgentInvoker;
+	agent: AgentInvokerService;
 	runRepo: Pick<RunRepository, "addRunUsage">;
 	cwd: string;
 	runId: RunId;

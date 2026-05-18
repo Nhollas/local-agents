@@ -1,5 +1,5 @@
 import * as canonicalLog from "../canonical-log.ts";
-import type { AgentMessage } from "./agent-invoker.ts";
+import type { AgentMessage } from "../workflow/agent-invoker.ts";
 
 /**
  * Accumulate cost and token usage from an SDK result message into the

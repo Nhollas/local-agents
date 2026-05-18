@@ -6,6 +6,10 @@ import type { RunRepository } from "../run-repository.ts";
 import type { RunContext } from "../runner/runner.ts";
 import { runStepSpan, type Span } from "../telemetry/spans.ts";
 import type { Issue } from "../trackers/types.ts";
+import type {
+	AgentInvokerService,
+	OutputFormat,
+} from "../workflow/agent-invoker.ts";
 import { renderPrompt } from "../workflow/render-prompt.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import {
@@ -13,7 +17,6 @@ import {
 	markTrustedShellBlocks,
 } from "../workflow/shell-expansion.ts";
 import type { RepoWorkflow, WorkflowStep } from "../workflow/types.ts";
-import type { AgentInvoker, OutputFormat } from "./agent-invoker.ts";
 import { emitAgentMessageEvents } from "./agent-logging.ts";
 import { recordAgentResult } from "./agent-metrics.ts";
 import { parseShortstat } from "./parse-shortstat.ts";
@@ -26,7 +29,7 @@ type StepRunRepository = Pick<
 type RunWorkflowStepsParams = {
 	ctx: RunContext;
 	runRepo: StepRunRepository;
-	agent: AgentInvoker;
+	agent: AgentInvokerService;
 	workflow: RepoWorkflow;
 	issue: Issue;
 	branch: string;
@@ -89,7 +92,7 @@ type RunWorkflowStepParams = {
 	ctx: RunContext;
 	runRepo: StepRunRepository;
 	outputs: Record<string, unknown>;
-	agent: AgentInvoker;
+	agent: AgentInvokerService;
 	step: WorkflowStep;
 	stepIndex: number;
 	totalSteps: number;
