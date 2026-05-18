@@ -34,8 +34,7 @@
 			"**/*.tsx",
 			"**/*.json",
 			"!repos",
-			"!**/node_modules",
-			"!workflow-redesign-prototype"
+			"!**/node_modules"
 		]
 	}
 }

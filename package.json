@@ -20,8 +20,7 @@
 		"db:generate": "drizzle-kit generate",
 		"langfuse:up": "docker compose -f infra/langfuse/docker-compose.yml --env-file infra/langfuse/.env up -d",
 		"langfuse:down": "docker compose -f infra/langfuse/docker-compose.yml down",
-		"langfuse:logs": "docker compose -f infra/langfuse/docker-compose.yml logs -f langfuse-web langfuse-worker",
-		"prototype:orchestrator": "node orchestrator-effect-prototype/src/main.ts"
+		"langfuse:logs": "docker compose -f infra/langfuse/docker-compose.yml logs -f langfuse-web langfuse-worker"
 	},
 	"lint-staged": {
 		"*.{ts,tsx,json,mjs}": "biome check --write --no-errors-on-unmatched"
