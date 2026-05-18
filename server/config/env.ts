@@ -1,26 +1,11 @@
 import { Config, Effect, type Redacted } from "effect";
 
-export const LOG_LEVELS = [
-	"fatal",
-	"error",
-	"warn",
-	"info",
-	"debug",
-	"trace",
-	"silent",
-] as const;
-export type LogLevel = (typeof LOG_LEVELS)[number];
-
 export type LangfuseEnv = {
 	readonly publicKey: Redacted.Redacted;
 	readonly secretKey: Redacted.Redacted;
 	readonly host: string;
 	readonly projectId: string;
 };
-
-const logLevel = Config.literal(...LOG_LEVELS)("LOG_LEVEL").pipe(
-	Config.withDefault("info" as LogLevel),
-);
 
 const port = Config.integer("PORT").pipe(Config.withDefault(3000));
 
@@ -34,7 +19,6 @@ const langfuseHost = Config.string("LANGFUSE_HOST").pipe(
 
 export const processEnv = Effect.all({
 	port,
-	logLevel,
 	langfuse: Effect.all({
 		publicKey: Config.redacted("LANGFUSE_PUBLIC_KEY"),
 		secretKey: Config.redacted("LANGFUSE_SECRET_KEY"),

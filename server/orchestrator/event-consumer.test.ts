@@ -4,11 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Queue } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as canonicalLog from "../canonical-log.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput } from "../runner/runner.ts";
 import { makeAppRuntime } from "../runtime.ts";
-import { testLogger } from "../test-support/test-logger.ts";
 import { runId } from "../types/brands.ts";
 import type { AgentMessage } from "../workflow/agent-invoker.ts";
 import type { WorkflowEvent } from "../workflow/event-emitter.ts";
@@ -145,7 +143,6 @@ async function drive(
 				ctx: options.emitter ?? { emit: () => {} },
 				runId: TEST_RUN_ID,
 				cwd: options.cwd ?? "/workdir",
-				logger: testLogger,
 				steps: options.steps ?? [step()],
 			}),
 		);
@@ -157,20 +154,6 @@ async function drive(
 	} finally {
 		await runtime.dispose();
 	}
-}
-
-async function withCanonical<T>(fn: () => Promise<T>): Promise<{
-	result: T;
-	bag: Record<string, unknown>;
-}> {
-	const captured: Record<string, unknown>[] = [];
-	const log = {
-		info(obj: Record<string, unknown>, _msg: string) {
-			captured.push(obj);
-		},
-	};
-	const result = await canonicalLog.run({ scope: "test" }, fn, log);
-	return { result, bag: captured[0] ?? {} };
 }
 
 describe("event-consumer transcript", () => {
@@ -405,127 +388,6 @@ describe("event-consumer transcript", () => {
 			{ emitter: ctx },
 		);
 		expect(events.some((e) => e.kind.startsWith("tool:"))).toBe(false);
-	});
-});
-
-describe("event-consumer canonical log", () => {
-	it("aggregates tool_use_by_name across assistant messages", async () => {
-		const { bag } = await withCanonical(async () => {
-			await drive([
-				{
-					_tag: "StepAssistantMessage",
-					stepName: "act",
-					message: assistant([
-						{
-							type: "tool_use",
-							name: "Read",
-							input: { file_path: "/workdir/a.ts" },
-						},
-						{
-							type: "tool_use",
-							name: "Read",
-							input: { file_path: "/workdir/b.ts" },
-						},
-						{
-							type: "tool_use",
-							name: "Edit",
-							input: { file_path: "/workdir/c.ts" },
-						},
-					]),
-				},
-			]);
-		});
-		expect(bag["tool_use_by_name"]).toEqual({ Read: 2, Edit: 1 });
-	});
-
-	it("aggregates usage onto the bag from StepResult events", async () => {
-		const { bag } = await withCanonical(async () => {
-			await drive(
-				[
-					{
-						_tag: "StepStarted",
-						name: "act",
-						index: 1,
-						total: 1,
-					},
-					{
-						_tag: "StepResult",
-						stepName: "act",
-						structuredOutput: { value: "out" },
-						sessionId: "s1",
-						usage: {
-							costUsd: 0.05,
-							tokensInput: 100,
-							tokensOutput: 40,
-							modelUsage: {
-								"claude-sonnet-4-6": {
-									inputTokens: 100,
-									outputTokens: 40,
-									costUSD: 0.05,
-								},
-							},
-						},
-					},
-					{
-						_tag: "StepCompleted",
-						stepName: "act",
-						index: 1,
-						durationMs: 1234,
-					},
-				],
-				{ steps: [step({ name: "act" })] },
-			);
-		});
-		expect(bag).toMatchObject({
-			steps_total: 1,
-			steps_completed: 1,
-			total_cost_usd: 0.05,
-			total_input_tokens: 100,
-			total_output_tokens: 40,
-			models_used: {
-				"claude-sonnet-4-6": {
-					input_tokens: 100,
-					output_tokens: 40,
-					cost_usd: 0.05,
-				},
-			},
-			step_durations_ms: { act: 1234 },
-			step_outputs_collected: ["act"],
-		});
-	});
-
-	it("records failed_step on StepFailed", async () => {
-		const { bag } = await withCanonical(async () => {
-			await drive(
-				[
-					{
-						_tag: "StepStarted",
-						name: "act",
-						index: 1,
-						total: 1,
-					},
-					{
-						_tag: "StepFailed",
-						stepName: "act",
-						index: 1,
-						error: {
-							_tag: "AgentTurnError",
-							message: "boom",
-						} as unknown as Extract<
-							WorkflowEvent,
-							{ _tag: "StepFailed" }
-						>["error"],
-						durationMs: 100,
-					},
-				],
-				{ steps: [step({ name: "act" })] },
-			);
-		});
-		expect(bag["failed_step"]).toEqual({
-			name: "act",
-			index: 1,
-			error: "boom",
-		});
 	});
 });
 

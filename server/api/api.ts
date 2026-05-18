@@ -6,7 +6,6 @@ import type { FinalizeFailurePhase } from "../db/schema.ts";
 import type { Last24hStats } from "../db/stats-query.ts";
 import { eventBus } from "../event-bus.ts";
 import type { RunEvent } from "../event-schema.ts";
-import type { Logger } from "../logger.ts";
 import type { Orchestrator } from "../orchestrator/orchestrator.ts";
 import type {
 	Run,
@@ -18,12 +17,12 @@ import {
 	repoSlug as brandRepoSlug,
 	runId as brandRunId,
 } from "../types/brands.ts";
-import { createCanonicalLogMiddleware } from "./canonical-log-middleware.ts";
 import {
 	ProblemDetailsError,
 	problemDetailsHandler,
 	zodProblemHook,
 } from "./problem-details.ts";
+import { requestIdMiddleware } from "./request-id-middleware.ts";
 import type { AppEnv } from "./types.ts";
 
 type HealthCheckResult = {
@@ -39,7 +38,6 @@ export function createApi({
 	queue,
 	readStats,
 	checkHealth,
-	logger,
 	clock = () => new Date(),
 }: {
 	runner: Runner;
@@ -47,7 +45,6 @@ export function createApi({
 	queue: Pick<Orchestrator, "getQueueSnapshot">;
 	readStats: (now: Date) => Last24hStats;
 	checkHealth: HealthCheck;
-	logger: Logger;
 	clock?: () => Date;
 }) {
 	const app = new Hono<AppEnv>();
@@ -96,7 +93,7 @@ export function createApi({
 		});
 	});
 
-	app.use(createCanonicalLogMiddleware(logger));
+	app.use(requestIdMiddleware);
 
 	app.get(
 		"/runs",

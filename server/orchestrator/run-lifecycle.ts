@@ -1,8 +1,7 @@
 import { join } from "node:path";
+import { trace } from "@opentelemetry/api";
 import { Effect, Fiber, Layer, Queue } from "effect";
-import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
-import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type {
 	RunContext,
@@ -48,7 +47,6 @@ type RunLifecycleDeps = {
 	runtime: AppRuntime;
 	codeHost: CodeHostAdapter;
 	agentFactory: AgentFactory;
-	logger: Logger;
 	workspaceRoot: string;
 	skillsSourceDir: string;
 	agentEnv: Record<string, string>;
@@ -64,7 +62,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		runtime,
 		codeHost,
 		agentFactory,
-		logger,
 		workspaceRoot,
 		skillsSourceDir,
 		agentEnv,
@@ -84,35 +81,26 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			issueTitle: issue.title,
 			issueUrl: issue.url,
 			handler: (ctx) =>
-				canonicalLog.run(
+				runRunSpan(
 					{
-						scope: "run",
-						run_id: ctx.runId,
-						issue_key: issue.key,
+						runId: ctx.runId,
+						issueKey: issue.key,
+						issueTitle: issue.title,
+						issueUrl: issue.url,
+						repo,
 					},
-					() =>
-						runRunSpan(
-							{
-								runId: ctx.runId,
-								issueKey: issue.key,
-								issueTitle: issue.title,
-								issueUrl: issue.url,
-								repo,
-							},
-							async (traceId) => {
-								const langfuseTraceUrl = `${langfuseHost}/project/${langfuseProjectId}/traces/${traceId}`;
-								runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
-								try {
-									return await runOnce(ctx, issue, repo, workflow, {
-										cloneUrl,
-										baseBranch,
-									});
-								} finally {
-									logger.info(`langfuse trace: ${langfuseTraceUrl}`);
-								}
-							},
-						),
-					logger,
+					async (traceId) => {
+						const langfuseTraceUrl = `${langfuseHost}/project/${langfuseProjectId}/traces/${traceId}`;
+						runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
+						try {
+							return await runOnce(ctx, issue, repo, workflow, {
+								cloneUrl,
+								baseBranch,
+							});
+						} finally {
+							console.log(`langfuse trace: ${langfuseTraceUrl}`);
+						}
+					},
 				),
 		});
 	}
@@ -150,7 +138,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 					ctx,
 					runId: ctx.runId,
 					cwd: wsPath,
-					logger,
 					steps: workflow.steps,
 				}),
 			);
@@ -193,7 +180,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			phaseResult,
 			Date.now() - startMs,
 		);
-		canonicalLog.set({ status: runnerResult.status });
+		trace.getActiveSpan()?.setAttribute("run.status", runnerResult.status);
 
 		if (
 			phaseResult.status === "completed" &&
@@ -214,11 +201,9 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		await runtime
 			.runPromise(tracker.markFailed(repo, issue.number))
 			.catch((err) => {
-				canonicalLog.append("warnings", {
-					kind: "mark_failed_failed",
-					issue: `${repo}#${issue.number}`,
-					error: err instanceof Error ? err.message : String(err),
-				});
+				console.warn(
+					`mark_failed_failed ${repo}#${issue.number}: ${err instanceof Error ? err.message : String(err)}`,
+				);
 			});
 	}
 

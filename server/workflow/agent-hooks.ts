@@ -5,7 +5,8 @@ import type {
 	HookInput,
 	SyncHookJSONOutput,
 } from "@anthropic-ai/claude-agent-sdk";
-import * as canonicalLog from "../canonical-log.ts";
+import { Effect, Metric } from "effect";
+import { toolDurationMs, toolFailureTotal } from "./metrics.ts";
 import type { RunLogWriter } from "./run-log-file.ts";
 
 export const BASH_TIMEOUT_CAP_MS = 180_000;
@@ -243,9 +244,15 @@ function record(input: HookInput): void {
 		return;
 	}
 	if (input.hook_event_name === "PostToolUseFailure") {
-		canonicalLog.incrementMap("tool_failures_by_name", input.tool_name);
-		// Fold failure wall-time into the same map as successes so the per-tool
-		// total reflects all time spent in that tool, not just successful calls.
+		Effect.runSync(
+			Metric.update(
+				toolFailureTotal.pipe(Metric.tagged("tool", input.tool_name)),
+				1,
+			),
+		);
+		// Fold failure wall-time into the same histogram as successes so the
+		// per-tool total reflects all time spent in that tool, not just
+		// successful calls.
 		addToolDuration(input.tool_name, input.duration_ms);
 	}
 }
@@ -283,7 +290,12 @@ function writeRunLog(writer: RunLogWriter) {
 
 function addToolDuration(toolName: string, durationMs: unknown): void {
 	if (typeof durationMs !== "number" || durationMs <= 0) return;
-	canonicalLog.incrementMap("tool_duration_ms_by_name", toolName, durationMs);
+	Effect.runSync(
+		Metric.update(
+			toolDurationMs.pipe(Metric.tagged("tool", toolName)),
+			durationMs,
+		),
+	);
 }
 
 // Wrap a side-effecting hook so a thrown error never blocks the agent.

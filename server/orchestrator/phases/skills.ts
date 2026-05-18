@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import * as canonicalLog from "../../canonical-log.ts";
 import { installSkills } from "../workspace.ts";
 import { PhaseFailure } from "./errors.ts";
 import { PhaseInputs } from "./inputs.ts";
@@ -25,9 +24,11 @@ export const skills: Phase = (s) =>
 			branch: s.branch,
 			base_branch: inputs.baseBranch,
 		});
-		canonicalLog.set({
-			skills_installed: result.installed,
-			skills_skipped: result.skipped,
+		yield* Effect.annotateCurrentSpan({
+			"skills.installed": result.installed.join(","),
+			"skills.skipped": result.skipped.join(","),
+			"skills.installed_count": result.installed.length,
+			"skills.skipped_count": result.skipped.length,
 		});
 		if (result.installed.length > 0 || result.skipped.length > 0) {
 			inputs.emit({

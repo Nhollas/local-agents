@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import * as canonicalLog from "../../canonical-log.ts";
 import { resolveWorkspaceEnvironment, runRepoSetup } from "../workspace.ts";
 import { PhaseFailure } from "./errors.ts";
 import { PhaseInputs } from "./inputs.ts";
@@ -19,7 +18,7 @@ export const setup: Phase = (s) =>
 			inputs.agentEnv,
 		);
 		const repoSetupRan = yield* runRepoSetup(s.wsPath, workspaceEnv);
-		canonicalLog.set({ repo_setup_ran: repoSetupRan });
+		yield* Effect.annotateCurrentSpan({ repo_setup_ran: repoSetupRan });
 		if (repoSetupRan) {
 			inputs.emit({
 				kind: "system",

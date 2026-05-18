@@ -115,7 +115,21 @@ export const runAgentTurn = (
 			sessionId: state.sessionId,
 			usage: state.usage,
 		};
-	});
+	}).pipe(
+		Effect.withSpan("workflow.agent_turn", {
+			attributes: {
+				model: input.model,
+				"emit.kind": input.emitAs.kind,
+				...(input.emitAs.kind === "step" && {
+					"step.name": input.emitAs.name,
+					"step.index": input.emitAs.index,
+				}),
+				...(input.resumeSessionId && {
+					"resume.session_id": input.resumeSessionId,
+				}),
+			},
+		}),
+	);
 
 type TurnState = {
 	usage: StepUsage;

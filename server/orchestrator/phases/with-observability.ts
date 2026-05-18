@@ -1,5 +1,4 @@
 import { Effect, Ref } from "effect";
-import * as canonicalLog from "../../canonical-log.ts";
 import type { RunContext } from "../../runner/runner.ts";
 import type { PhaseFailure, PhaseFailureCause } from "./errors.ts";
 import type { Phase, PhaseName, RunState } from "./types.ts";
@@ -19,7 +18,14 @@ export const withObservability =
 				Effect.sync(() => emitPhaseSuccess(deps.emit, name, next)),
 			),
 			Effect.tapError((err) =>
-				Effect.sync(() => recordPhaseFailure(deps.emit, err)),
+				Effect.gen(function* () {
+					const error = formatPhaseCause(err.cause);
+					yield* Effect.annotateCurrentSpan({
+						failure_phase: err.phase,
+						failure_error: error,
+					});
+					recordPhaseFailure(deps.emit, err);
+				}),
 			),
 			Effect.withSpan(`phase_${name}`),
 		);
@@ -103,8 +109,6 @@ function emitPhaseSuccess(
 }
 
 function recordPhaseFailure(emit: RunContext["emit"], err: PhaseFailure): void {
-	const error = formatPhaseCause(err.cause);
-	canonicalLog.set({ failure_phase: err.phase, failure_error: error });
 	const finalize = toFinalizeFailurePhase(err.phase);
 	if (finalize) {
 		emit({

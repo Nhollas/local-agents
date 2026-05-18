@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import * as canonicalLog from "../../canonical-log.ts";
 import { renderChangeRequest } from "../../workflow/render-change-request.ts";
 import { PhaseFailure } from "./errors.ts";
 import { PhaseInputs } from "./inputs.ts";
@@ -33,7 +32,7 @@ export const changeRequest: Phase = (s) =>
 			url: pr.url,
 			kind: "opened",
 		});
-		canonicalLog.set({ pr_url: pr.url });
+		yield* Effect.annotateCurrentSpan({ pr_url: pr.url });
 		return { ...s, prUrl: pr.url };
 	}).pipe(
 		Effect.mapError(

@@ -1,10 +1,8 @@
 import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Cause, Effect, type Fiber, Schedule } from "effect";
-import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { AppConfigShape } from "../config/app-config.ts";
-import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner } from "../runner/runner.ts";
 import type { AppRuntime } from "../runtime.ts";
@@ -42,7 +40,6 @@ type OrchestratorConfig = {
 	config: AppConfigShape;
 	workflow: RepoWorkflow;
 	runner: Runner;
-	logger: Logger;
 	langfuse: LangfuseConfig;
 	agentFactory?: AgentFactory;
 };
@@ -103,7 +100,6 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		config,
 		workflow,
 		runner,
-		logger,
 		langfuse,
 	} = opts;
 	const { defaults } = config;
@@ -120,7 +116,6 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		runtime,
 		codeHost,
 		agentFactory,
-		logger,
 		workspaceRoot: defaults.workspace_root,
 		skillsSourceDir: SKILLS_SOURCE_DIR,
 		agentEnv,
@@ -142,14 +137,15 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			Effect.map((page) =>
 				[...page.issues].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
 			),
-			Effect.catchAll((err) => {
-				canonicalLog.append("warnings", {
-					kind: "fetch_active_issues_failed",
-					state: "pending",
-					error: err instanceof Error ? err.message : String(err),
-				});
-				return Effect.succeed<Issue[]>([]);
-			}),
+			Effect.catchAll((err) =>
+				Effect.logWarning("orchestrator.fetch_active_issues_failed").pipe(
+					Effect.annotateLogs({
+						state: "pending",
+						error: errMessage(err),
+					}),
+					Effect.as<Issue[]>([]),
+				),
+			),
 		);
 		return { runningIssueKeys, pending };
 	});
@@ -199,16 +195,22 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 					workflow,
 				}).pipe(
 					Effect.map(() => true),
-					Effect.catchAll((err) => {
-						canonicalLog.append("warnings", {
-							kind: "dispatch_failed",
-							issue_key: issue.key,
-							error: err instanceof Error ? err.message : String(err),
-						});
-						return runTrackerTransition(issue, "running", "pending").pipe(
-							Effect.as(false),
-						);
-					}),
+					Effect.catchAll((err) =>
+						Effect.logWarning("orchestrator.dispatch_failed")
+							.pipe(
+								Effect.annotateLogs({
+									issue_key: issue.key,
+									error: errMessage(err),
+								}),
+							)
+							.pipe(
+								Effect.zipRight(
+									runTrackerTransition(issue, "running", "pending").pipe(
+										Effect.as(false),
+									),
+								),
+							),
+					),
 				);
 				if (!dispatched) continue;
 
@@ -232,36 +234,35 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			catch: (err) => err,
 		}).pipe(
 			Effect.as(true),
-			Effect.catchAll((err) => {
-				canonicalLog.append("warnings", {
-					kind: "state_transition_failed",
-					issue: `${issue.repo}#${issue.number}`,
-					from,
-					to,
-					error: err instanceof Error ? err.message : String(err),
-				});
-				return Effect.succeed(false);
-			}),
+			Effect.catchAll((err) =>
+				Effect.logWarning("orchestrator.state_transition_failed").pipe(
+					Effect.annotateLogs({
+						issue: `${issue.repo}#${issue.number}`,
+						from,
+						to,
+						error: errMessage(err),
+					}),
+					Effect.as(false),
+				),
+			),
 		);
 
-	const tickBody: Effect.Effect<void> = Effect.gen(function* () {
+	const tick: Effect.Effect<void> = Effect.gen(function* () {
 		const state = yield* fetchTickState;
-		canonicalLog.set({
+		yield* Effect.annotateCurrentSpan({
 			pending_count: state.pending.length,
 			running_count: state.runningIssueKeys.size,
 		});
 		reconcileQueue(state);
-		canonicalLog.set({ queued_count: holdingQueue.size });
+		yield* Effect.annotateCurrentSpan({ queued_count: holdingQueue.size });
 		const tally = yield* dispatchFromQueue(state);
-		canonicalLog.set({
+		yield* Effect.annotateCurrentSpan({
 			dispatched_count: tally.dispatched,
 			skipped_at_capacity: tally.skippedAtCapacity,
 		});
-	});
+	}).pipe(Effect.withSpan("orchestrator.tick"));
 
-	const tick = wrapInCanonicalScope({ scope: "tick" }, tickBody);
-
-	const recoverBody: Effect.Effect<void> = Effect.gen(function* () {
+	const recover: Effect.Effect<void> = Effect.gen(function* () {
 		const completedAt = new Date().toISOString();
 		let staleRunsFailed = 0;
 		for (const run of runRepo.getRunningSnapshot()) {
@@ -271,7 +272,7 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			});
 			staleRunsFailed += 1;
 		}
-		canonicalLog.set({
+		yield* Effect.annotateCurrentSpan({
 			stale_runs_failed: staleRunsFailed,
 			tracker_orphans_recovered: 0,
 		});
@@ -283,14 +284,15 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			catch: (err) => err,
 		}).pipe(
 			Effect.map((page) => page.issues),
-			Effect.catchAll((err) => {
-				canonicalLog.append("warnings", {
-					kind: "fetch_active_issues_failed",
-					state: "running",
-					error: err instanceof Error ? err.message : String(err),
-				});
-				return Effect.succeed<readonly Issue[] | null>(null);
-			}),
+			Effect.catchAll((err) =>
+				Effect.logWarning("orchestrator.fetch_active_issues_failed").pipe(
+					Effect.annotateLogs({
+						state: "running",
+						error: errMessage(err),
+					}),
+					Effect.as<readonly Issue[] | null>(null),
+				),
+			),
 		);
 		if (fetched === null) return;
 
@@ -298,12 +300,10 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			fetched.map((issue) => runTrackerTransition(issue, "running", "pending")),
 			{ concurrency: "unbounded" },
 		);
-		canonicalLog.set({
+		yield* Effect.annotateCurrentSpan({
 			tracker_orphans_recovered: recovered.filter((ok) => ok).length,
 		});
-	});
-
-	const recover = wrapInCanonicalScope({ scope: "recovery" }, recoverBody);
+	}).pipe(Effect.withSpan("orchestrator.recover"));
 
 	const sweepNow: Effect.Effect<void> = Effect.tryPromise({
 		try: () =>
@@ -313,39 +313,34 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		catch: (err) => err,
 	}).pipe(
 		Effect.tap((swept) =>
-			Effect.sync(() => {
-				if (swept.removed.length > 0) {
-					logger.info(
-						{ count: swept.removed.length },
-						"orchestrator.workspaces_swept",
-					);
-				}
-			}),
+			swept.removed.length > 0
+				? Effect.logInfo("orchestrator.workspaces_swept").pipe(
+						Effect.annotateLogs({ count: swept.removed.length }),
+					)
+				: Effect.void,
 		),
 		Effect.catchAll((err) =>
-			Effect.sync(() => {
-				logger.warn({ err }, "orchestrator.workspace_sweep_failed");
-			}),
+			Effect.logWarning("orchestrator.workspace_sweep_failed").pipe(
+				Effect.annotateLogs({ error: errMessage(err) }),
+			),
 		),
+		Effect.asVoid,
 	);
 
 	const safeTick = tick.pipe(
 		Effect.catchAllCause((cause) =>
-			Effect.sync(() => {
-				logger.error({ err: Cause.pretty(cause) }, "orchestrator.tick_failed");
-			}),
+			Effect.logError("orchestrator.tick_failed").pipe(
+				Effect.annotateLogs({ err: Cause.pretty(cause) }),
+			),
 		),
 	);
 
 	const mainLoop = Effect.gen(function* () {
 		yield* recover.pipe(
 			Effect.catchAllCause((cause) =>
-				Effect.sync(() => {
-					logger.error(
-						{ err: Cause.pretty(cause) },
-						"orchestrator.recover_failed",
-					);
-				}),
+				Effect.logError("orchestrator.recover_failed").pipe(
+					Effect.annotateLogs({ err: Cause.pretty(cause) }),
+				),
 			),
 		);
 		yield* safeTick.pipe(
@@ -359,9 +354,8 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 
 	const start: Effect.Effect<Fiber.RuntimeFiber<void, never>> = Effect.gen(
 		function* () {
-			logger.info(
-				{ interval: defaults.polling_interval_ms },
-				"orchestrator.starting",
+			yield* Effect.logInfo("orchestrator.starting").pipe(
+				Effect.annotateLogs({ interval: defaults.polling_interval_ms }),
 			);
 			yield* Effect.forkDaemon(sweepLoop);
 			return yield* Effect.forkDaemon(mainLoop);
@@ -381,13 +375,8 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			}));
 		},
 	};
+}
 
-	function wrapInCanonicalScope(
-		init: Record<string, unknown>,
-		body: Effect.Effect<void>,
-	): Effect.Effect<void> {
-		return Effect.promise(() =>
-			canonicalLog.run(init, () => runtime.runPromise(body), logger),
-		);
-	}
+function errMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
 }

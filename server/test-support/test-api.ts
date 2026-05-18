@@ -4,7 +4,6 @@ import type { QueuedItem } from "../orchestrator/orchestrator.ts";
 import { createRunRepository } from "../run-repository.ts";
 import { createRunner } from "../runner/runner.ts";
 import { createTestDb } from "./test-db.ts";
-import { testLogger } from "./test-logger.ts";
 
 const healthyCheck: HealthCheck = () => ({
 	status: "healthy",
@@ -30,7 +29,6 @@ export function createTestApi(opts?: {
 		queue: { getQueueSnapshot: () => queued },
 		readStats: (now) => readLast24hStats(db, now),
 		checkHealth: opts?.checkHealth ?? healthyCheck,
-		logger: testLogger,
 		...(opts?.clock && { clock: opts.clock }),
 	});
 	return { app, db, runner };

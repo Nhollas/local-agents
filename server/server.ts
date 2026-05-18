@@ -13,7 +13,6 @@ import { processEnv } from "./config/env.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
 import { readLast24hStats } from "./db/stats-query.ts";
-import { createLogger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner, type Runner } from "./runner/runner.ts";
@@ -31,8 +30,6 @@ const program = Effect.gen(function* () {
 		Effect.sync(() => initOtel(env.langfuse)),
 		() => Effect.promise(() => shutdownOtel()),
 	);
-
-	const logger = createLogger(env.logLevel);
 
 	const config = yield* AppConfig.pipe(
 		Effect.provide(AppConfigLive),
@@ -70,7 +67,7 @@ const program = Effect.gen(function* () {
 		Effect.sync(() =>
 			createRunner({ repo, maxConcurrency: config.defaults.max_concurrent }),
 		),
-		(r) => Effect.promise(() => drainAndDispose(r, logger)),
+		(r) => Effect.promise(() => drainAndDispose(r)),
 	);
 
 	const orchestrator = yield* Effect.promise(() =>
@@ -83,7 +80,6 @@ const program = Effect.gen(function* () {
 				config,
 				workflow,
 				runner,
-				logger,
 				langfuse: {
 					host: env.langfuse.host,
 					projectId: env.langfuse.projectId,
@@ -121,17 +117,15 @@ const program = Effect.gen(function* () {
 		queue: orchestrator,
 		readStats: (now) => readLast24hStats(db, now),
 		checkHealth,
-		logger,
 	});
 
-	logger.info(
-		{
+	yield* Effect.logInfo("orchestrator.started").pipe(
+		Effect.annotateLogs({
 			port: env.port,
 			codeHost: config.code_host.kind,
 			scopes: config.code_host.scopes,
 			interval: config.defaults.polling_interval_ms,
-		},
-		"orchestrator.started",
+		}),
 	);
 
 	yield* Layer.launch(
@@ -145,17 +139,14 @@ const program = Effect.gen(function* () {
 	);
 });
 
-async function drainAndDispose(
-	runner: Runner,
-	logger: ReturnType<typeof createLogger>,
-): Promise<void> {
+async function drainAndDispose(runner: Runner): Promise<void> {
 	const drained = await Promise.race([
 		runner.waitForIdle().then(() => "drained" as const),
 		new Promise<"timeout">((resolve) =>
 			setTimeout(() => resolve("timeout"), DRAIN_TIMEOUT_MS),
 		),
 	]);
-	if (drained === "timeout") logger.warn("shutdown.drain_timeout");
+	if (drained === "timeout") console.warn("shutdown.drain_timeout");
 	await runner.dispose();
 }
 

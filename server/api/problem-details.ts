@@ -1,7 +1,6 @@
 import type { Hook } from "@hono/zod-validator";
 import type { Context, Env, ErrorHandler, ValidationTargets } from "hono";
 import type { $ZodType } from "zod/v4/core";
-import * as canonicalLog from "../canonical-log.ts";
 import type { AppEnv } from "./types.ts";
 
 const STATUS_TITLES = {
@@ -57,9 +56,12 @@ export const problemDetailsHandler: ErrorHandler<AppEnv> = (err, c) => {
 		return buildProblemResponse(c, err.status, err.detail, err.extensions);
 	}
 
-	canonicalLog.set({
-		error: err instanceof Error ? err.message : String(err),
-	});
+	const requestId = c.get("requestId");
+	console.error(
+		`http.unhandled_error request_id=${requestId ?? "?"}: ${
+			err instanceof Error ? (err.stack ?? err.message) : String(err)
+		}`,
+	);
 	return buildProblemResponse(c, 500, "Internal Server Error");
 };
 
