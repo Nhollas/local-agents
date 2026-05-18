@@ -1,5 +1,9 @@
 # Slice 1 — Error taxonomy + prompt-scope types
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md). No semantic-cases section applies — this slice introduces types only.
+
 ## What to build
 
 Land the foundation types the engine speaks in:
@@ -10,7 +14,7 @@ Land the foundation types the engine speaks in:
 
 No engine behaviour changes in this slice. Existing call sites that already throw / catch on the soon-to-be-renamed errors update to the new tags. Existing call sites that consume `Issue` directly can keep doing so for now — the engine doesn't yet take `PromptScope` until slices 5 / 6 land.
 
-The error / scope shapes come from the prototype (`workflow-redesign-prototype/src/data.ts`):
+The shapes (already locked — copy verbatim):
 
 ```ts
 // workflow/errors.ts — 5 tagged errors + 3 unions

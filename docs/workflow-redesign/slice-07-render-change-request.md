@@ -1,5 +1,9 @@
 # Slice 7 — Pure `renderChangeRequest` (delete `change-request-renderer.ts`)
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md), and the **"Slice 7 — `renderChangeRequest`"** section of [`semantic-cases.md`](semantic-cases.md). You don't need the other sections of that file.
+
 ## What to build
 
 Third (and final) workflow phase converted. Pure function, no Effect, no Service Tags.

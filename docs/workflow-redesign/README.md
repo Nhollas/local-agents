@@ -1,8 +1,19 @@
 # Workflow redesign — slice index
 
-The redesign that turns `server/workflow/` into the workflow engine described in [ADR 0002](../adr/0002-workflow-engine-owns-agent-invocation.md). Source of truth for the target shape: [the prototype](../../workflow-redesign-prototype/src/data.ts). Per-slice behaviour checklist: [`semantic-cases.md`](semantic-cases.md).
+The redesign that turns `server/workflow/` into the workflow engine described in [ADR 0002](../adr/0002-workflow-engine-owns-agent-invocation.md).
 
-Read [`../migration-standards.md`](../migration-standards.md) first. This is a rebuild, not a port — actively strip patterns the new design makes obsolete.
+**Required reading for every slice (in order):**
+
+1. The slice doc itself.
+2. [`../migration-standards.md`](../migration-standards.md) — the rebuild philosophy and runner-migration lessons.
+3. The relevant section of [`semantic-cases.md`](semantic-cases.md) — only the slice's own subsection, not the whole file.
+
+**Reference, if needed:**
+
+- [ADR 0002](../adr/0002-workflow-engine-owns-agent-invocation.md) — the *why* behind the redesign. Read if the slice doc leaves a decision feeling arbitrary.
+- [`workflow-redesign-prototype/src/data.ts`](../../workflow-redesign-prototype/src/data.ts) — full target-shape inventory. The decision-rich snippets are already inlined in the slice docs; only open this if a slice gestures at something not inlined.
+
+This is a rebuild, not a port — actively strip patterns the new design makes obsolete.
 
 ## Slices, in dependency order
 

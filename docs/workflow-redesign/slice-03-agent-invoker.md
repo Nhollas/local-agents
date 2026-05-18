@@ -1,5 +1,9 @@
 # Slice 3 — `AgentInvoker` Tag + Live layer relocated into `workflow/`
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md). No semantic-cases section applies — this is a relocation, not a behaviour change.
+
 ## What to build
 
 Move agent invocation into the workflow module per ADR 0002. After this slice, the workflow engine *owns* agent invocation; the orchestrator no longer has any agent-invoker code.

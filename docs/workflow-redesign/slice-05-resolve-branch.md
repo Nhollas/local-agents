@@ -1,5 +1,9 @@
 # Slice 5 — `resolveBranch` via `runAgentTurn` (delete `branch-resolver.ts`)
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md), and the **"Slice 5 — `resolveBranch`"** section of [`semantic-cases.md`](semantic-cases.md). You don't need the other sections of that file.
+
 ## What to build
 
 First workflow phase converted end-to-end. Land:
@@ -9,7 +13,7 @@ First workflow phase converted end-to-end. Land:
 - Delete `server/orchestrator/branch-resolver.ts`.
 - Update `run-lifecycle.ts` to call `engine.resolveBranch(workflowBranch, scope)` directly with `Effect.provide(perRunLayers)`.
 
-`runAgentTurn` signature (from the prototype — keep this verbatim):
+`runAgentTurn` signature (locked — copy verbatim):
 
 ```ts
 runAgentTurn: (input: {

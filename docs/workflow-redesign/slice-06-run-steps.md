@@ -1,5 +1,9 @@
 # Slice 6 — `runSteps` via `runAgentTurn` (delete `step-runner.ts`)
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md), and the **"Slice 6 — `runSteps`"** section of [`semantic-cases.md`](semantic-cases.md). You don't need the other sections of that file.
+
 ## What to build
 
 Second workflow phase converted end-to-end. Land:

@@ -1,5 +1,9 @@
 # Slice 8 — `event-consumer` fiber + `run-lifecycle.ts` per-run wiring
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md), and the **"Slice 8 — `event-consumer` fiber"** section of [`semantic-cases.md`](semantic-cases.md). You don't need the other sections of that file.
+
 ## What to build
 
 The orchestrator-side payoff. After this slice, the engine's `WorkflowEvent` stream is the *only* seam between engine and orchestrator, and the bridging files are gone.
@@ -10,7 +14,7 @@ The orchestrator-side payoff. After this slice, the engine's `WorkflowEvent` str
   - canonical log bag (aggregations from `semantic-cases.md` → "Slice 8")
   - OTel spans for `StepStarted` / `StepCompleted` / `StepFailed`
   - `measure_diff` after `StepCompleted` for steps with `measure_diff: true` (consumes `parse-shortstat.ts`)
-- Update `orchestrator/run-lifecycle.ts` with the per-run wiring sketch from the prototype:
+- Update `orchestrator/run-lifecycle.ts` with the per-run wiring sketch (locked):
 
 ```ts
 const eventQueue    = yield* Queue.unbounded<WorkflowEvent>();

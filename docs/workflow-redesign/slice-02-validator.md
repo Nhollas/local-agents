@@ -1,5 +1,9 @@
 # Slice 2 — One-walk validator across all 4 template surfaces
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md). No semantic-cases section applies — this is a new behaviour, not migrated from old tests.
+
 ## What to build
 
 Generalise `workflow/validator.ts` so a single walk catches reference typos across every template surface in `workflow.yaml`:

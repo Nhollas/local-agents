@@ -1,5 +1,9 @@
 # Slice 4 — `WorkflowEventEmitter` Tag + `WorkflowEvent` ADT + Queue-backed Live layer
 
+## Read first
+
+This slice doc, [`../migration-standards.md`](../migration-standards.md). No semantic-cases section applies — this slice lands the contract; emission happens in slices 5 / 6.
+
 ## What to build
 
 The engine's contract with the outside world is a tagged-union event stream. This slice lands the contract; emission and consumption are wired up in later slices.
