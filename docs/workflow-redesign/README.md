@@ -34,6 +34,14 @@ This is a rebuild, not a port — actively strip patterns the new design makes o
 - Their semantics are recorded in `semantic-cases.md` — each slice owns a section and must cover it with fresh tests at the new public boundary.
 - Tests for files being *moved* (`agent-hooks.test.ts`, `run-log-file.test.ts`) stay put and move with their source files.
 
+## Handoff — when your slice is done
+
+All slices land on the same branch. There is **no PR per slice**.
+
+- Run `pnpm typecheck && pnpm test`. Both must be green.
+- **Stop. Do not `git add`, `git commit`, or `git push`.** The user reviews the working-tree diff and decides when to commit.
+- Report what you changed in your final message: which files were created / modified / deleted, and any deviation from the slice doc you had to make (and why).
+
 ## Standing rules for every slice
 
 - `pnpm typecheck && pnpm test` green before declaring done.
