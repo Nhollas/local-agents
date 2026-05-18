@@ -1,4 +1,4 @@
-import { Cause, type Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Queue } from "effect";
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
@@ -15,12 +15,17 @@ import { runRunSpan } from "../telemetry/spans.ts";
 import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
-import type { AgentInvokerService } from "../workflow/agent-invoker.ts";
+import { AgentInvoker } from "../workflow/agent-invoker.ts";
+import {
+	type WorkflowEvent,
+	WorkflowEventEmitterLive,
+} from "../workflow/event-emitter-live.ts";
+import { resolveBranch } from "../workflow/resolve-branch.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
-import type { RepoWorkflow } from "../workflow/types.ts";
-import { resolveBranch } from "./branch-resolver.ts";
+import type { PromptScope, RepoWorkflow } from "../workflow/types.ts";
 import { renderChangeRequest } from "./change-request-renderer.ts";
 import type { Clock } from "./clock.ts";
+import type { AgentFactory } from "./orchestrator.ts";
 import type { OrchestratorRuntime } from "./runtime.ts";
 import { runWorkflowSteps } from "./step-runner.ts";
 import {
@@ -52,7 +57,7 @@ type RunLifecycleDeps = {
 	codeHostRuntime: CodeHostRuntime;
 	workflowRuntime: WorkflowRuntime;
 	orchestratorRuntime: OrchestratorRuntime;
-	agent: AgentInvokerService;
+	agentFactory: AgentFactory;
 	clock: Clock;
 	logger: Logger;
 	workspaceRoot: string;
@@ -88,7 +93,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		codeHostRuntime,
 		workflowRuntime,
 		orchestratorRuntime,
-		agent,
+		agentFactory,
 		clock,
 		logger,
 		workspaceRoot,
@@ -194,17 +199,46 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 										},
 									});
 
+									const agent = agentFactory({
+										cwd: wsPath,
+										runId: ctx.runId,
+										signal: ctx.signal,
+									});
+
 									try {
 										const branchResolverStart = clock.now();
-										const resolvedBranch = await resolveBranch({
-											workflowBranch: workflow.branch,
-											issue,
-											agent,
-											runRepo,
-											cwd: wsPath,
-											runId: ctx.runId,
-											signal: ctx.signal,
-										});
+										const scope: PromptScope = {
+											issue: {
+												key: issue.key,
+												number: issue.number,
+												title: issue.title,
+												description: issue.description,
+												labels: issue.labels,
+												url: issue.url,
+												createdAt: issue.createdAt,
+											},
+											baseBranch,
+										};
+										const eventQueue = await workflowRuntime.runPromise(
+											Queue.unbounded<WorkflowEvent>(),
+										);
+										const perRunLayers = Layer.merge(
+											Layer.succeed(AgentInvoker, agent),
+											WorkflowEventEmitterLive(eventQueue),
+										);
+										let resolvedBranch: string;
+										try {
+											resolvedBranch = await workflowRuntime.runPromise(
+												resolveBranch(workflow.branch, scope).pipe(
+													Effect.provide(perRunLayers),
+												),
+											);
+										} finally {
+											// Drop events for now; slice 8 lands the consumer fiber.
+											await workflowRuntime.runPromise(
+												Queue.shutdown(eventQueue),
+											);
+										}
 										canonicalLog.set({
 											branch_resolver_ms: clock.now() - branchResolverStart,
 										});

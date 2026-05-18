@@ -33,13 +33,6 @@ export function emitAgentMessageEvents(
 	}
 }
 
-export function trackAgentToolUseBag(msg: AgentMessage): void {
-	for (const block of msg.message.content) {
-		if (!isToolUseBlock(block)) continue;
-		canonicalLog.incrementMap("tool_use_by_name", block.name);
-	}
-}
-
 type TextBlock = { type: "text"; text: string };
 type ToolUseBlock = {
 	type: "tool_use";

@@ -1,6 +1,5 @@
 import type { query } from "@anthropic-ai/claude-agent-sdk";
 import { Context } from "effect";
-import type { IssueKey, RunId } from "../types/brands.ts";
 
 export type AgentMessage =
 	ReturnType<typeof query> extends AsyncGenerator<infer T> ? T : never;
@@ -12,14 +11,10 @@ export type OutputFormat = {
 
 export type AgentInvokeOptions = {
 	prompt: string;
-	cwd: string;
 	model: string;
-	runId: RunId;
-	issueKey?: IssueKey;
 	stepName?: string;
 	env?: Record<string, string>;
 	resumeSessionId?: string;
-	signal: AbortSignal;
 	outputFormat?: OutputFormat;
 	allowedTools?: readonly string[];
 	onToolFailure?: (toolName: string) => void;

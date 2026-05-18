@@ -5,8 +5,6 @@
 	"ignore": [
 		"dashboard/src/vite-env.d.ts",
 		"repos/**",
-		"workflow-redesign-prototype/**",
-		"server/workflow/event-emitter.ts",
-		"server/workflow/event-emitter-live.ts"
+		"workflow-redesign-prototype/**"
 	]
 }

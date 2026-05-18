@@ -1,8 +1,9 @@
 import type { Issue } from "../trackers/types.ts";
 import { stripShellBlockMarkers } from "./shell-expansion.ts";
+import type { PromptIssue } from "./types.ts";
 
 type RenderPromptVars = {
-	issue: Issue;
+	issue: Issue | PromptIssue;
 	branch?: string;
 	base_branch?: string;
 	outputs?: Record<string, unknown> | undefined;

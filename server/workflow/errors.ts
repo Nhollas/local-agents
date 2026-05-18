@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import type { StepUsage } from "./types.ts";
 
 export class WorkflowParseError extends Data.TaggedError("WorkflowParseError")<{
 	message: string;
@@ -16,13 +17,12 @@ export class ShellExpansionError extends Data.TaggedError(
 	message: string;
 }> {}
 
-/** @lintignore consumed in slice 6 (run-steps) */
 export class AgentTurnError extends Data.TaggedError("AgentTurnError")<{
 	message: string;
 	subtype?: string;
+	usage?: StepUsage;
 }> {}
 
-/** @lintignore consumed in slice 6 (run-steps) */
 export class StructuredOutputDecodeError extends Data.TaggedError(
 	"StructuredOutputDecodeError",
 )<{
@@ -33,10 +33,9 @@ export class StructuredOutputDecodeError extends Data.TaggedError(
 export type WorkflowDefinitionError =
 	| WorkflowParseError
 	| WorkflowValidationError;
-/** @lintignore consumed in slices 5/6 (engine entrypoints) */
 export type WorkflowExecutionError =
 	| ShellExpansionError
 	| AgentTurnError
 	| StructuredOutputDecodeError;
-/** @lintignore consumed in slices 5/6 (engine entrypoints) */
+/** @lintignore consumed in slice 6 (run-steps) */
 export type WorkflowError = WorkflowDefinitionError | WorkflowExecutionError;

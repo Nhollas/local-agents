@@ -11,7 +11,6 @@ export type WorkflowStep = typeof WorkflowStepSchema.Type;
 export type WorkflowBranch = typeof BranchSchema.Type;
 export type ChangeRequestTemplate = typeof ChangeRequestSchema.Type;
 
-/** @lintignore consumed in slices 5/6 (engine entrypoints) */
 export type PromptIssue = {
 	key: IssueKey;
 	number: IssueNumber;
@@ -22,23 +21,27 @@ export type PromptIssue = {
 	createdAt: string;
 };
 
-/** @lintignore consumed in slices 5/6 (engine entrypoints) */
 export type PromptScope = {
 	issue: PromptIssue;
 	baseBranch: string;
 };
 
-/** @lintignore carried on BranchResolved / StepResult events; wired in slices 5/6 */
 export type ModelUsage = {
 	inputTokens: number;
 	outputTokens: number;
 	costUSD: number;
 };
 
-/** @lintignore carried on BranchResolved / StepResult events; wired in slices 5/6 */
 export type StepUsage = {
 	costUsd: number;
 	tokensInput: number;
 	tokensOutput: number;
 	modelUsage: Record<string, ModelUsage>;
 };
+
+export const emptyStepUsage = (): StepUsage => ({
+	costUsd: 0,
+	tokensInput: 0,
+	tokensOutput: 0,
+	modelUsage: {},
+});

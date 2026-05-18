@@ -1,4 +1,5 @@
 import { makeCodeHostRuntime } from "../code-hosts/runtime.ts";
+import type { AgentFactory } from "../orchestrator/orchestrator.ts";
 import { createOrchestrator } from "../orchestrator/orchestrator.ts";
 import { makeOrchestratorRuntime } from "../orchestrator/runtime.ts";
 import { createRunRepository } from "../run-repository.ts";
@@ -50,7 +51,11 @@ export async function createTestOrchestrator(
 	const defaultBare = await workspace.setupRepoRemote(REPO);
 	codeHost.setCloneUrl(REPO, defaultBare);
 
-	const agent = options.agent ?? adaptRunAgent(options.runAgent ?? noopAgent);
+	const runAgent = options.runAgent ?? noopAgent;
+	const fixedAgent = options.agent;
+	const agentFactory: AgentFactory = fixedAgent
+		? () => fixedAgent
+		: (params) => adaptRunAgent(runAgent, params.cwd);
 
 	const orchestrator = createOrchestrator({
 		runRepo: repo,
@@ -66,7 +71,7 @@ export async function createTestOrchestrator(
 		}),
 		workflow: options.workflow ?? createTestWorkflow(),
 		runner,
-		agent,
+		agentFactory,
 		logger: testLogger,
 		langfuse: {
 			host: "http://localhost:3100",

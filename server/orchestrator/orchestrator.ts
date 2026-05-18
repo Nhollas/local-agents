@@ -11,7 +11,10 @@ import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { IssueKey } from "../types/brands.ts";
 import type { AgentInvokerService } from "../workflow/agent-invoker.ts";
-import { claudeSdkAgentInvoker } from "../workflow/agent-invoker-live.ts";
+import {
+	type AgentInvokerLiveParams,
+	claudeSdkAgentInvoker,
+} from "../workflow/agent-invoker-live.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/types.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
@@ -46,9 +49,13 @@ type OrchestratorConfig = {
 	runner: Runner;
 	logger: Logger;
 	langfuse: LangfuseConfig;
-	agent?: AgentInvokerService;
+	agentFactory?: AgentFactory;
 	clock?: Clock;
 };
+
+export type AgentFactory = (
+	params: Omit<AgentInvokerLiveParams, "env" | "logDir">,
+) => AgentInvokerService;
 
 export type QueuedItem = {
 	issueKey: IssueKey;
@@ -108,7 +115,9 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	const { defaults } = config;
 	const agentEnv = resolveAgentEnvironment(config.agent.env);
 	const logDir = resolvePath(process.cwd(), defaults.log_dir);
-	const agent = opts.agent ?? claudeSdkAgentInvoker({ env: agentEnv, logDir });
+	const agentFactory: AgentFactory =
+		opts.agentFactory ??
+		((params) => claudeSdkAgentInvoker({ env: agentEnv, logDir, ...params }));
 
 	function logTransitionFailed(
 		repo: Issue["repo"],
@@ -135,7 +144,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		codeHostRuntime,
 		workflowRuntime,
 		orchestratorRuntime,
-		agent,
+		agentFactory,
 		clock,
 		logger,
 		workspaceRoot: defaults.workspace_root,

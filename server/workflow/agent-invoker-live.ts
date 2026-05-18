@@ -1,38 +1,40 @@
 import { context as otelContext, propagation } from "@opentelemetry/api";
-import { Layer } from "effect";
 import { instrumentedQuery } from "../telemetry/otel.ts";
+import type { RunId } from "../types/brands.ts";
 import { buildAgentHooks } from "./agent-hooks.ts";
 import {
-	AgentInvoker,
 	type AgentInvokerService,
 	DEFAULT_ALLOWED_TOOLS,
 } from "./agent-invoker.ts";
 import { createRunLogWriter } from "./run-log-file.ts";
 
-type LiveParams = {
+export type AgentInvokerLiveParams = {
 	env: Record<string, string>;
 	logDir: string;
+	cwd: string;
+	runId: RunId;
+	signal: AbortSignal;
 };
 
 export function claudeSdkAgentInvoker({
-	env,
+	env: runEnv,
 	logDir,
-}: LiveParams): AgentInvokerService {
+	cwd,
+	runId,
+	signal,
+}: AgentInvokerLiveParams): AgentInvokerService {
 	return {
 		invoke({
 			prompt,
-			cwd,
 			model,
-			runId,
 			env: invocationEnv,
 			resumeSessionId,
 			outputFormat,
-			signal,
 			allowedTools,
 			onToolFailure,
 		}) {
 			const runLogWriter = createRunLogWriter(logDir, runId);
-			const baseEnv = invocationEnv ?? env;
+			const baseEnv = invocationEnv ?? runEnv;
 			const propagationCarrier: Record<string, string> = {};
 			propagation.inject(otelContext.active(), propagationCarrier);
 			const resolvedEnv = {
@@ -71,12 +73,6 @@ export function claudeSdkAgentInvoker({
 		},
 	};
 }
-
-/** @lintignore consumed once engine runs under a per-run runtime (slices 5/6) */
-export const AgentInvokerLive = (
-	params: LiveParams,
-): Layer.Layer<AgentInvoker> =>
-	Layer.succeed(AgentInvoker, claudeSdkAgentInvoker(params));
 
 function abortControllerFromSignal(signal: AbortSignal): AbortController {
 	const controller = new AbortController();
