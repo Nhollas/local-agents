@@ -2,5 +2,9 @@
 	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"tags": ["-lintignore"],
 	"ignoreDependencies": ["pino-pretty"],
-	"ignore": ["dashboard/src/vite-env.d.ts", "repos/**"]
+	"ignore": [
+		"dashboard/src/vite-env.d.ts",
+		"repos/**",
+		"workflow-redesign-prototype/**"
+	]
 }
