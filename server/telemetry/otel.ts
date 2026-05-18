@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import * as ClaudeAgentSDKModule from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeAgentSDKInstrumentation } from "@arizeai/openinference-instrumentation-claude-agent-sdk";
 import { isDefaultExportSpan, LangfuseSpanProcessor } from "@langfuse/otel";
@@ -13,6 +12,7 @@ import {
 } from "@opentelemetry/semantic-conventions";
 import { Redacted } from "effect";
 import type { LangfuseEnv } from "../config/env.ts";
+import { SERVICE_NAME, SERVICE_VERSION } from "./service-info.ts";
 import { TRACER_NAME } from "./spans.ts";
 
 const ClaudeAgentSDK = { ...ClaudeAgentSDKModule };
@@ -60,8 +60,8 @@ export function initOtel(langfuse: LangfuseEnv): void {
 	};
 
 	const resource = resourceFromAttributes({
-		[ATTR_SERVICE_NAME]: "local-agents",
-		[ATTR_SERVICE_VERSION]: readVersion(),
+		[ATTR_SERVICE_NAME]: SERVICE_NAME,
+		[ATTR_SERVICE_VERSION]: SERVICE_VERSION,
 	});
 
 	sdk = new NodeSDK({
@@ -111,21 +111,4 @@ export async function shutdownOtel(): Promise<void> {
 		const msg = err instanceof Error ? err.message : String(err);
 		process.stderr.write(`otel shutdown error: ${msg}\n`);
 	});
-}
-
-function readVersion(): string {
-	try {
-		const parsed: unknown = JSON.parse(readFileSync("./package.json", "utf8"));
-		if (
-			parsed &&
-			typeof parsed === "object" &&
-			"version" in parsed &&
-			typeof parsed.version === "string"
-		) {
-			return parsed.version;
-		}
-		return "unknown";
-	} catch {
-		return "unknown";
-	}
 }
