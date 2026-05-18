@@ -1,11 +1,11 @@
 import { access, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { makeAppRuntime } from "../runtime.ts";
 import { createTestWorkspaceRoot } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import { renderPrompt } from "./render-prompt.ts";
-import { makeWorkflowRuntime } from "./runtime.ts";
 import {
 	expandMarkedShellBlocks,
 	markTrustedShellBlocks,
@@ -13,7 +13,7 @@ import {
 	SHELL_BLOCK_SPILL_DIR,
 } from "./shell-expansion.ts";
 
-const runtime = makeWorkflowRuntime();
+const runtime = makeAppRuntime();
 afterAll(() => runtime.dispose());
 
 const expand = (

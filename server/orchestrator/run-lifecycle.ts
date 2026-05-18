@@ -1,18 +1,17 @@
-import { Cause, Effect, Exit, Layer, Option, Queue } from "effect";
+import { join } from "node:path";
+import { Effect, Fiber, Layer, Queue } from "effect";
 import * as canonicalLog from "../canonical-log.ts";
-import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
-import type { FinalizeFailurePhase } from "../db/schema.ts";
 import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type {
 	RunContext,
 	RunHandle,
 	Runner,
-	RunResult,
+	RunResult as RunnerRunResult,
 } from "../runner/runner.ts";
+import type { AppRuntime } from "../runtime.ts";
 import { runRunSpan } from "../telemetry/spans.ts";
-import type { TrackerRuntime } from "../trackers/runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import { AgentInvoker } from "../workflow/agent-invoker.ts";
@@ -20,24 +19,17 @@ import {
 	type WorkflowEvent,
 	WorkflowEventEmitterLive,
 } from "../workflow/event-emitter-live.ts";
-import { renderChangeRequest } from "../workflow/render-change-request.ts";
-import { resolveBranch } from "../workflow/resolve-branch.ts";
-import { runSteps } from "../workflow/run-steps.ts";
-import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { PromptScope, RepoWorkflow } from "../workflow/types.ts";
-import type { Clock } from "./clock.ts";
 import { consumeWorkflowEvents } from "./event-consumer.ts";
 import type { AgentFactory } from "./orchestrator.ts";
-import type { OrchestratorRuntime } from "./runtime.ts";
+import { PhaseInputs } from "./phases/inputs.ts";
+import type { RunResult as WalkerResult } from "./phases/types.ts";
 import {
-	createWorkspace,
-	ensureBranch,
-	installSkills,
-	pushBranch,
-	removeWorkspace,
-	resolveWorkspaceEnvironment,
-	runRepoSetup,
-} from "./workspace.ts";
+	formatPhaseCause,
+	toFinalizeFailurePhase,
+} from "./phases/with-observability.ts";
+import { runLifecycleWalker } from "./walker.ts";
+import { removeWorkspace, sanitizeKey } from "./workspace.ts";
 
 type RunRequest = {
 	issue: Issue;
@@ -53,13 +45,9 @@ type RunLifecycleDeps = {
 	runner: Runner;
 	repo: RunRepository;
 	tracker: TrackerAdapter;
-	trackerRuntime: TrackerRuntime;
+	runtime: AppRuntime;
 	codeHost: CodeHostAdapter;
-	codeHostRuntime: CodeHostRuntime;
-	workflowRuntime: WorkflowRuntime;
-	orchestratorRuntime: OrchestratorRuntime;
 	agentFactory: AgentFactory;
-	clock: Clock;
 	logger: Logger;
 	workspaceRoot: string;
 	skillsSourceDir: string;
@@ -68,34 +56,14 @@ type RunLifecycleDeps = {
 	langfuseProjectId: string;
 };
 
-type FailurePhase =
-	| "workspace"
-	| "branch_resolver"
-	| "skills"
-	| "setup"
-	| "step"
-	| FinalizeFailurePhase;
-
-type FinalizeOutcome =
-	| { ok: true }
-	| { ok: false; phase: FinalizeFailurePhase; error: string };
-
-function recordFailure(phase: FailurePhase, error: string): void {
-	canonicalLog.set({ failure_phase: phase, failure_error: error });
-}
-
 export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	const {
 		runner,
 		repo: runRepo,
 		tracker,
-		trackerRuntime,
+		runtime,
 		codeHost,
-		codeHostRuntime,
-		workflowRuntime,
-		orchestratorRuntime,
 		agentFactory,
-		clock,
 		logger,
 		workspaceRoot,
 		skillsSourceDir,
@@ -104,26 +72,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		langfuseProjectId,
 	} = deps;
 
-	type OrchR = Parameters<typeof orchestratorRuntime.runPromise>[0] extends
-		| Effect.Effect<unknown, unknown, infer R>
-		| infer _
-		? R
-		: never;
-	async function runOrch<A, E>(eff: Effect.Effect<A, E, OrchR>): Promise<A> {
-		const exit = await orchestratorRuntime.runPromiseExit(eff);
-		if (Exit.isSuccess(exit)) return exit.value;
-		const failure = Cause.failureOption(exit.cause);
-		if (Option.isSome(failure)) throw failure.value;
-		throw Cause.squash(exit.cause);
-	}
-
 	async function dispatch(req: RunRequest): Promise<RunHandle> {
 		const { issue, repo, workflow } = req;
-
 		const cloneUrl = codeHost.cloneUrl(repo);
-		const baseBranch = await codeHostRuntime.runPromise(
-			codeHost.defaultBranch(repo),
-		);
+		const baseBranch = await runtime.runPromise(codeHost.defaultBranch(repo));
 
 		return runner.enqueue({
 			repo,
@@ -151,245 +103,10 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 								const langfuseTraceUrl = `${langfuseHost}/project/${langfuseProjectId}/traces/${traceId}`;
 								runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
 								try {
-									const startTime = clock.now();
-									let result: RunResult;
-									let branch: string | undefined;
-									let outputs: Record<string, unknown> = {};
-									let phase: FailurePhase = "branch_resolver";
-
-									runRepo.insertSteps(
-										ctx.runId,
-										workflow.steps.map((s, i) => ({
-											index: i + 1,
-											name: s.name,
-										})),
-									);
-
-									let wsPath: string;
-									try {
-										wsPath = await runOrch(
-											createWorkspace(
-												issue,
-												workspaceRoot,
-												cloneUrl,
-												ctx.runId,
-											),
-										);
-									} catch (err) {
-										const error =
-											err instanceof Error ? err.message : String(err);
-										recordFailure("workspace", error);
-										canonicalLog.set({ status: "failed" });
-										await markIssueFailed(repo, issue);
-										return {
-											status: "failed",
-											error,
-											durationMs: clock.now() - startTime,
-										};
-									}
-
-									runRepo.setRunWorkspaceDir(ctx.runId, wsPath);
-									ctx.emit({
-										kind: "system",
-										stepName: null,
-										data: {
-											message: "workspace prepared",
-											command: null,
-											path: wsPath,
-											exitCode: null,
-										},
-									});
-
-									const agent = agentFactory({
-										cwd: wsPath,
-										runId: ctx.runId,
-										signal: ctx.signal,
-									});
-
-									const scope: PromptScope = {
-										issue: {
-											key: issue.key,
-											number: issue.number,
-											title: issue.title,
-											description: issue.description,
-											labels: issue.labels,
-											url: issue.url,
-											createdAt: issue.createdAt,
-										},
+									return await runOnce(ctx, issue, repo, workflow, {
+										cloneUrl,
 										baseBranch,
-									};
-
-									const eventQueue = await workflowRuntime.runPromise(
-										Queue.unbounded<WorkflowEvent>(),
-									);
-									const perRunLayers = Layer.merge(
-										Layer.succeed(AgentInvoker, agent),
-										WorkflowEventEmitterLive(eventQueue),
-									);
-									let consumerDone: Promise<void> | undefined;
-
-									try {
-										consumerDone = workflowRuntime.runPromise(
-											consumeWorkflowEvents(eventQueue, {
-												runRepo,
-												ctx,
-												runId: ctx.runId,
-												cwd: wsPath,
-												logger,
-												steps: workflow.steps,
-											}),
-										);
-										const branchResolverStart = clock.now();
-										const resolvedBranch = await workflowRuntime.runPromise(
-											resolveBranch(workflow.branch, scope).pipe(
-												Effect.provide(perRunLayers),
-											),
-										);
-										canonicalLog.set({
-											branch_resolver_ms: clock.now() - branchResolverStart,
-										});
-										branch = resolvedBranch;
-										canonicalLog.set({ branch });
-										runRepo.setRunBranch(ctx.runId, branch);
-										ctx.emit({
-											kind: "system",
-											stepName: null,
-											data: {
-												message: "branch resolved",
-												command: null,
-												path: branch,
-												exitCode: null,
-											},
-										});
-
-										await runOrch(ensureBranch(wsPath, branch));
-
-										phase = "skills";
-										const skillsResult = await runOrch(
-											installSkills(wsPath, skillsSourceDir, {
-												issue,
-												branch,
-												base_branch: baseBranch,
-											}),
-										);
-										canonicalLog.set({
-											skills_installed: skillsResult.installed,
-											skills_skipped: skillsResult.skipped,
-										});
-										if (
-											skillsResult.installed.length > 0 ||
-											skillsResult.skipped.length > 0
-										) {
-											ctx.emit({
-												kind: "system",
-												stepName: null,
-												data: {
-													message: `skills installed: ${skillsResult.installed.length} (skipped ${skillsResult.skipped.length})`,
-													command: null,
-													path: null,
-													exitCode: null,
-												},
-											});
-										}
-
-										phase = "setup";
-										const workspaceEnv = await runOrch(
-											resolveWorkspaceEnvironment(wsPath, agentEnv),
-										);
-										const repoSetupRan = await runOrch(
-											runRepoSetup(wsPath, workspaceEnv),
-										);
-										canonicalLog.set({ repo_setup_ran: repoSetupRan });
-										if (repoSetupRan) {
-											ctx.emit({
-												kind: "system",
-												stepName: null,
-												data: {
-													message: "repo setup ran",
-													command: ".agent/setup.sh",
-													path: wsPath,
-													exitCode: 0,
-												},
-											});
-										}
-
-										phase = "step";
-										outputs = await workflowRuntime.runPromise(
-											runSteps(
-												workflow.steps,
-												scope,
-												branch,
-												wsPath,
-												workspaceEnv,
-											).pipe(Effect.provide(perRunLayers)),
-										);
-
-										result = {
-											status: "completed",
-											durationMs: clock.now() - startTime,
-										};
-									} catch (err) {
-										const error =
-											err instanceof Error ? err.message : String(err);
-										recordFailure(phase, error);
-										result = {
-											status: "failed",
-											error,
-											durationMs: clock.now() - startTime,
-										};
-									} finally {
-										await workflowRuntime.runPromise(
-											Queue.shutdown(eventQueue),
-										);
-										if (consumerDone) await consumerDone;
-									}
-
-									if (result.status === "completed" && branch !== undefined) {
-										const finalize = await finalizeSuccess(
-											ctx,
-											repo,
-											issue,
-											scope,
-											workflow,
-											wsPath,
-											branch,
-											baseBranch,
-											outputs,
-										);
-										if (!finalize.ok) {
-											ctx.emit({
-												kind: "system",
-												stepName: null,
-												data: {
-													message: `finalize failed: ${finalize.phase}`,
-													command: null,
-													path: null,
-													exitCode: null,
-												},
-											});
-											result = {
-												status: "failed",
-												error: `${finalize.phase}: ${finalize.error}`,
-												durationMs: result.durationMs,
-												finalizeFailure: {
-													phase: finalize.phase,
-													error: finalize.error,
-												},
-											};
-										}
-									}
-
-									canonicalLog.set({ status: result.status });
-
-									// Keep the workspace on any failure so the run can be inspected;
-									// only fully successful runs (agent + push + change-request) clean up.
-									if (result.status === "completed") {
-										await runOrch(removeWorkspace(wsPath));
-									} else {
-										await markIssueFailed(repo, issue);
-									}
-
-									return result;
+									});
 								} finally {
 									logger.info(`langfuse trace: ${langfuseTraceUrl}`);
 								}
@@ -400,87 +117,107 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		});
 	}
 
-	async function finalizeSuccess(
+	async function runOnce(
 		ctx: RunContext,
+		issue: Issue,
+		repo: RepoSlug,
+		workflow: RepoWorkflow,
+		urls: { cloneUrl: string; baseBranch: string },
+	): Promise<RunnerRunResult> {
+		const startMs = Date.now();
+		const wsPath = join(
+			workspaceRoot,
+			`${sanitizeKey(issue.key)}-${ctx.runId}`,
+		);
+		const scope: PromptScope = {
+			issue: {
+				key: issue.key,
+				number: issue.number,
+				title: issue.title,
+				description: issue.description,
+				labels: issue.labels,
+				url: issue.url,
+				createdAt: issue.createdAt,
+			},
+			baseBranch: urls.baseBranch,
+		};
+
+		const program = Effect.gen(function* () {
+			const eventQueue = yield* Queue.unbounded<WorkflowEvent>();
+			const consumer = yield* Effect.fork(
+				consumeWorkflowEvents(eventQueue, {
+					runRepo,
+					ctx,
+					runId: ctx.runId,
+					cwd: wsPath,
+					logger,
+					steps: workflow.steps,
+				}),
+			);
+			const agent = agentFactory({
+				cwd: wsPath,
+				runId: ctx.runId,
+				signal: ctx.signal,
+			});
+			const perRunLayers = Layer.mergeAll(
+				Layer.succeed(AgentInvoker, agent),
+				WorkflowEventEmitterLive(eventQueue),
+				Layer.succeed(PhaseInputs, {
+					issue,
+					repo,
+					cloneUrl: urls.cloneUrl,
+					baseBranch: urls.baseBranch,
+					runId: ctx.runId,
+					workspaceRoot,
+					skillsSourceDir,
+					agentEnv,
+					scope,
+					workflow,
+					runRepo,
+					emit: ctx.emit,
+					codeHost,
+					tracker,
+				}),
+			);
+
+			const result = yield* runLifecycleWalker.pipe(
+				Effect.provide(perRunLayers),
+			);
+			yield* Queue.shutdown(eventQueue);
+			yield* Fiber.join(consumer);
+			return result;
+		});
+
+		const phaseResult = await runtime.runPromise(program);
+		const runnerResult = phaseResultToRunnerResult(
+			phaseResult,
+			Date.now() - startMs,
+		);
+		canonicalLog.set({ status: runnerResult.status });
+
+		if (
+			phaseResult.status === "completed" &&
+			phaseResult.state.wsPath !== undefined
+		) {
+			await runtime.runPromise(removeWorkspace(phaseResult.state.wsPath));
+		} else {
+			await markIssueFailedSafe(repo, issue);
+		}
+
+		return runnerResult;
+	}
+
+	async function markIssueFailedSafe(
 		repo: RepoSlug,
 		issue: Issue,
-		scope: PromptScope,
-		workflow: RepoWorkflow,
-		wsPath: string,
-		branch: string,
-		baseBranch: string,
-		outputs: Record<string, unknown>,
-	): Promise<FinalizeOutcome> {
-		// Pinned order per ADR 0001: push → change-request → tracker.
-		try {
-			await runOrch(pushBranch(wsPath, branch));
-		} catch (err) {
-			return finalizeFailure("push", err);
-		}
-
-		const { title, body } = renderChangeRequest(
-			workflow.change_request,
-			scope,
-			branch,
-			outputs,
-		);
-		try {
-			const pr = await codeHostRuntime.runPromise(
-				codeHost.createChangeRequest(repo, branch, baseBranch, title, body),
-			);
-			runRepo.setRunPr(ctx.runId, {
-				repo,
-				number: pr.number,
-				url: pr.url,
-				kind: "opened",
-			});
-			canonicalLog.set({ pr_url: pr.url });
-			ctx.emit({
-				kind: "system",
-				stepName: null,
-				data: {
-					message: "change request opened",
-					command: null,
-					path: pr.url,
-					exitCode: null,
-				},
-			});
-		} catch (err) {
-			return finalizeFailure("change_request", err);
-		}
-
-		try {
-			await trackerRuntime.runPromise(
-				tracker.transitionState(
-					repo,
-					issue.number,
-					"running",
-					"awaiting_review",
-				),
-			);
-		} catch (err) {
-			return finalizeFailure("tracker_transition", err);
-		}
-		return { ok: true };
-	}
-
-	function finalizeFailure(
-		phase: FinalizeFailurePhase,
-		err: unknown,
-	): FinalizeOutcome {
-		const error = formatExecError(err);
-		recordFailure(phase, error);
-		return { ok: false, phase, error };
-	}
-
-	async function markIssueFailed(repo: RepoSlug, issue: Issue): Promise<void> {
-		await trackerRuntime
+	): Promise<void> {
+		await runtime
 			.runPromise(tracker.markFailed(repo, issue.number))
 			.catch((err) => {
 				canonicalLog.append("warnings", {
 					kind: "mark_failed_failed",
 					issue: `${repo}#${issue.number}`,
-					error: formatExecError(err),
+					error: err instanceof Error ? err.message : String(err),
 				});
 			});
 	}
@@ -488,16 +225,22 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	return { dispatch };
 }
 
-// Node's child_process errors keep the rich detail (stderr/stdout) on the error
-// object rather than in `err.message` — message is just "Command failed: …".
-// Surface stderr/stdout so failure diagnostics survive logging.
-function formatExecError(err: unknown): string {
-	if (!(err instanceof Error)) return String(err);
-	const e = err as Error & { stderr?: unknown; stdout?: unknown };
-	const stderr = typeof e.stderr === "string" ? e.stderr.trim() : "";
-	const stdout = typeof e.stdout === "string" ? e.stdout.trim() : "";
-	const parts = [e.message];
-	if (stderr) parts.push(`stderr:\n${stderr}`);
-	if (stdout) parts.push(`stdout:\n${stdout}`);
-	return parts.join("\n");
+function phaseResultToRunnerResult(
+	result: WalkerResult,
+	durationMs: number,
+): RunnerRunResult {
+	if (result.status === "completed") {
+		return { status: "completed", durationMs };
+	}
+	const error = formatPhaseCause(result.cause);
+	const finalize = toFinalizeFailurePhase(result.phase);
+	if (finalize) {
+		return {
+			status: "failed",
+			error: `${finalize}: ${error}`,
+			durationMs,
+			finalizeFailure: { phase: finalize, error },
+		};
+	}
+	return { status: "failed", error, durationMs };
 }

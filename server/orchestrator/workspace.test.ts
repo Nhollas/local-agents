@@ -13,10 +13,10 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { makeAppRuntime } from "../runtime.ts";
 import { seedBareRepoMain } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
 import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
-import { makeOrchestratorRuntime } from "./runtime.ts";
 import {
 	createWorkspace,
 	installSkills,
@@ -30,7 +30,7 @@ import {
 
 const exec = promisify(execFile);
 
-const runtime = makeOrchestratorRuntime();
+const runtime = makeAppRuntime();
 const run = <A, E>(
 	eff: Effect.Effect<
 		A,

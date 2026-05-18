@@ -1,12 +1,12 @@
 import { HttpResponse, http } from "msw";
 import { afterAll, describe, expect, it } from "vitest";
+import { makeAppRuntime } from "../runtime.ts";
 import { GITHUB_API, REPO } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
 import { createGitHubAdapter } from "./github.ts";
-import { makeCodeHostRuntime } from "./runtime.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
-const runtime = makeCodeHostRuntime();
+const runtime = makeAppRuntime();
 afterAll(() => runtime.dispose());
 
 async function makeAdapter(cloneToken?: string): Promise<CodeHostAdapter> {

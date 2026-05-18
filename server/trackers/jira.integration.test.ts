@@ -1,6 +1,7 @@
 import { Cause } from "effect";
 import { HttpResponse, http } from "msw";
 import { afterAll, describe, expect, it } from "vitest";
+import { makeAppRuntime } from "../runtime.ts";
 import {
 	createJiraIssue,
 	JIRA_API,
@@ -11,9 +12,8 @@ import { server } from "../test-support/msw.ts";
 import { issueNumber, type RepoSlug, repoSlug } from "../types/brands.ts";
 import { JiraTransitionNotFoundError } from "./errors.ts";
 import { createJiraTracker, type JiraTrackerOptions } from "./jira-tracker.ts";
-import { makeTrackerRuntime } from "./runtime.ts";
 
-const runtime = makeTrackerRuntime();
+const runtime = makeAppRuntime();
 afterAll(() => runtime.dispose());
 
 const statuses = {

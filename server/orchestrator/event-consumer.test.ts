@@ -7,11 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as canonicalLog from "../canonical-log.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput } from "../runner/runner.ts";
+import { makeAppRuntime } from "../runtime.ts";
 import { testLogger } from "../test-support/test-logger.ts";
 import { runId } from "../types/brands.ts";
 import type { AgentMessage } from "../workflow/agent-invoker.ts";
 import type { WorkflowEvent } from "../workflow/event-emitter.ts";
-import { makeWorkflowRuntime } from "../workflow/runtime.ts";
 import type { StepUsage, WorkflowStep } from "../workflow/types.ts";
 import { consumeWorkflowEvents } from "./event-consumer.ts";
 
@@ -136,7 +136,7 @@ async function drive(
 		repo?: ReturnType<typeof makeRepo>["repo"];
 	} = {},
 ): Promise<void> {
-	const runtime = makeWorkflowRuntime();
+	const runtime = makeAppRuntime();
 	try {
 		const queue = await runtime.runPromise(Queue.unbounded<WorkflowEvent>());
 		const consumer = runtime.runPromise(

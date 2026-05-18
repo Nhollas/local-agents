@@ -1,34 +1,27 @@
 import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Cause, Effect, type Fiber, Schedule } from "effect";
 import * as canonicalLog from "../canonical-log.ts";
-import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { AppConfigShape } from "../config/app-config.ts";
 import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
-import type { Runner } from "../runner/runner.ts";
-import type { TrackerRuntime } from "../trackers/runtime.ts";
+import type { RunHandle, Runner } from "../runner/runner.ts";
+import type { AppRuntime } from "../runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import type { IssueKey } from "../types/brands.ts";
+import type { IssueKey, RepoSlug } from "../types/brands.ts";
 import type { AgentInvokerService } from "../workflow/agent-invoker.ts";
 import {
 	type AgentInvokerLiveParams,
 	claudeSdkAgentInvoker,
 } from "../workflow/agent-invoker-live.ts";
-import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { RepoWorkflow } from "../workflow/types.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
-import { type Clock, systemClock } from "./clock.ts";
 import { createRunLifecycle } from "./run-lifecycle.ts";
-import type { OrchestratorRuntime } from "./runtime.ts";
 import { sweepWorkspaces } from "./workspace.ts";
 
-type LangfuseConfig = {
-	host: string;
-	projectId: string;
-};
-
 const WORKSPACE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const WORKSPACE_SWEEP_INTERVAL = "1 hour";
 
 // LA ships its own skills at `<repo-root>/skills/`. Resolve relative to this
 // source file so the path is tied to the install, not the launch CWD.
@@ -36,26 +29,33 @@ const SKILLS_SOURCE_DIR = fileURLToPath(
 	new URL("../../skills/", import.meta.url),
 );
 
+type LangfuseConfig = {
+	host: string;
+	projectId: string;
+};
+
 type OrchestratorConfig = {
 	runRepo: RunRepository;
 	tracker: TrackerAdapter;
-	trackerRuntime: TrackerRuntime;
+	runtime: AppRuntime;
 	codeHost: CodeHostAdapter;
-	codeHostRuntime: CodeHostRuntime;
-	workflowRuntime: WorkflowRuntime;
-	orchestratorRuntime: OrchestratorRuntime;
 	config: AppConfigShape;
 	workflow: RepoWorkflow;
 	runner: Runner;
 	logger: Logger;
 	langfuse: LangfuseConfig;
 	agentFactory?: AgentFactory;
-	clock?: Clock;
 };
 
 export type AgentFactory = (
 	params: Omit<AgentInvokerLiveParams, "env" | "logDir">,
 ) => AgentInvokerService;
+
+export type DispatchRequest = {
+	issue: Issue;
+	repo: RepoSlug;
+	workflow: RepoWorkflow;
+};
 
 export type QueuedItem = {
 	issueKey: IssueKey;
@@ -65,16 +65,17 @@ export type QueuedItem = {
 };
 
 export type Orchestrator = {
-	tick(): Promise<void>;
-	/** Reconcile DB and tracker state left over from a previous process. */
-	recover(): Promise<void>;
-	/** Wait for all post-run work (PR creation, label swaps, cleanup) to finish. */
-	settled(): Promise<void>;
-	start(): void;
-	stop(): void;
-	/** Snapshot of the in-memory holding queue, ordered by `pendingSince` ascending. */
+	dispatch(req: DispatchRequest): Effect.Effect<RunHandle, unknown>;
+	sweepNow: Effect.Effect<void>;
+	start: Effect.Effect<Fiber.RuntimeFiber<void, never>>;
 	getQueueSnapshot(): QueuedItem[];
 };
+
+export function createOrchestrator(
+	opts: OrchestratorConfig,
+): Effect.Effect<Orchestrator> {
+	return Effect.sync(() => buildOrchestrator(opts));
+}
 
 type QueueEntry = {
 	issue: Issue;
@@ -91,26 +92,19 @@ type DispatchTally = {
 	skippedAtCapacity: number;
 };
 
-export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
-	let timer: ReturnType<typeof setInterval>;
-	let ticking = false;
-	const pendingPostRuns = new Set<Promise<unknown>>();
+function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	const holdingQueue = new Map<IssueKey, QueueEntry>();
 
 	const {
 		runRepo,
 		tracker,
-		trackerRuntime,
+		runtime,
 		codeHost,
-		codeHostRuntime,
-		workflowRuntime,
-		orchestratorRuntime,
 		config,
 		workflow,
 		runner,
 		logger,
 		langfuse,
-		clock = systemClock(),
 	} = opts;
 	const { defaults } = config;
 	const agentEnv = resolveAgentEnvironment(config.agent.env);
@@ -119,33 +113,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		opts.agentFactory ??
 		((params) => claudeSdkAgentInvoker({ env: agentEnv, logDir, ...params }));
 
-	function logTransitionFailed(
-		repo: Issue["repo"],
-		number: Issue["number"],
-		from: "pending" | "running",
-		to: "pending" | "running",
-		err: unknown,
-	): void {
-		canonicalLog.append("warnings", {
-			kind: "state_transition_failed",
-			issue: `${repo}#${number}`,
-			from,
-			to,
-			error: err instanceof Error ? err.message : String(err),
-		});
-	}
-
 	const lifecycle = createRunLifecycle({
 		runner,
 		repo: runRepo,
 		tracker,
-		trackerRuntime,
+		runtime,
 		codeHost,
-		codeHostRuntime,
-		workflowRuntime,
-		orchestratorRuntime,
 		agentFactory,
-		clock,
 		logger,
 		workspaceRoot: defaults.workspace_root,
 		skillsSourceDir: SKILLS_SOURCE_DIR,
@@ -154,103 +128,31 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		langfuseProjectId: langfuse.projectId,
 	});
 
-	function trackPostRun(done: Promise<unknown>): void {
-		pendingPostRuns.add(done);
-		done.finally(() => pendingPostRuns.delete(done));
-	}
+	const dispatch = (req: DispatchRequest): Effect.Effect<RunHandle, unknown> =>
+		Effect.tryPromise({ try: () => lifecycle.dispatch(req), catch: (e) => e });
 
-	async function fetchTickState(): Promise<TickState> {
+	const fetchTickState: Effect.Effect<TickState> = Effect.gen(function* () {
 		const runningIssueKeys = new Set(
 			runRepo.getRunningSnapshot().map((r) => r.issueKey),
 		);
-
-		let pending: Issue[];
-		try {
-			const result = await trackerRuntime.runPromise(
-				tracker.fetchActiveIssues("pending"),
-			);
-			pending = [...result.issues];
-		} catch (err) {
-			canonicalLog.append("warnings", {
-				kind: "fetch_active_issues_failed",
-				state: "pending",
-				error: err instanceof Error ? err.message : String(err),
-			});
-			pending = [];
-		}
-		pending.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-
-		return { runningIssueKeys, pending };
-	}
-
-	async function recover() {
-		await canonicalLog.run(
-			{ scope: "recovery" },
-			async () => {
-				const completedAt = new Date(clock.now()).toISOString();
-				let staleRunsFailed = 0;
-				for (const run of runRepo.getRunningSnapshot()) {
-					runRepo.failRun(run.id, {
-						error: "Stale run from previous session",
-						completedAt,
-					});
-					staleRunsFailed += 1;
-				}
-				canonicalLog.set({
-					stale_runs_failed: staleRunsFailed,
-					tracker_orphans_recovered: 0,
+		const pending = yield* Effect.tryPromise({
+			try: () => runtime.runPromise(tracker.fetchActiveIssues("pending")),
+			catch: (err) => err,
+		}).pipe(
+			Effect.map((page) =>
+				[...page.issues].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+			),
+			Effect.catchAll((err) => {
+				canonicalLog.append("warnings", {
+					kind: "fetch_active_issues_failed",
+					state: "pending",
+					error: err instanceof Error ? err.message : String(err),
 				});
-
-				// Tracker issues stuck "running" mean the previous process died mid-flight;
-				// push them back to "pending" so the next tick re-dispatches.
-				let runningIssues: readonly Issue[];
-				try {
-					const result = await trackerRuntime.runPromise(
-						tracker.fetchActiveIssues("running"),
-					);
-					runningIssues = result.issues;
-				} catch (err) {
-					canonicalLog.append("warnings", {
-						kind: "fetch_active_issues_failed",
-						state: "running",
-						error: err instanceof Error ? err.message : String(err),
-					});
-					return;
-				}
-
-				const results = await Promise.allSettled(
-					runningIssues.map((issue) =>
-						trackerRuntime.runPromise(
-							tracker.transitionState(
-								issue.repo,
-								issue.number,
-								"running",
-								"pending",
-							),
-						),
-					),
-				);
-				for (const [index, r] of results.entries()) {
-					if (r.status !== "rejected") continue;
-					const issue = runningIssues[index];
-					if (!issue) continue;
-					logTransitionFailed(
-						issue.repo,
-						issue.number,
-						"running",
-						"pending",
-						r.reason,
-					);
-				}
-				canonicalLog.set({
-					tracker_orphans_recovered: results.filter(
-						(r) => r.status === "fulfilled",
-					).length,
-				});
-			},
-			logger,
+				return Effect.succeed<Issue[]>([]);
+			}),
 		);
-	}
+		return { runningIssueKeys, pending };
+	});
 
 	function reconcileQueue(state: TickState): void {
 		const pendingByKey = new Map(state.pending.map((i) => [i.key, i]));
@@ -261,7 +163,7 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			}
 		}
 
-		const nowIso = new Date(clock.now()).toISOString();
+		const nowIso = new Date().toISOString();
 		for (const issue of state.pending) {
 			if (state.runningIssueKeys.has(issue.key)) continue;
 			const existing = holdingQueue.get(issue.key);
@@ -273,132 +175,203 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 		}
 	}
 
-	async function dispatchFromQueue(state: TickState): Promise<DispatchTally> {
-		const tally: DispatchTally = {
-			dispatched: 0,
-			skippedAtCapacity: 0,
-		};
-		for (const entry of [...holdingQueue.values()]) {
-			const { issue } = entry;
-			if (state.runningIssueKeys.has(issue.key)) continue;
-			if (state.runningIssueKeys.size >= defaults.max_concurrent) {
-				tally.skippedAtCapacity += 1;
-				continue;
-			}
+	const dispatchFromQueue = (state: TickState): Effect.Effect<DispatchTally> =>
+		Effect.gen(function* () {
+			const tally: DispatchTally = { dispatched: 0, skippedAtCapacity: 0 };
+			for (const entry of [...holdingQueue.values()]) {
+				const { issue } = entry;
+				if (state.runningIssueKeys.has(issue.key)) continue;
+				if (state.runningIssueKeys.size >= defaults.max_concurrent) {
+					tally.skippedAtCapacity += 1;
+					continue;
+				}
 
-			const { repo } = issue;
-			try {
-				await trackerRuntime.runPromise(
-					tracker.transitionState(repo, issue.number, "pending", "running"),
+				const transitioned = yield* runTrackerTransition(
+					issue,
+					"pending",
+					"running",
 				);
-			} catch (err) {
-				logTransitionFailed(repo, issue.number, "pending", "running", err);
-				continue;
-			}
+				if (!transitioned) continue;
 
-			try {
-				const handle = await lifecycle.dispatch({ issue, repo, workflow });
-				trackPostRun(handle.result);
-			} catch (err) {
+				const dispatched = yield* dispatch({
+					issue,
+					repo: issue.repo,
+					workflow,
+				}).pipe(
+					Effect.map(() => true),
+					Effect.catchAll((err) => {
+						canonicalLog.append("warnings", {
+							kind: "dispatch_failed",
+							issue_key: issue.key,
+							error: err instanceof Error ? err.message : String(err),
+						});
+						return runTrackerTransition(issue, "running", "pending").pipe(
+							Effect.as(false),
+						);
+					}),
+				);
+				if (!dispatched) continue;
+
+				holdingQueue.delete(issue.key);
+				state.runningIssueKeys.add(issue.key);
+				tally.dispatched += 1;
+			}
+			return tally;
+		});
+
+	const runTrackerTransition = (
+		issue: Issue,
+		from: "pending" | "running",
+		to: "pending" | "running",
+	): Effect.Effect<boolean> =>
+		Effect.tryPromise({
+			try: () =>
+				runtime.runPromise(
+					tracker.transitionState(issue.repo, issue.number, from, to),
+				),
+			catch: (err) => err,
+		}).pipe(
+			Effect.as(true),
+			Effect.catchAll((err) => {
 				canonicalLog.append("warnings", {
-					kind: "dispatch_failed",
-					issue_key: issue.key,
+					kind: "state_transition_failed",
+					issue: `${issue.repo}#${issue.number}`,
+					from,
+					to,
 					error: err instanceof Error ? err.message : String(err),
 				});
-				await trackerRuntime
-					.runPromise(
-						tracker.transitionState(repo, issue.number, "running", "pending"),
-					)
-					.catch((rollbackErr) => {
-						logTransitionFailed(
-							repo,
-							issue.number,
-							"running",
-							"pending",
-							rollbackErr,
-						);
-					});
-				continue;
-			}
+				return Effect.succeed(false);
+			}),
+		);
 
-			holdingQueue.delete(issue.key);
-			state.runningIssueKeys.add(issue.key);
-			tally.dispatched += 1;
+	const tickBody: Effect.Effect<void> = Effect.gen(function* () {
+		const state = yield* fetchTickState;
+		canonicalLog.set({
+			pending_count: state.pending.length,
+			running_count: state.runningIssueKeys.size,
+		});
+		reconcileQueue(state);
+		canonicalLog.set({ queued_count: holdingQueue.size });
+		const tally = yield* dispatchFromQueue(state);
+		canonicalLog.set({
+			dispatched_count: tally.dispatched,
+			skipped_at_capacity: tally.skippedAtCapacity,
+		});
+	});
+
+	const tick = wrapInCanonicalScope({ scope: "tick" }, tickBody);
+
+	const recoverBody: Effect.Effect<void> = Effect.gen(function* () {
+		const completedAt = new Date().toISOString();
+		let staleRunsFailed = 0;
+		for (const run of runRepo.getRunningSnapshot()) {
+			runRepo.failRun(run.id, {
+				error: "Stale run from previous session",
+				completedAt,
+			});
+			staleRunsFailed += 1;
 		}
-		return tally;
-	}
+		canonicalLog.set({
+			stale_runs_failed: staleRunsFailed,
+			tracker_orphans_recovered: 0,
+		});
 
-	async function tick() {
-		if (ticking) return;
-		ticking = true;
+		// Tracker issues stuck "running" mean the previous process died mid-flight;
+		// push them back to "pending" so the next tick re-dispatches.
+		const fetched = yield* Effect.tryPromise({
+			try: () => runtime.runPromise(tracker.fetchActiveIssues("running")),
+			catch: (err) => err,
+		}).pipe(
+			Effect.map((page) => page.issues),
+			Effect.catchAll((err) => {
+				canonicalLog.append("warnings", {
+					kind: "fetch_active_issues_failed",
+					state: "running",
+					error: err instanceof Error ? err.message : String(err),
+				});
+				return Effect.succeed<readonly Issue[] | null>(null);
+			}),
+		);
+		if (fetched === null) return;
 
-		try {
-			await canonicalLog.run(
-				{ scope: "tick" },
-				async () => {
-					const state = await fetchTickState();
-					canonicalLog.set({
-						pending_count: state.pending.length,
-						running_count: state.runningIssueKeys.size,
-					});
-					reconcileQueue(state);
-					canonicalLog.set({ queued_count: holdingQueue.size });
-					const tally = await dispatchFromQueue(state);
-					canonicalLog.set({
-						dispatched_count: tally.dispatched,
-						skipped_at_capacity: tally.skippedAtCapacity,
-					});
-				},
-				logger,
-			);
-		} finally {
-			ticking = false;
-		}
-	}
+		const recovered = yield* Effect.all(
+			fetched.map((issue) => runTrackerTransition(issue, "running", "pending")),
+			{ concurrency: "unbounded" },
+		);
+		canonicalLog.set({
+			tracker_orphans_recovered: recovered.filter((ok) => ok).length,
+		});
+	});
 
-	return {
-		tick,
-		recover,
-		async settled() {
-			await Promise.all(pendingPostRuns);
-		},
-		start() {
+	const recover = wrapInCanonicalScope({ scope: "recovery" }, recoverBody);
+
+	const sweepNow: Effect.Effect<void> = Effect.tryPromise({
+		try: () =>
+			runtime.runPromise(
+				sweepWorkspaces(defaults.workspace_root, WORKSPACE_TTL_MS),
+			),
+		catch: (err) => err,
+	}).pipe(
+		Effect.tap((swept) =>
+			Effect.sync(() => {
+				if (swept.removed.length > 0) {
+					logger.info(
+						{ count: swept.removed.length },
+						"orchestrator.workspaces_swept",
+					);
+				}
+			}),
+		),
+		Effect.catchAll((err) =>
+			Effect.sync(() => {
+				logger.warn({ err }, "orchestrator.workspace_sweep_failed");
+			}),
+		),
+	);
+
+	const safeTick = tick.pipe(
+		Effect.catchAllCause((cause) =>
+			Effect.sync(() => {
+				logger.error({ err: Cause.pretty(cause) }, "orchestrator.tick_failed");
+			}),
+		),
+	);
+
+	const mainLoop = Effect.gen(function* () {
+		yield* recover.pipe(
+			Effect.catchAllCause((cause) =>
+				Effect.sync(() => {
+					logger.error(
+						{ err: Cause.pretty(cause) },
+						"orchestrator.recover_failed",
+					);
+				}),
+			),
+		);
+		yield* safeTick.pipe(
+			Effect.repeat(Schedule.spaced(`${defaults.polling_interval_ms} millis`)),
+		);
+	});
+
+	const sweepLoop = sweepNow.pipe(
+		Effect.repeat(Schedule.spaced(WORKSPACE_SWEEP_INTERVAL)),
+	);
+
+	const start: Effect.Effect<Fiber.RuntimeFiber<void, never>> = Effect.gen(
+		function* () {
 			logger.info(
 				{ interval: defaults.polling_interval_ms },
 				"orchestrator.starting",
 			);
-			orchestratorRuntime
-				.runPromise(sweepWorkspaces(defaults.workspace_root, WORKSPACE_TTL_MS))
-				.then(
-					(swept) => {
-						if (swept.removed.length > 0) {
-							logger.info(
-								{ count: swept.removed.length },
-								"orchestrator.workspaces_swept",
-							);
-						}
-					},
-					(err) => logger.warn({ err }, "orchestrator.workspace_sweep_failed"),
-				);
-			void (async () => {
-				try {
-					await recover();
-					await tick();
-				} catch (err) {
-					logger.error({ err }, "orchestrator.tick_failed");
-				}
-				timer = setInterval(
-					() =>
-						tick().catch((err) =>
-							logger.error({ err }, "orchestrator.tick_failed"),
-						),
-					defaults.polling_interval_ms,
-				);
-			})();
+			yield* Effect.forkDaemon(sweepLoop);
+			return yield* Effect.forkDaemon(mainLoop);
 		},
-		stop() {
-			clearInterval(timer);
-		},
+	);
+
+	return {
+		dispatch,
+		sweepNow,
+		start,
 		getQueueSnapshot() {
 			return [...holdingQueue.values()].map((entry) => ({
 				issueKey: entry.issue.key,
@@ -408,4 +381,13 @@ export function createOrchestrator(opts: OrchestratorConfig): Orchestrator {
 			}));
 		},
 	};
+
+	function wrapInCanonicalScope(
+		init: Record<string, unknown>,
+		body: Effect.Effect<void>,
+	): Effect.Effect<void> {
+		return Effect.promise(() =>
+			canonicalLog.run(init, () => runtime.runPromise(body), logger),
+		);
+	}
 }

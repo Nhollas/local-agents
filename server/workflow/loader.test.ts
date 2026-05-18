@@ -2,10 +2,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { makeAppRuntime } from "../runtime.ts";
 import { loadWorkflow } from "./loader.ts";
-import { makeWorkflowRuntime } from "./runtime.ts";
 
-const runtime = makeWorkflowRuntime();
+const runtime = makeAppRuntime();
 afterAll(() => runtime.dispose());
 
 const load = (path?: string) => runtime.runPromise(loadWorkflow(path));
