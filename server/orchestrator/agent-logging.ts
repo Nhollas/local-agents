@@ -1,7 +1,7 @@
 import * as canonicalLog from "../canonical-log.ts";
 import type { RunContext } from "../runner/runner.ts";
 
-export type AgentMessage = {
+type AgentMessage = {
 	type: "assistant";
 	message: { content: ContentBlock[] };
 };
