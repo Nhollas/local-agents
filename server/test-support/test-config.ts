@@ -1,4 +1,4 @@
-import type { Config } from "../config.ts";
+import type { AppConfigShape } from "../config/app-config.ts";
 import {
 	GITLAB_BASE_URL,
 	JIRA_BASE_URL,
@@ -9,8 +9,8 @@ import {
 } from "./fixtures.ts";
 
 export function createTestConfig(
-	overrides: Partial<Config["defaults"]> = {},
-): Config {
+	overrides: Partial<AppConfigShape["defaults"]> = {},
+): AppConfigShape {
 	return {
 		tracker: {
 			kind: "jira",

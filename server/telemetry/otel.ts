@@ -11,7 +11,8 @@ import {
 	ATTR_SERVICE_NAME,
 	ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
-import { env } from "../env.ts";
+import { Redacted } from "effect";
+import type { LangfuseEnv } from "../config/env.ts";
 import { TRACER_NAME } from "./spans.ts";
 
 const ClaudeAgentSDK = { ...ClaudeAgentSDKModule };
@@ -42,6 +43,76 @@ function stripCostAttributes(attrs: Attributes) {
 const { PeriodicExportingMetricReader } = metrics;
 const { BatchLogRecordProcessor } = logs;
 
+let sdk: NodeSDK | undefined;
+
+export function initOtel(langfuse: LangfuseEnv): void {
+	if (sdk) return;
+
+	const publicKey = Redacted.value(langfuse.publicKey);
+	const secretKey = Redacted.value(langfuse.secretKey);
+	const otelEndpoint = `${langfuse.host}/api/public/otel`;
+	const credentials = Buffer.from(`${publicKey}:${secretKey}`).toString(
+		"base64",
+	);
+	const otelHeaders = {
+		Authorization: `Basic ${credentials}`,
+		"x-langfuse-ingestion-version": "4",
+	};
+
+	const resource = resourceFromAttributes({
+		[ATTR_SERVICE_NAME]: "local-agents",
+		[ATTR_SERVICE_VERSION]: readVersion(),
+	});
+
+	sdk = new NodeSDK({
+		resource,
+		spanProcessors: [
+			new LangfuseSpanProcessor({
+				publicKey,
+				secretKey,
+				baseUrl: langfuse.host,
+				shouldExportSpan: ({ otelSpan }) => {
+					const shouldExport =
+						isDefaultExportSpan(otelSpan) ||
+						otelSpan.instrumentationScope.name ===
+							CLAUDE_SDK_INSTRUMENTATION_SCOPE ||
+						otelSpan.instrumentationScope.name === TRACER_NAME;
+					if (shouldExport) {
+						stripCostAttributes(otelSpan.attributes);
+					}
+					return shouldExport;
+				},
+			}),
+		],
+		metricReaders: [
+			new PeriodicExportingMetricReader({
+				exporter: new OTLPMetricExporter({
+					url: `${otelEndpoint}/v1/metrics`,
+					headers: otelHeaders,
+				}),
+			}),
+		],
+		logRecordProcessors: [
+			new BatchLogRecordProcessor(
+				new OTLPLogExporter({
+					url: `${otelEndpoint}/v1/logs`,
+					headers: otelHeaders,
+				}),
+			),
+		],
+	});
+
+	sdk.start();
+}
+
+export async function shutdownOtel(): Promise<void> {
+	if (!sdk) return;
+	await sdk.shutdown().catch((err: unknown) => {
+		const msg = err instanceof Error ? err.message : String(err);
+		process.stderr.write(`otel shutdown error: ${msg}\n`);
+	});
+}
+
 function readVersion(): string {
 	try {
 		const parsed: unknown = JSON.parse(readFileSync("./package.json", "utf8"));
@@ -57,65 +128,4 @@ function readVersion(): string {
 	} catch {
 		return "unknown";
 	}
-}
-
-const otelEndpoint = `${env.LANGFUSE_HOST}/api/public/otel`;
-const credentials = Buffer.from(
-	`${env.LANGFUSE_PUBLIC_KEY}:${env.LANGFUSE_SECRET_KEY}`,
-).toString("base64");
-const otelHeaders = {
-	Authorization: `Basic ${credentials}`,
-	"x-langfuse-ingestion-version": "4",
-};
-
-const resource = resourceFromAttributes({
-	[ATTR_SERVICE_NAME]: "local-agents",
-	[ATTR_SERVICE_VERSION]: readVersion(),
-});
-
-const sdk = new NodeSDK({
-	resource,
-	spanProcessors: [
-		new LangfuseSpanProcessor({
-			publicKey: env.LANGFUSE_PUBLIC_KEY,
-			secretKey: env.LANGFUSE_SECRET_KEY,
-			baseUrl: env.LANGFUSE_HOST,
-			shouldExportSpan: ({ otelSpan }) => {
-				const shouldExport =
-					isDefaultExportSpan(otelSpan) ||
-					otelSpan.instrumentationScope.name ===
-						CLAUDE_SDK_INSTRUMENTATION_SCOPE ||
-					otelSpan.instrumentationScope.name === TRACER_NAME;
-				if (shouldExport) {
-					stripCostAttributes(otelSpan.attributes);
-				}
-				return shouldExport;
-			},
-		}),
-	],
-	metricReaders: [
-		new PeriodicExportingMetricReader({
-			exporter: new OTLPMetricExporter({
-				url: `${otelEndpoint}/v1/metrics`,
-				headers: otelHeaders,
-			}),
-		}),
-	],
-	logRecordProcessors: [
-		new BatchLogRecordProcessor(
-			new OTLPLogExporter({
-				url: `${otelEndpoint}/v1/logs`,
-				headers: otelHeaders,
-			}),
-		),
-	],
-});
-
-sdk.start();
-
-export async function shutdownOtel(): Promise<void> {
-	await sdk.shutdown().catch((err: unknown) => {
-		const msg = err instanceof Error ? err.message : String(err);
-		process.stderr.write(`otel shutdown error: ${msg}\n`);
-	});
 }

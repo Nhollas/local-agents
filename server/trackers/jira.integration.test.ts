@@ -1,3 +1,4 @@
+import { Cause } from "effect";
 import { HttpResponse, http } from "msw";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -8,6 +9,7 @@ import {
 } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
 import { issueNumber, type RepoSlug, repoSlug } from "../types/brands.ts";
+import { JiraTransitionNotFoundError } from "./errors.ts";
 import { createJiraTracker, type JiraTrackerOptions } from "./jira-tracker.ts";
 import { makeTrackerRuntime } from "./runtime.ts";
 
@@ -481,14 +483,21 @@ describe("createJiraTracker", () => {
 
 			const tracker = await createTracker();
 
-			await expect(
-				tracker.transitionState(
-					REPO,
-					issueNumber(42),
-					"running",
-					"awaiting_review",
-				),
-			).rejects.toThrow("No Jira transition for PROJ-42 to status In Review");
+			const causeSymbol = Symbol.for("effect/Runtime/FiberFailure/Cause");
+			const error = (await tracker
+				.transitionState(REPO, issueNumber(42), "running", "awaiting_review")
+				.then(
+					() => null,
+					(e: unknown) => e,
+				)) as Record<symbol, Cause.Cause<unknown>>;
+			const failure = Cause.failureOption(error[causeSymbol]);
+			expect(failure._tag).toBe("Some");
+			expect(failure._tag === "Some" && failure.value).toEqual(
+				new JiraTransitionNotFoundError({
+					issueKey: "PROJ-42",
+					targetStatus: "In Review",
+				}),
+			);
 		});
 	});
 

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import * as canonicalLog from "../canonical-log.ts";
 import type { CodeHostRuntime } from "../code-hosts/runtime.ts";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
-import type { Config } from "../config.ts";
+import type { AppConfigShape } from "../config/app-config.ts";
 import type { Logger } from "../logger.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
@@ -39,7 +39,7 @@ type OrchestratorConfig = {
 	codeHostRuntime: CodeHostRuntime;
 	workflowRuntime: WorkflowRuntime;
 	orchestratorRuntime: OrchestratorRuntime;
-	config: Config;
+	config: AppConfigShape;
 	workflow: RepoWorkflow;
 	runner: Runner;
 	logger: Logger;

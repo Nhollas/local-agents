@@ -1,40 +1,31 @@
 import type { HttpClient } from "@effect/platform";
-import { Effect } from "effect";
-import type { Config } from "../config.ts";
-import { TrackerConfigError } from "./errors.ts";
+import { Config, type ConfigError, Effect, Match, Redacted } from "effect";
+import { AppConfig } from "../config/app-config.ts";
 import { createJiraTracker } from "./jira-tracker.ts";
 import type { TrackerAdapter } from "./types.ts";
 
-export const createTracker = (
-	tracker: Config["tracker"],
-	scopes: Config["code_host"]["scopes"],
-	tokens: { jiraEmail: string | undefined; jiraApiToken: string | undefined },
-): Effect.Effect<TrackerAdapter, TrackerConfigError, HttpClient.HttpClient> => {
-	switch (tracker.kind) {
-		case "jira": {
-			if (!tokens.jiraEmail) {
-				return Effect.fail(
-					new TrackerConfigError({
-						message: "JIRA_EMAIL is required for Jira tracker",
-					}),
-				);
-			}
-			if (!tokens.jiraApiToken) {
-				return Effect.fail(
-					new TrackerConfigError({
-						message: "JIRA_API_TOKEN is required for Jira tracker",
-					}),
-				);
-			}
-			return createJiraTracker({
-				project: tracker.project,
-				scopes,
-				baseUrl: tracker.base_url,
-				statuses: tracker.statuses,
-				triggerLabel: tracker.trigger_label,
-				email: tokens.jiraEmail,
-				apiToken: tokens.jiraApiToken,
-			});
-		}
-	}
-};
+export const createTracker: Effect.Effect<
+	TrackerAdapter,
+	ConfigError.ConfigError,
+	HttpClient.HttpClient | AppConfig
+> = Effect.gen(function* () {
+	const { tracker, code_host } = yield* AppConfig;
+	return yield* Match.value(tracker).pipe(
+		Match.discriminator("kind")("jira", (t) =>
+			Effect.gen(function* () {
+				const email = yield* Config.redacted("JIRA_EMAIL");
+				const apiToken = yield* Config.redacted("JIRA_API_TOKEN");
+				return yield* createJiraTracker({
+					project: t.project,
+					scopes: code_host.scopes,
+					baseUrl: t.base_url,
+					statuses: t.statuses,
+					triggerLabel: t.trigger_label,
+					email: Redacted.value(email),
+					apiToken: Redacted.value(apiToken),
+				});
+			}),
+		),
+		Match.exhaustive,
+	);
+});

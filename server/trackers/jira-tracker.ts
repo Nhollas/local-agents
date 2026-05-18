@@ -1,8 +1,9 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect, Metric } from "effect";
-import { HttpServiceError } from "../http/errors.ts";
 import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
+import { JiraTransitionNotFoundError } from "./errors.ts";
 import { jiraClient } from "./jira-client.ts";
+import { issuesDropped, issuesFetched } from "./metrics.ts";
 import type { JiraIssue } from "./schemas.ts";
 import { resolveRepo } from "./scope-resolver.ts";
 import type { Issue, TrackerAdapter, TrackerState } from "./types.ts";
@@ -26,6 +27,23 @@ export const createJiraTracker = (
 		const jira = yield* jiraClient(options);
 		const failedLabel = `${options.triggerLabel}-failed`;
 
+		const recordDroppedIssue = (
+			issueKeyValue: string,
+			reason: DropReason,
+		): Effect.Effect<void> =>
+			Effect.gen(function* () {
+				yield* Effect.logWarning("tracker.issue.dropped").pipe(
+					Effect.annotateLogs({
+						"jira.issue.key": issueKeyValue,
+						"tracker.drop_reason": reason,
+					}),
+				);
+				yield* Metric.update(
+					issuesDropped.pipe(Metric.tagged("reason", reason)),
+					1,
+				);
+			});
+
 		function buildIssue(issue: JiraIssue, repo: RepoSlug): Issue {
 			return {
 				key: issueKey(issue.key.raw),
@@ -39,6 +57,7 @@ export const createJiraTracker = (
 			};
 		}
 
+		const REPO_LABEL_PREFIX = "repo:";
 		const resolveScopedIssue = (
 			issue: JiraIssue,
 		): Effect.Effect<Issue | null> =>
@@ -71,11 +90,8 @@ export const createJiraTracker = (
 					.pipe(
 						Effect.flatMap((raw) =>
 							Effect.gen(function* () {
-								const issues: Issue[] = [];
-								for (const r of raw) {
-									const mapped = yield* resolveScopedIssue(r);
-									if (mapped) issues.push(mapped);
-								}
+								const resolved = yield* Effect.forEach(raw, resolveScopedIssue);
+								const issues = resolved.filter((i): i is Issue => i !== null);
 								yield* Metric.update(
 									issuesFetched.pipe(Metric.tagged("state", state)),
 									issues.length,
@@ -117,10 +133,9 @@ export const createJiraTracker = (
 					);
 					if (!transition) {
 						return yield* Effect.fail(
-							new HttpServiceError({
-								message: `No Jira transition for ${key} to status ${options.statuses[to]}`,
-								method: "POST",
-								url: `${options.baseUrl}/rest/api/2/issue/${key}/transitions`,
+							new JiraTransitionNotFoundError({
+								issueKey: key,
+								targetStatus: options.statuses[to],
 							}),
 						);
 					}
@@ -136,40 +151,10 @@ export const createJiraTracker = (
 		};
 	});
 
-const issuesFetched = Metric.counter("tracker.jira.issues_fetched_total", {
-	description: "Issues returned by fetchActiveIssues, after scope filtering.",
-	incremental: true,
-});
-
-const issuesDropped = Metric.counter("tracker.jira.issues_dropped_total", {
-	description: "Issues filtered out during fetchActiveIssues, by reason.",
-	incremental: true,
-});
-
-const REPO_LABEL_PREFIX = "repo:";
-
 type DropReason =
 	| "no_repo_label"
 	| "multiple_repo_labels"
 	| "unresolved_repo_label";
-
-function recordDroppedIssue(
-	issueKeyValue: string,
-	reason: DropReason,
-): Effect.Effect<void> {
-	return Effect.gen(function* () {
-		yield* Effect.logWarning("tracker.issue.dropped").pipe(
-			Effect.annotateLogs({
-				"jira.issue.key": issueKeyValue,
-				"tracker.drop_reason": reason,
-			}),
-		);
-		yield* Metric.update(
-			issuesDropped.pipe(Metric.tagged("reason", reason)),
-			1,
-		);
-	});
-}
 
 function buildJql(options: JiraTrackerOptions, state: TrackerState): string {
 	const clauses = [

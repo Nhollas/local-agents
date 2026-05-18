@@ -1,7 +1,8 @@
 import type { HttpClient } from "@effect/platform";
-import { Effect } from "effect";
+import { Effect, Metric } from "effect";
 import type { CodeHostError } from "./errors.ts";
 import { githubClient } from "./github-client.ts";
+import { changeRequests } from "./metrics.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
 type GitHubAdapterOptions = {
@@ -46,6 +47,13 @@ export const createGitHubAdapter = (
 					});
 					const [first] = existing;
 					if (first) {
+						yield* Metric.update(
+							changeRequests.pipe(
+								Metric.tagged("host", "github"),
+								Metric.tagged("outcome", "existing"),
+							),
+							1,
+						);
 						return { number: first.number, url: first.html_url };
 					}
 					const pr = yield* client.createPullRequest(repo, {
@@ -54,6 +62,13 @@ export const createGitHubAdapter = (
 						head,
 						base,
 					});
+					yield* Metric.update(
+						changeRequests.pipe(
+							Metric.tagged("host", "github"),
+							Metric.tagged("outcome", "created"),
+						),
+						1,
+					);
 					return { number: pr.number, url: pr.html_url };
 				}),
 		};

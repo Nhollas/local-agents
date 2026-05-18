@@ -43,8 +43,6 @@ export const DEFAULT_ALLOWED_TOOLS = [
 ] as const;
 
 export type LangfuseConfig = {
-	publicKey: string;
-	secretKey: string;
 	host: string;
 	projectId: string;
 };

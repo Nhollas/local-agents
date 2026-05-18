@@ -1,46 +1,33 @@
 import type { HttpClient } from "@effect/platform";
-import { Effect } from "effect";
-import type { Config } from "../config.ts";
-import { CodeHostConfigError } from "./errors.ts";
+import { Config, type ConfigError, Effect, Match, Redacted } from "effect";
+import { AppConfig } from "../config/app-config.ts";
 import { createGitHubAdapter } from "./github.ts";
 import { createGitLabAdapter } from "./gitlab.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
-export const createCodeHost = (
-	codeHost: Config["code_host"],
-	tokens: { gitlab: string | undefined; github: string | undefined },
-): Effect.Effect<
+export const createCodeHost: Effect.Effect<
 	CodeHostAdapter,
-	CodeHostConfigError,
-	HttpClient.HttpClient
-> => {
-	switch (codeHost.kind) {
-		case "gitlab": {
-			if (!tokens.gitlab) {
-				return Effect.fail(
-					new CodeHostConfigError({
-						message: "GITLAB_TOKEN is required for GitLab code host",
-					}),
-				);
-			}
-			return createGitLabAdapter({
-				token: tokens.gitlab,
-				baseUrl: codeHost.base_url,
-				cloneToken: tokens.gitlab,
-			});
-		}
-		case "github": {
-			if (!tokens.github) {
-				return Effect.fail(
-					new CodeHostConfigError({
-						message: "GITHUB_TOKEN is required for GitHub code host",
-					}),
-				);
-			}
-			return createGitHubAdapter({
-				token: tokens.github,
-				cloneToken: tokens.github,
-			});
-		}
-	}
-};
+	ConfigError.ConfigError,
+	HttpClient.HttpClient | AppConfig
+> = Effect.gen(function* () {
+	const { code_host } = yield* AppConfig;
+	return yield* Match.value(code_host).pipe(
+		Match.discriminator("kind")("gitlab", (c) =>
+			Effect.gen(function* () {
+				const token = Redacted.value(yield* Config.redacted("GITLAB_TOKEN"));
+				return yield* createGitLabAdapter({
+					token,
+					baseUrl: c.base_url,
+					cloneToken: token,
+				});
+			}),
+		),
+		Match.discriminator("kind")("github", () =>
+			Effect.gen(function* () {
+				const token = Redacted.value(yield* Config.redacted("GITHUB_TOKEN"));
+				return yield* createGitHubAdapter({ token, cloneToken: token });
+			}),
+		),
+		Match.exhaustive,
+	);
+});

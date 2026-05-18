@@ -1,29 +1,36 @@
-// Side-effect import: installs the OpenTelemetry SDK's global tracer/meter/log
-// providers before any other module loads. Keep first.
-import "./telemetry/otel.ts";
-
+import { NodeFileSystem } from "@effect/platform-node";
 import { serve } from "@hono/node-server";
+import { Effect, Layer } from "effect";
 import { createApi, type HealthCheck } from "./api/api.ts";
 import { createCodeHost } from "./code-hosts/create-code-host.ts";
 import { makeCodeHostRuntime } from "./code-hosts/runtime.ts";
-import { loadConfig } from "./config.ts";
+import { AppConfig, AppConfigLive } from "./config/app-config.ts";
+import { processEnv } from "./config/env.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
 import { readLast24hStats } from "./db/stats-query.ts";
-import { env } from "./env.ts";
 import { createLogger } from "./logger.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { makeOrchestratorRuntime } from "./orchestrator/runtime.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner } from "./runner/runner.ts";
-import { shutdownOtel } from "./telemetry/otel.ts";
+import { initOtel, shutdownOtel } from "./telemetry/otel.ts";
 import { createTracker } from "./trackers/create-tracker.ts";
 import { makeTrackerRuntime } from "./trackers/runtime.ts";
 import { makeWorkflowRuntime } from "./workflow/runtime.ts";
 import { loadWorkflow } from "./workflow/workflow-loader.ts";
 
-const config = loadConfig(env.CONFIG_PATH);
-const logger = createLogger(env.LOG_LEVEL);
+const env = await Effect.runPromise(processEnv);
+initOtel(env.langfuse);
+
+const config = await Effect.runPromise(
+	AppConfig.pipe(
+		Effect.provide(AppConfigLive),
+		Effect.provide(NodeFileSystem.layer),
+	),
+);
+const AppConfigStatic = Layer.succeed(AppConfig, config);
+const logger = createLogger(env.logLevel);
 
 const db = getDb();
 migrate(db);
@@ -31,19 +38,13 @@ migrate(db);
 const trackerRuntime = makeTrackerRuntime();
 
 const tracker = await trackerRuntime.runPromise(
-	createTracker(config.tracker, config.code_host.scopes, {
-		jiraEmail: env.JIRA_EMAIL,
-		jiraApiToken: env.JIRA_API_TOKEN,
-	}),
+	createTracker.pipe(Effect.provide(AppConfigStatic)),
 );
 
 const codeHostRuntime = makeCodeHostRuntime();
 
 const codeHost = await codeHostRuntime.runPromise(
-	createCodeHost(config.code_host, {
-		gitlab: env.GITLAB_TOKEN,
-		github: env.GITHUB_TOKEN,
-	}),
+	createCodeHost.pipe(Effect.provide(AppConfigStatic)),
 );
 
 const repo = createRunRepository(db);
@@ -72,10 +73,8 @@ const orchestrator = createOrchestrator({
 	runner,
 	logger,
 	langfuse: {
-		publicKey: env.LANGFUSE_PUBLIC_KEY,
-		secretKey: env.LANGFUSE_SECRET_KEY,
-		host: env.LANGFUSE_HOST,
-		projectId: env.LANGFUSE_PROJECT_ID,
+		host: env.langfuse.host,
+		projectId: env.langfuse.projectId,
 	},
 });
 
@@ -110,7 +109,7 @@ orchestrator.start();
 
 const DRAIN_TIMEOUT_MS = 30_000;
 
-const httpServer = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+const httpServer = serve({ fetch: app.fetch, port: env.port }, (info) => {
 	logger.info(
 		{
 			port: info.port,

@@ -1,7 +1,8 @@
 import type { HttpClient } from "@effect/platform";
-import { Effect } from "effect";
+import { Effect, Metric } from "effect";
 import type { CodeHostError } from "./errors.ts";
 import { gitlabClient } from "./gitlab-client.ts";
+import { changeRequests } from "./metrics.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
 export type GitLabAdapterOptions = {
@@ -55,6 +56,13 @@ export const createGitLabAdapter = (
 					});
 					const [first] = existing;
 					if (first) {
+						yield* Metric.update(
+							changeRequests.pipe(
+								Metric.tagged("host", "gitlab"),
+								Metric.tagged("outcome", "existing"),
+							),
+							1,
+						);
 						return { number: first.iid, url: first.web_url };
 					}
 					const mr = yield* client.createMergeRequest(repo, {
@@ -63,6 +71,13 @@ export const createGitLabAdapter = (
 						title,
 						description: body,
 					});
+					yield* Metric.update(
+						changeRequests.pipe(
+							Metric.tagged("host", "gitlab"),
+							Metric.tagged("outcome", "created"),
+						),
+						1,
+					);
 					return { number: mr.iid, url: mr.web_url };
 				}),
 		};

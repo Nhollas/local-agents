@@ -1,5 +1,5 @@
 import pino, { type Logger } from "pino";
-import type { LogLevel } from "./env.ts";
+import type { LogLevel } from "./config/env.ts";
 
 export type { Logger };
 

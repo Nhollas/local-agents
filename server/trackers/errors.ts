@@ -1,7 +1,11 @@
 import { Data } from "effect";
+import type { HttpClientError } from "../http/errors.ts";
 
-export type { HttpClientError as TrackerError } from "../http/errors.ts";
-
-export class TrackerConfigError extends Data.TaggedError("TrackerConfigError")<{
-	readonly message: string;
+export class JiraTransitionNotFoundError extends Data.TaggedError(
+	"JiraTransitionNotFoundError",
+)<{
+	readonly issueKey: string;
+	readonly targetStatus: string;
 }> {}
+
+export type TrackerError = HttpClientError | JiraTransitionNotFoundError;

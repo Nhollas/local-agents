@@ -1,6 +1,6 @@
-import type { Config } from "../config.ts";
+import type { AppConfigShape } from "../config/app-config.ts";
 
-type AgentEnvConfig = Config["agent"]["env"];
+type AgentEnvConfig = AppConfigShape["agent"]["env"];
 
 // Shell basics required for the Claude Agent SDK subprocess to function:
 // HOME locates `~/.claude/` credentials, PATH resolves git/node/pnpm/fnm,
