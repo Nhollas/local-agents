@@ -68,7 +68,35 @@ export function createJiraIssue(
 	};
 }
 
-export async function* noopAgent() {}
+export function syntheticSuccessResult(
+	overrides: { sessionId?: string } = {},
+): AgentMessage {
+	return {
+		type: "result",
+		subtype: "success",
+		duration_ms: 0,
+		duration_api_ms: 0,
+		is_error: false,
+		num_turns: 1,
+		result: "",
+		stop_reason: null,
+		total_cost_usd: 0,
+		usage: {
+			input_tokens: 0,
+			output_tokens: 0,
+			cache_creation_input_tokens: 0,
+			cache_read_input_tokens: 0,
+		},
+		modelUsage: {},
+		permission_denials: [],
+		uuid: "00000000-0000-4000-8000-000000000001",
+		session_id: overrides.sessionId ?? "test-session",
+	} as unknown as AgentMessage;
+}
+
+export async function* noopAgent() {
+	yield syntheticSuccessResult();
+}
 
 export async function* hangingAgent() {
 	await new Promise(() => {});

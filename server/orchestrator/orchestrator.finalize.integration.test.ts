@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
 	noopAgent,
 	REPO,
+	syntheticSuccessResult,
 	type TestRunAgent,
 } from "../test-support/fixtures.ts";
 import { createTestOrchestrator } from "../test-support/test-orchestrator.ts";
@@ -20,9 +21,7 @@ async function listRemoteBranches(barePath: string): Promise<string[]> {
 }
 
 // Simulates push failure by breaking origin from inside the agent step, after
-// the orchestrator has already cloned a fresh workspace. The generator never
-// yields a message — it only performs the setup side effect.
-// biome-ignore lint/correctness/useYield: intentional side-effect-only agent
+// the orchestrator has already cloned a fresh workspace.
 async function* breakRemoteAgent({
 	options,
 }: Parameters<TestRunAgent>[0]): ReturnType<TestRunAgent> {
@@ -34,6 +33,7 @@ async function* breakRemoteAgent({
 			{ cwd },
 		);
 	}
+	yield syntheticSuccessResult();
 }
 
 describe("Orchestrator success-path finalization", () => {

@@ -19,7 +19,7 @@ type JsonSchemaDocument = Record<string, unknown>;
 type RunAgentTurnInput = {
 	prompt: string;
 	model: ModelId;
-	outputSchema: JsonSchemaDocument;
+	outputSchema?: JsonSchemaDocument;
 	allowedTools?: readonly string[];
 	resumeSessionId?: string;
 	shellExpansion?: { cwd: string; env: Record<string, string> };
@@ -56,10 +56,9 @@ export const runAgentTurn = (
 				})
 			: input.prompt;
 
-		const outputFormat: OutputFormat = {
-			type: "json_schema",
-			schema: input.outputSchema,
-		};
+		const outputFormat: OutputFormat | undefined = input.outputSchema
+			? { type: "json_schema", schema: input.outputSchema }
+			: undefined;
 
 		const state: TurnState = {
 			usage: emptyStepUsage(),
@@ -73,7 +72,7 @@ export const runAgentTurn = (
 			invoker.invoke({
 				prompt,
 				model: input.model,
-				outputFormat,
+				...(outputFormat && { outputFormat }),
 				...(input.allowedTools && { allowedTools: input.allowedTools }),
 				...(input.resumeSessionId && {
 					resumeSessionId: input.resumeSessionId,
@@ -99,6 +98,7 @@ export const runAgentTurn = (
 					message: state.failureSubtype,
 					subtype: state.failureSubtype,
 					usage: state.usage,
+					...(state.sessionId && { sessionId: state.sessionId }),
 				}),
 			);
 		}

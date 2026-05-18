@@ -21,6 +21,7 @@ export class AgentTurnError extends Data.TaggedError("AgentTurnError")<{
 	message: string;
 	subtype?: string;
 	usage?: StepUsage;
+	sessionId?: string;
 }> {}
 
 export class StructuredOutputDecodeError extends Data.TaggedError(
@@ -37,5 +38,3 @@ export type WorkflowExecutionError =
 	| ShellExpansionError
 	| AgentTurnError
 	| StructuredOutputDecodeError;
-/** @lintignore consumed in slice 6 (run-steps) */
-export type WorkflowError = WorkflowDefinitionError | WorkflowExecutionError;

@@ -20,14 +20,15 @@ import {
 	type WorkflowEvent,
 	WorkflowEventEmitterLive,
 } from "../workflow/event-emitter-live.ts";
+import { renderChangeRequest } from "../workflow/render-change-request.ts";
 import { resolveBranch } from "../workflow/resolve-branch.ts";
+import { runSteps } from "../workflow/run-steps.ts";
 import type { WorkflowRuntime } from "../workflow/runtime.ts";
 import type { PromptScope, RepoWorkflow } from "../workflow/types.ts";
-import { renderChangeRequest } from "./change-request-renderer.ts";
 import type { Clock } from "./clock.ts";
+import { consumeWorkflowEvents } from "./event-consumer.ts";
 import type { AgentFactory } from "./orchestrator.ts";
 import type { OrchestratorRuntime } from "./runtime.ts";
-import { runWorkflowSteps } from "./step-runner.ts";
 import {
 	createWorkspace,
 	ensureBranch,
@@ -205,40 +206,45 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 										signal: ctx.signal,
 									});
 
+									const scope: PromptScope = {
+										issue: {
+											key: issue.key,
+											number: issue.number,
+											title: issue.title,
+											description: issue.description,
+											labels: issue.labels,
+											url: issue.url,
+											createdAt: issue.createdAt,
+										},
+										baseBranch,
+									};
+
+									const eventQueue = await workflowRuntime.runPromise(
+										Queue.unbounded<WorkflowEvent>(),
+									);
+									const perRunLayers = Layer.merge(
+										Layer.succeed(AgentInvoker, agent),
+										WorkflowEventEmitterLive(eventQueue),
+									);
+									let consumerDone: Promise<void> | undefined;
+
 									try {
+										consumerDone = workflowRuntime.runPromise(
+											consumeWorkflowEvents(eventQueue, {
+												runRepo,
+												ctx,
+												runId: ctx.runId,
+												cwd: wsPath,
+												logger,
+												steps: workflow.steps,
+											}),
+										);
 										const branchResolverStart = clock.now();
-										const scope: PromptScope = {
-											issue: {
-												key: issue.key,
-												number: issue.number,
-												title: issue.title,
-												description: issue.description,
-												labels: issue.labels,
-												url: issue.url,
-												createdAt: issue.createdAt,
-											},
-											baseBranch,
-										};
-										const eventQueue = await workflowRuntime.runPromise(
-											Queue.unbounded<WorkflowEvent>(),
+										const resolvedBranch = await workflowRuntime.runPromise(
+											resolveBranch(workflow.branch, scope).pipe(
+												Effect.provide(perRunLayers),
+											),
 										);
-										const perRunLayers = Layer.merge(
-											Layer.succeed(AgentInvoker, agent),
-											WorkflowEventEmitterLive(eventQueue),
-										);
-										let resolvedBranch: string;
-										try {
-											resolvedBranch = await workflowRuntime.runPromise(
-												resolveBranch(workflow.branch, scope).pipe(
-													Effect.provide(perRunLayers),
-												),
-											);
-										} finally {
-											// Drop events for now; slice 8 lands the consumer fiber.
-											await workflowRuntime.runPromise(
-												Queue.shutdown(eventQueue),
-											);
-										}
 										canonicalLog.set({
 											branch_resolver_ms: clock.now() - branchResolverStart,
 										});
@@ -308,19 +314,15 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 										}
 
 										phase = "step";
-										outputs = await runWorkflowSteps({
-											ctx,
-											runRepo,
-											agent,
-											workflow,
-											issue,
-											branch,
-											baseBranch,
-											cwd: wsPath,
-											env: workspaceEnv,
-											logger,
-											workflowRuntime,
-										});
+										outputs = await workflowRuntime.runPromise(
+											runSteps(
+												workflow.steps,
+												scope,
+												branch,
+												wsPath,
+												workspaceEnv,
+											).pipe(Effect.provide(perRunLayers)),
+										);
 
 										result = {
 											status: "completed",
@@ -335,6 +337,11 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 											error,
 											durationMs: clock.now() - startTime,
 										};
+									} finally {
+										await workflowRuntime.runPromise(
+											Queue.shutdown(eventQueue),
+										);
+										if (consumerDone) await consumerDone;
 									}
 
 									if (result.status === "completed" && branch !== undefined) {
@@ -342,6 +349,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 											ctx,
 											repo,
 											issue,
+											scope,
 											workflow,
 											wsPath,
 											branch,
@@ -396,6 +404,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 		ctx: RunContext,
 		repo: RepoSlug,
 		issue: Issue,
+		scope: PromptScope,
 		workflow: RepoWorkflow,
 		wsPath: string,
 		branch: string,
@@ -409,12 +418,12 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			return finalizeFailure("push", err);
 		}
 
-		const { title, body } = renderChangeRequest({
-			template: workflow.change_request,
-			issue,
+		const { title, body } = renderChangeRequest(
+			workflow.change_request,
+			scope,
 			branch,
 			outputs,
-		});
+		);
 		try {
 			const pr = await codeHostRuntime.runPromise(
 				codeHost.createChangeRequest(repo, branch, baseBranch, title, body),

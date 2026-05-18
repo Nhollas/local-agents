@@ -1,12 +1,5 @@
-import {
-	type Attributes,
-	type Span,
-	SpanStatusCode,
-	trace,
-} from "@opentelemetry/api";
+import { type Attributes, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { IssueKey, RunId } from "../types/brands.ts";
-
-export type { Span };
 
 export const TRACER_NAME = "local-agents";
 const tracer = trace.getTracer(TRACER_NAME);
@@ -43,34 +36,6 @@ export function runRunSpan<T>(
 			"langfuse.trace.metadata.issue_url": ctx.issueUrl,
 		},
 		(traceId) => fn(traceId),
-	);
-}
-
-export function runStepSpan<T>(
-	stepName: string,
-	fn: (span: Span) => Promise<T>,
-): Promise<T> {
-	return tracer.startActiveSpan(
-		`step:${stepName}`,
-		{
-			attributes: {
-				"workflow.step": stepName,
-				"langfuse.observation.metadata.step_name": stepName,
-			},
-		},
-		async (span) => {
-			try {
-				return await fn(span);
-			} catch (err) {
-				span.setStatus({
-					code: SpanStatusCode.ERROR,
-					message: err instanceof Error ? err.message : String(err),
-				});
-				throw err;
-			} finally {
-				span.end();
-			}
-		},
 	);
 }
 
