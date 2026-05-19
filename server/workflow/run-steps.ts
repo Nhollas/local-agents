@@ -6,10 +6,7 @@ import {
 	StructuredOutputDecodeError,
 	type WorkflowExecutionError,
 } from "./errors.ts";
-import {
-	WorkflowEventEmitter,
-	type WorkflowEventEmitterService,
-} from "./event-emitter.ts";
+import { WorkflowEventEmitter } from "./event-emitter.ts";
 import { renderPrompt } from "./render-prompt.ts";
 import { runAgentTurn } from "./run-agent-turn.ts";
 import { markTrustedShellBlocks } from "./shell-expansion.ts";
@@ -35,6 +32,39 @@ export const runSteps = (
 		let previousSessionId: string | undefined;
 		const total = steps.length;
 
+		const failStep = (
+			stepName: string,
+			index: number,
+			startedAt: number,
+			error: WorkflowExecutionError,
+		): Effect.Effect<never, WorkflowExecutionError> =>
+			Effect.gen(function* () {
+				if (error instanceof AgentTurnError && error.usage && error.sessionId) {
+					yield* events.emit({
+						_tag: "StepResult",
+						stepName,
+						sessionId: error.sessionId,
+						usage: error.usage,
+					});
+				}
+				const stepError =
+					error._tag === "AgentTurnError" &&
+					error.subtype === "error_max_structured_output_retries"
+						? new StructuredOutputDecodeError({
+								message: error.message,
+								context: "step",
+							})
+						: error;
+				yield* events.emit({
+					_tag: "StepFailed",
+					stepName,
+					index,
+					error: stepError,
+					durationMs: Date.now() - startedAt,
+				});
+				return yield* Effect.fail(stepError);
+			});
+
 		for (const [zeroBasedIndex, step] of steps.entries()) {
 			const index = zeroBasedIndex + 1;
 			const startedAt = Date.now();
@@ -59,14 +89,14 @@ export const runSteps = (
 			const turnResult = yield* runAgentTurn({
 				prompt: renderedPrompt,
 				model: step.model,
-				...(step.output_schema && { outputSchema: step.output_schema }),
-				...(step.allowed_tools && { allowedTools: step.allowed_tools }),
-				...(resumeSessionId && { resumeSessionId }),
+				outputSchema: step.output_schema,
+				allowedTools: step.allowed_tools,
+				resumeSessionId,
 				shellExpansion: { cwd, env: env ?? {} },
 				emitAs: { kind: "step", name: step.name, index, total },
 			}).pipe(
 				Effect.catchAll((error) =>
-					failStep(events, step.name, index, startedAt, error),
+					failStep(step.name, index, startedAt, error),
 				),
 			);
 
@@ -75,9 +105,9 @@ export const runSteps = (
 				stepName: step.name,
 				sessionId: turnResult.sessionId,
 				usage: turnResult.usage,
-				...(step.output_schema && {
-					structuredOutput: turnResult.structuredOutput,
-				}),
+				structuredOutput: step.output_schema
+					? turnResult.structuredOutput
+					: undefined,
 			});
 
 			if (step.output_schema) {
@@ -95,38 +125,9 @@ export const runSteps = (
 		}
 
 		return outputs;
-	});
-
-const failStep = (
-	events: WorkflowEventEmitterService,
-	stepName: string,
-	index: number,
-	startedAt: number,
-	error: WorkflowExecutionError,
-): Effect.Effect<never, WorkflowExecutionError> =>
-	Effect.gen(function* () {
-		if (error instanceof AgentTurnError && error.usage && error.sessionId) {
-			yield* events.emit({
-				_tag: "StepResult",
-				stepName,
-				sessionId: error.sessionId,
-				usage: error.usage,
-			});
-		}
-		const stepError =
-			error._tag === "AgentTurnError" &&
-			error.subtype === "error_max_structured_output_retries"
-				? new StructuredOutputDecodeError({
-						message: error.message,
-						context: "step",
-					})
-				: error;
-		yield* events.emit({
-			_tag: "StepFailed",
-			stepName,
-			index,
-			error: stepError,
-			durationMs: Date.now() - startedAt,
-		});
-		return yield* Effect.fail(stepError);
-	});
+	}).pipe(
+		Effect.annotateLogs({
+			"workflow.branch": branch,
+			"workflow.steps.total": steps.length,
+		}),
+	);

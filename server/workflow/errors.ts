@@ -19,9 +19,9 @@ export class ShellExpansionError extends Data.TaggedError(
 
 export class AgentTurnError extends Data.TaggedError("AgentTurnError")<{
 	message: string;
-	subtype?: string;
-	usage?: StepUsage;
-	sessionId?: string;
+	subtype?: string | undefined;
+	usage?: StepUsage | undefined;
+	sessionId?: string | undefined;
 }> {}
 
 export class StructuredOutputDecodeError extends Data.TaggedError(

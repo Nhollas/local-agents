@@ -23,7 +23,7 @@ export type WorkflowEvent =
 	| {
 			_tag: "StepResult";
 			stepName: string;
-			structuredOutput?: unknown;
+			structuredOutput?: unknown | undefined;
 			sessionId: string;
 			usage: StepUsage;
 	  }
@@ -41,13 +41,11 @@ export type WorkflowEvent =
 			durationMs: number;
 	  };
 
+interface WorkflowEventEmitterService {
+	readonly emit: (event: WorkflowEvent) => Effect.Effect<void>;
+}
+
 export class WorkflowEventEmitter extends Context.Tag("WorkflowEventEmitter")<
 	WorkflowEventEmitter,
-	{
-		readonly emit: (event: WorkflowEvent) => Effect.Effect<void>;
-	}
+	WorkflowEventEmitterService
 >() {}
-
-export type WorkflowEventEmitterService = Context.Tag.Service<
-	typeof WorkflowEventEmitter
->;

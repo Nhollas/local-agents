@@ -11,7 +11,7 @@ export const validateOutputReferences = (
 			workflow.steps.map((step) => [step.name, step] as const),
 		);
 
-		for (const surface of surfaces(workflow)) {
+		for (const surface of referenceSurfaces(workflow)) {
 			for (const reference of extractReferences(surface.template)) {
 				yield* validateReference(reference, {
 					sourcePath,
@@ -28,26 +28,7 @@ const STEPS_REFERENCE_RE =
 
 const COMPOSITION_KEYWORDS = ["$ref", "anyOf", "oneOf", "allOf"] as const;
 
-type StepReference = {
-	raw: string;
-	stepName: string;
-	path: string[];
-};
-
-type ValidationContext = {
-	sourcePath: string | undefined;
-	location: string;
-	stepsByName: Map<string, WorkflowStep>;
-	allowedSteps: Set<string>;
-};
-
-type Surface = {
-	label: string;
-	template: string;
-	allowedSteps: Set<string>;
-};
-
-function* surfaces(workflow: RepoWorkflow): Generator<Surface> {
+function* referenceSurfaces(workflow: RepoWorkflow): Generator<Surface> {
 	if (typeof workflow.branch !== "string") {
 		yield {
 			label: "branch.agent.prompt",
@@ -56,14 +37,14 @@ function* surfaces(workflow: RepoWorkflow): Generator<Surface> {
 		};
 	}
 
-	const seen = new Set<string>();
+	const priorSteps = new Set<string>();
 	for (const step of workflow.steps) {
 		yield {
 			label: step.name,
 			template: step.prompt,
-			allowedSteps: new Set(seen),
+			allowedSteps: new Set(priorSteps),
 		};
-		seen.add(step.name);
+		priorSteps.add(step.name);
 	}
 
 	const allSteps = new Set(workflow.steps.map((step) => step.name));
@@ -136,26 +117,22 @@ const walkSchemaPath = (
 	stepName: string,
 ): Effect.Effect<void, WorkflowValidationError> =>
 	Effect.gen(function* () {
-		let current: Record<string, unknown> = schema;
+		let node: Record<string, unknown> = schema;
 		for (const key of path) {
-			yield* assertNoComposition(current, reference, ctx, stepName);
-			const properties = current["properties"];
-			const next = isRecord(properties) ? properties[key] : undefined;
-			if (!isRecord(next)) {
+			yield* assertNoComposition(node, reference, ctx, stepName);
+			const properties = node["properties"];
+			const child = isRecord(properties) ? properties[key] : undefined;
+			if (!isRecord(child)) {
 				return yield* fail(
 					ctx,
 					reference,
 					`unknown field "${key}" in step "${stepName}" output_schema`,
 				);
 			}
-			current = next;
+			node = child;
 		}
-		yield* assertNoComposition(current, reference, ctx, stepName);
+		yield* assertNoComposition(node, reference, ctx, stepName);
 	});
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 const assertNoComposition = (
 	schema: Record<string, unknown>,
@@ -186,4 +163,27 @@ const fail = (
 			message: `${prefix}${ctx.location}: invalid reference "{{ ${reference.raw} }}" — ${reason}`,
 		}),
 	);
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+type StepReference = {
+	raw: string;
+	stepName: string;
+	path: string[];
+};
+
+type ValidationContext = {
+	sourcePath: string | undefined;
+	location: string;
+	stepsByName: Map<string, WorkflowStep>;
+	allowedSteps: Set<string>;
+};
+
+type Surface = {
+	label: string;
+	template: string;
+	allowedSteps: Set<string>;
 };

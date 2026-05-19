@@ -12,12 +12,12 @@ export type OutputFormat = {
 export type AgentInvokeOptions = {
 	prompt: string;
 	model: string;
-	stepName?: string;
-	env?: Record<string, string>;
-	resumeSessionId?: string;
-	outputFormat?: OutputFormat;
-	allowedTools?: readonly string[];
-	onToolFailure?: (toolName: string) => void;
+	stepName?: string | undefined;
+	env?: Record<string, string> | undefined;
+	resumeSessionId?: string | undefined;
+	outputFormat?: OutputFormat | undefined;
+	allowedTools?: readonly string[] | undefined;
+	onToolFailure?: ((toolName: string) => void) | undefined;
 };
 
 export const DEFAULT_ALLOWED_TOOLS = [
@@ -30,11 +30,11 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Agent",
 ] as const;
 
+export interface AgentInvokerService {
+	readonly invoke: (opts: AgentInvokeOptions) => AsyncIterable<AgentMessage>;
+}
+
 export class AgentInvoker extends Context.Tag("AgentInvoker")<
 	AgentInvoker,
-	{
-		readonly invoke: (opts: AgentInvokeOptions) => AsyncIterable<AgentMessage>;
-	}
+	AgentInvokerService
 >() {}
-
-export type AgentInvokerService = Context.Tag.Service<typeof AgentInvoker>;

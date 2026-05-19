@@ -80,7 +80,13 @@ export const resolveBranch = (
 			usage: turn.usage,
 		});
 		return decoded.right.name;
-	});
+	}).pipe(
+		Effect.annotateLogs({
+			"workflow.branch.kind":
+				typeof workflowBranch === "string" ? "static" : "agent",
+			"workflow.issue.key": scope.issue.key,
+		}),
+	);
 
 const BranchOutputSchema = Schema.Struct({
 	name: Schema.String.pipe(Schema.minLength(1)),

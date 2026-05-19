@@ -1,43 +1,34 @@
 import type { CommandExecutor, FileSystem } from "@effect/platform";
 import { Effect, Stream } from "effect";
 import type { ModelId } from "../types/model-id.ts";
-import {
-	AgentInvoker,
-	type AgentMessage,
-	type OutputFormat,
-} from "./agent-invoker.ts";
+import { AgentInvoker, type AgentMessage } from "./agent-invoker.ts";
 import { AgentTurnError, type WorkflowExecutionError } from "./errors.ts";
-import {
-	WorkflowEventEmitter,
-	type WorkflowEventEmitterService,
-} from "./event-emitter.ts";
+import { WorkflowEventEmitter } from "./event-emitter.ts";
 import { expandMarkedShellBlocks } from "./shell-expansion.ts";
-import { emptyStepUsage, type ModelUsage, type StepUsage } from "./types.ts";
+import { emptyStepUsage, type StepUsage } from "./types.ts";
 
-type JsonSchemaDocument = Record<string, unknown>;
-
-type RunAgentTurnInput = {
+type AgentTurnInput = {
 	prompt: string;
 	model: ModelId;
-	outputSchema?: JsonSchemaDocument;
-	allowedTools?: readonly string[];
-	resumeSessionId?: string;
-	shellExpansion?: { cwd: string; env: Record<string, string> };
+	outputSchema?: Record<string, unknown> | undefined;
+	allowedTools?: readonly string[] | undefined;
+	resumeSessionId?: string | undefined;
+	shellExpansion?: { cwd: string; env: Record<string, string> } | undefined;
 	emitAs:
 		| { kind: "branch" }
 		| { kind: "step"; name: string; index: number; total: number };
 };
 
-type RunAgentTurnResult = {
+type AgentTurnOutcome = {
 	structuredOutput: unknown;
 	sessionId: string;
 	usage: StepUsage;
 };
 
 export const runAgentTurn = (
-	input: RunAgentTurnInput,
+	input: AgentTurnInput,
 ): Effect.Effect<
-	RunAgentTurnResult,
+	AgentTurnOutcome,
 	WorkflowExecutionError,
 	| AgentInvoker
 	| WorkflowEventEmitter
@@ -56,29 +47,18 @@ export const runAgentTurn = (
 				})
 			: input.prompt;
 
-		const outputFormat: OutputFormat | undefined = input.outputSchema
-			? { type: "json_schema", schema: input.outputSchema }
-			: undefined;
-
-		const state: TurnState = {
-			usage: emptyStepUsage(),
-			sessionId: undefined,
-			structuredOutput: undefined,
-			resultArrived: false,
-			failureSubtype: undefined,
-		};
-
-		const stream = Stream.fromAsyncIterable(
+		const messages = Stream.fromAsyncIterable(
 			invoker.invoke({
 				prompt,
 				model: input.model,
-				...(outputFormat && { outputFormat }),
-				...(input.allowedTools && { allowedTools: input.allowedTools }),
-				...(input.resumeSessionId && {
-					resumeSessionId: input.resumeSessionId,
-				}),
-				...(input.shellExpansion && { env: input.shellExpansion.env }),
-				...(input.emitAs.kind === "step" && { stepName: input.emitAs.name }),
+				outputFormat: input.outputSchema && {
+					type: "json_schema",
+					schema: input.outputSchema,
+				},
+				allowedTools: input.allowedTools,
+				resumeSessionId: input.resumeSessionId,
+				env: input.shellExpansion?.env,
+				stepName: input.emitAs.kind === "step" ? input.emitAs.name : undefined,
 			}),
 			(cause) =>
 				new AgentTurnError({
@@ -86,35 +66,69 @@ export const runAgentTurn = (
 				}),
 		);
 
-		yield* stream.pipe(
-			Stream.runForEach((message) =>
-				handleMessage(message, input, state, events),
-			),
+		const outcome = yield* Stream.runFoldEffect(
+			messages,
+			initialState,
+			(state, message) => {
+				if (message.type === "assistant") {
+					return events
+						.emit(
+							input.emitAs.kind === "branch"
+								? { _tag: "BranchAssistantMessage", message }
+								: {
+										_tag: "StepAssistantMessage",
+										stepName: input.emitAs.name,
+										message,
+									},
+						)
+						.pipe(Effect.as({ ...state, sessionId: message.session_id }));
+				}
+				if (message.type === "result") {
+					const usage = mergeUsage(state.usage, message);
+					return Effect.succeed(
+						message.subtype === "success"
+							? {
+									...state,
+									usage,
+									sessionId: message.session_id,
+									structuredOutput: message.structured_output,
+									resultArrived: true,
+								}
+							: {
+									...state,
+									usage,
+									sessionId: message.session_id,
+									failureSubtype: message.subtype,
+								},
+					);
+				}
+				return Effect.succeed(state);
+			},
 		);
 
-		if (state.failureSubtype !== undefined) {
+		if (outcome.failureSubtype !== undefined) {
 			return yield* Effect.fail(
 				new AgentTurnError({
-					message: state.failureSubtype,
-					subtype: state.failureSubtype,
-					usage: state.usage,
-					...(state.sessionId && { sessionId: state.sessionId }),
+					message: outcome.failureSubtype,
+					subtype: outcome.failureSubtype,
+					usage: outcome.usage,
+					sessionId: outcome.sessionId,
 				}),
 			);
 		}
-		if (!state.resultArrived || state.sessionId === undefined) {
+		if (!outcome.resultArrived || outcome.sessionId === undefined) {
 			return yield* Effect.fail(
 				new AgentTurnError({
 					message: "agent stream ended without a result message",
-					usage: state.usage,
+					usage: outcome.usage,
 				}),
 			);
 		}
 		return {
-			structuredOutput: state.structuredOutput,
-			sessionId: state.sessionId,
-			usage: state.usage,
-		};
+			structuredOutput: outcome.structuredOutput,
+			sessionId: outcome.sessionId,
+			usage: outcome.usage,
+		} satisfies AgentTurnOutcome;
 	}).pipe(
 		Effect.withSpan("workflow.agent_turn", {
 			attributes: {
@@ -129,6 +143,14 @@ export const runAgentTurn = (
 				}),
 			},
 		}),
+		Effect.annotateLogs({
+			"workflow.model": input.model,
+			"workflow.emit.kind": input.emitAs.kind,
+			...(input.emitAs.kind === "step" && {
+				"workflow.step.name": input.emitAs.name,
+				"workflow.step.index": input.emitAs.index,
+			}),
+		}),
 	);
 
 type TurnState = {
@@ -139,50 +161,35 @@ type TurnState = {
 	failureSubtype: string | undefined;
 };
 
-const handleMessage = (
-	message: AgentMessage,
-	input: RunAgentTurnInput,
-	state: TurnState,
-	events: WorkflowEventEmitterService,
-): Effect.Effect<void> => {
-	if (message.type === "assistant") {
-		state.sessionId = message.session_id;
-		return events.emit(
-			input.emitAs.kind === "branch"
-				? { _tag: "BranchAssistantMessage", message }
-				: {
-						_tag: "StepAssistantMessage",
-						stepName: input.emitAs.name,
-						message,
-					},
-		);
-	}
-	if (message.type === "result") {
-		state.sessionId = message.session_id;
-		state.usage.costUsd += message.total_cost_usd;
-		for (const [modelName, m] of Object.entries(message.modelUsage)) {
-			const modelUsage: ModelUsage = {
-				inputTokens: m.inputTokens,
-				outputTokens: m.outputTokens,
-				costUSD: m.costUSD,
-			};
-			state.usage.tokensInput += modelUsage.inputTokens;
-			state.usage.tokensOutput += modelUsage.outputTokens;
-			const existing = state.usage.modelUsage[modelName];
-			state.usage.modelUsage[modelName] = existing
-				? {
-						inputTokens: existing.inputTokens + modelUsage.inputTokens,
-						outputTokens: existing.outputTokens + modelUsage.outputTokens,
-						costUSD: existing.costUSD + modelUsage.costUSD,
-					}
-				: modelUsage;
-		}
-		if (message.subtype === "success") {
-			state.structuredOutput = message.structured_output;
-			state.resultArrived = true;
-		} else {
-			state.failureSubtype = message.subtype;
-		}
-	}
-	return Effect.void;
+const initialState: TurnState = {
+	usage: emptyStepUsage(),
+	sessionId: undefined,
+	structuredOutput: undefined,
+	resultArrived: false,
+	failureSubtype: undefined,
 };
+
+type ResultMessage = Extract<AgentMessage, { type: "result" }>;
+
+function mergeUsage(running: StepUsage, message: ResultMessage): StepUsage {
+	const merged: StepUsage = {
+		...running,
+		costUsd: running.costUsd + message.total_cost_usd,
+		modelUsage: { ...running.modelUsage },
+	};
+	for (const [model, { inputTokens, outputTokens, costUSD }] of Object.entries(
+		message.modelUsage,
+	)) {
+		merged.tokensInput += inputTokens;
+		merged.tokensOutput += outputTokens;
+		const prior = merged.modelUsage[model];
+		merged.modelUsage[model] = prior
+			? {
+					inputTokens: prior.inputTokens + inputTokens,
+					outputTokens: prior.outputTokens + outputTokens,
+					costUSD: prior.costUSD + costUSD,
+				}
+			: { inputTokens, outputTokens, costUSD };
+	}
+	return merged;
+}
