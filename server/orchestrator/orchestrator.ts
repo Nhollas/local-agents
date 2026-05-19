@@ -1,5 +1,6 @@
 import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { FileSystem } from "@effect/platform";
 import { Cause, Effect, type Fiber, Schedule } from "effect";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { AppConfigShape } from "../config/app-config.ts";
@@ -11,7 +12,7 @@ import type { IssueKey, RepoSlug } from "../types/brands.ts";
 import type { AgentInvokerService } from "../workflow/agent-invoker.ts";
 import {
 	type AgentInvokerLiveParams,
-	claudeSdkAgentInvoker,
+	makeClaudeSdkAgentInvoker,
 } from "../workflow/agent-invoker-live.ts";
 import type { RepoWorkflow } from "../workflow/types.ts";
 import { resolveAgentEnvironment } from "./agent-env.ts";
@@ -46,7 +47,7 @@ type OrchestratorConfig = {
 
 export type AgentFactory = (
 	params: Omit<AgentInvokerLiveParams, "env" | "logDir">,
-) => AgentInvokerService;
+) => Effect.Effect<AgentInvokerService, never, FileSystem.FileSystem>;
 
 export type DispatchRequest = {
 	issue: Issue;
@@ -107,7 +108,8 @@ function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
 	const logDir = resolvePath(process.cwd(), defaults.log_dir);
 	const agentFactory: AgentFactory =
 		opts.agentFactory ??
-		((params) => claudeSdkAgentInvoker({ env: agentEnv, logDir, ...params }));
+		((params) =>
+			makeClaudeSdkAgentInvoker({ env: agentEnv, logDir, ...params }));
 
 	const lifecycle = createRunLifecycle({
 		runner,

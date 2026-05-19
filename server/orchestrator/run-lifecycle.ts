@@ -1,6 +1,10 @@
 import { join } from "node:path";
-import { trace } from "@opentelemetry/api";
-import { Effect, Fiber, Layer, Queue } from "effect";
+import * as Tracer from "@effect/opentelemetry/Tracer";
+import type {
+	CommandExecutor as CommandExecutorModule,
+	FileSystem as FileSystemModule,
+} from "@effect/platform";
+import { Cause, Effect, Fiber, Layer, Queue } from "effect";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type {
@@ -10,7 +14,6 @@ import type {
 	RunResult as RunnerRunResult,
 } from "../runner/runner.ts";
 import type { AppRuntime } from "../runtime.ts";
-import { runRunSpan } from "../telemetry/spans.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
 import { AgentInvoker } from "../workflow/agent-invoker.ts";
@@ -81,38 +84,43 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			issueTitle: issue.title,
 			issueUrl: issue.url,
 			handler: (ctx) =>
-				runRunSpan(
-					{
-						runId: ctx.runId,
-						issueKey: issue.key,
-						issueTitle: issue.title,
-						issueUrl: issue.url,
-						repo,
-					},
-					async (traceId) => {
-						const langfuseTraceUrl = `${langfuseHost}/project/${langfuseProjectId}/traces/${traceId}`;
-						runRepo.setRunLangfuseTraceUrl(ctx.runId, langfuseTraceUrl);
-						try {
-							return await runOnce(ctx, issue, repo, workflow, {
-								cloneUrl,
-								baseBranch,
-							});
-						} finally {
-							console.log(`langfuse trace: ${langfuseTraceUrl}`);
-						}
-					},
+				runtime.runPromise(
+					runOne(ctx, issue, repo, workflow, { cloneUrl, baseBranch }).pipe(
+						Effect.withSpan("run", {
+							attributes: {
+								"run.id": ctx.runId,
+								"issue.key": issue.key,
+								"langfuse.trace.name": `${issue.key}: ${issue.title}`,
+								"langfuse.session.id": ctx.runId,
+								"langfuse.trace.input": JSON.stringify({
+									issueKey: issue.key,
+									issueTitle: issue.title,
+									issueUrl: issue.url,
+									repo,
+								}),
+								"langfuse.trace.tags": [repo, issue.key],
+								"langfuse.trace.metadata.run_id": ctx.runId,
+								"langfuse.trace.metadata.issue_key": issue.key,
+								"langfuse.trace.metadata.repo": repo,
+								"langfuse.trace.metadata.issue_url": issue.url,
+							},
+						}),
+					),
 				),
 		});
 	}
 
-	async function runOnce(
+	function runOne(
 		ctx: RunContext,
 		issue: Issue,
 		repo: RepoSlug,
 		workflow: RepoWorkflow,
 		urls: { cloneUrl: string; baseBranch: string },
-	): Promise<RunnerRunResult> {
-		const startMs = Date.now();
+	): Effect.Effect<
+		RunnerRunResult,
+		never,
+		FileSystemModule.FileSystem | CommandExecutorModule.CommandExecutor
+	> {
 		const wsPath = join(
 			workspaceRoot,
 			`${sanitizeKey(issue.key)}-${ctx.runId}`,
@@ -130,81 +138,98 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 			baseBranch: urls.baseBranch,
 		};
 
-		const program = Effect.gen(function* () {
-			const eventQueue = yield* Queue.unbounded<WorkflowEvent>();
-			const consumer = yield* Effect.fork(
-				consumeWorkflowEvents(eventQueue, {
-					runRepo,
-					ctx,
-					runId: ctx.runId,
-					cwd: wsPath,
-					steps: workflow.steps,
-				}),
+		return Effect.gen(function* () {
+			const startMs = Date.now();
+
+			const traceUrl = yield* Tracer.currentOtelSpan.pipe(
+				Effect.map(
+					(span) =>
+						`${langfuseHost}/project/${langfuseProjectId}/traces/${span.spanContext().traceId}`,
+				),
+				Effect.orElseSucceed(() => undefined),
 			);
-			const agent = agentFactory({
-				cwd: wsPath,
-				runId: ctx.runId,
-				signal: ctx.signal,
-			});
-			const perRunLayers = Layer.mergeAll(
-				Layer.succeed(AgentInvoker, agent),
-				WorkflowEventEmitterLive(eventQueue),
-				Layer.succeed(PhaseInputs, {
-					issue,
-					repo,
-					cloneUrl: urls.cloneUrl,
-					baseBranch: urls.baseBranch,
-					runId: ctx.runId,
-					workspaceRoot,
-					skillsSourceDir,
-					agentEnv,
-					scope,
-					workflow,
-					runRepo,
-					emit: ctx.emit,
-					codeHost,
-					tracker,
-				}),
-			);
+			if (traceUrl) runRepo.setRunLangfuseTraceUrl(ctx.runId, traceUrl);
 
-			const result = yield* runLifecycleWalker.pipe(
-				Effect.provide(perRunLayers),
-			);
-			yield* Queue.shutdown(eventQueue);
-			yield* Fiber.join(consumer);
-			return result;
-		});
-
-		const phaseResult = await runtime.runPromise(program);
-		const runnerResult = phaseResultToRunnerResult(
-			phaseResult,
-			Date.now() - startMs,
-		);
-		trace.getActiveSpan()?.setAttribute("run.status", runnerResult.status);
-
-		if (
-			phaseResult.status === "completed" &&
-			phaseResult.state.wsPath !== undefined
-		) {
-			await runtime.runPromise(removeWorkspace(phaseResult.state.wsPath));
-		} else {
-			await markIssueFailedSafe(repo, issue);
-		}
-
-		return runnerResult;
-	}
-
-	async function markIssueFailedSafe(
-		repo: RepoSlug,
-		issue: Issue,
-	): Promise<void> {
-		await runtime
-			.runPromise(tracker.markFailed(repo, issue.number))
-			.catch((err) => {
-				console.warn(
-					`mark_failed_failed ${repo}#${issue.number}: ${err instanceof Error ? err.message : String(err)}`,
+			const program = Effect.gen(function* () {
+				const eventQueue = yield* Queue.unbounded<WorkflowEvent>();
+				const consumer = yield* Effect.fork(
+					consumeWorkflowEvents(eventQueue, {
+						runRepo,
+						ctx,
+						runId: ctx.runId,
+						cwd: wsPath,
+						steps: workflow.steps,
+					}),
 				);
+				const agent = yield* agentFactory({
+					cwd: wsPath,
+					runId: ctx.runId,
+					signal: ctx.signal,
+				});
+				const perRunLayers = Layer.mergeAll(
+					Layer.succeed(AgentInvoker, agent),
+					WorkflowEventEmitterLive(eventQueue),
+					Layer.succeed(PhaseInputs, {
+						issue,
+						repo,
+						cloneUrl: urls.cloneUrl,
+						baseBranch: urls.baseBranch,
+						runId: ctx.runId,
+						workspaceRoot,
+						skillsSourceDir,
+						agentEnv,
+						scope,
+						workflow,
+						runRepo,
+						emit: ctx.emit,
+						codeHost,
+						tracker,
+					}),
+				);
+
+				const result = yield* runLifecycleWalker.pipe(
+					Effect.provide(perRunLayers),
+				);
+				yield* Queue.shutdown(eventQueue);
+				yield* Fiber.join(consumer);
+				return result;
 			});
+
+			const phaseResult = yield* program;
+			const runnerResult = phaseResultToRunnerResult(
+				phaseResult,
+				Date.now() - startMs,
+			);
+			yield* Effect.annotateCurrentSpan("run.status", runnerResult.status);
+
+			if (
+				phaseResult.status === "completed" &&
+				phaseResult.state.wsPath !== undefined
+			) {
+				yield* removeWorkspace(phaseResult.state.wsPath).pipe(
+					Effect.catchAllCause((cause) =>
+						Effect.logWarning("run_lifecycle.workspace_cleanup_failed").pipe(
+							Effect.annotateLogs({ err: Cause.pretty(cause) }),
+						),
+					),
+				);
+			} else {
+				yield* tracker.markFailed(repo, issue.number).pipe(
+					Effect.catchAllCause((cause) =>
+						Effect.logWarning("run_lifecycle.mark_failed_failed").pipe(
+							Effect.annotateLogs({
+								repo,
+								issue: issue.number,
+								err: Cause.pretty(cause),
+							}),
+						),
+					),
+				);
+			}
+
+			if (traceUrl) console.log(`langfuse trace: ${traceUrl}`);
+			return runnerResult;
+		});
 	}
 
 	return { dispatch };

@@ -1,9 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Queue } from "effect";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput } from "../runner/runner.ts";
 import { makeAppRuntime } from "../runtime.ts";
@@ -491,73 +487,5 @@ describe("event-consumer repository writes", () => {
 				error: "subtype error_max_structured_output_retries",
 			},
 		]);
-	});
-});
-
-describe("event-consumer measure_diff", () => {
-	let repoPath: string;
-
-	beforeEach(() => {
-		repoPath = mkdtempSync(join(tmpdir(), "event-consumer-diff-"));
-		const run = (...args: string[]) =>
-			execFileSync("git", args, { cwd: repoPath });
-		run("init", "-q");
-		run("config", "user.email", "t@t.test");
-		run("config", "user.name", "t");
-		run("commit", "--allow-empty", "-m", "base");
-	});
-
-	afterEach(() => {
-		execFileSync("rm", ["-rf", repoPath]);
-	});
-
-	it("calls the diff command after StepCompleted for steps with measure_diff: true", async () => {
-		writeFileSync(join(repoPath, "a.txt"), "hi\n");
-		execFileSync("git", ["add", "."], { cwd: repoPath });
-		execFileSync("git", ["commit", "-m", "change"], { cwd: repoPath });
-
-		await drive(
-			[
-				{ _tag: "StepStarted", name: "act", index: 1, total: 1 },
-				{
-					_tag: "StepResult",
-					stepName: "act",
-					sessionId: "s1",
-					usage: emptyUsage(),
-				},
-				{
-					_tag: "StepCompleted",
-					stepName: "act",
-					index: 1,
-					durationMs: 10,
-				},
-			],
-			{
-				cwd: repoPath,
-				steps: [step({ name: "act", measure_diff: true })],
-			},
-		);
-		// The consumer ran without throwing — a smoke test that the diff path is
-		// exercised end-to-end against a real repo. Span attribute assertions are
-		// covered by parse-shortstat unit tests.
-	});
-
-	it("skips git commands entirely for steps without measure_diff", async () => {
-		await drive(
-			[
-				{ _tag: "StepStarted", name: "act", index: 1, total: 1 },
-				{
-					_tag: "StepCompleted",
-					stepName: "act",
-					index: 1,
-					durationMs: 5,
-				},
-			],
-			{
-				cwd: "/this/path/does/not/exist",
-				steps: [step({ name: "act", measure_diff: false })],
-			},
-		);
-		// no throw despite invalid cwd — measure_diff: false means git is never invoked
 	});
 });

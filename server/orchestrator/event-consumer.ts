@@ -1,9 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import { Effect, Metric, type Queue, Stream } from "effect";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput } from "../runner/runner.ts";
-import { TRACER_NAME } from "../telemetry/spans.ts";
 import type { RunId } from "../types/brands.ts";
 import type { AgentMessage } from "../workflow/agent-invoker.ts";
 import type { WorkflowEvent } from "../workflow/event-emitter.ts";
@@ -17,9 +14,6 @@ import {
 	turnOutputTokens,
 } from "../workflow/metrics.ts";
 import type { WorkflowStep } from "../workflow/types.ts";
-import { parseShortstat } from "./parse-shortstat.ts";
-
-const tracer = trace.getTracer(TRACER_NAME);
 
 type EventConsumerDeps = {
 	runRepo: ConsumerRepo;
@@ -37,32 +31,18 @@ type ConsumerRepo = Pick<
 export const consumeWorkflowEvents = (
 	queue: Queue.Dequeue<WorkflowEvent>,
 	deps: EventConsumerDeps,
-): Effect.Effect<void> => {
-	const state: ConsumerState = {
-		headBefore: new Map(),
-		stepSpans: new Map(),
-	};
-	return Effect.annotateCurrentSpan({
-		steps_total: deps.steps.length,
-	}).pipe(
+): Effect.Effect<void> =>
+	Effect.annotateCurrentSpan({ steps_total: deps.steps.length }).pipe(
 		Effect.zipRight(
 			Stream.fromQueue(queue).pipe(
-				Stream.runForEach((event) => handleEvent(event, deps, state)),
-				Effect.ensuring(Effect.sync(() => closeOpenSpans(state))),
+				Stream.runForEach((event) => handleEvent(event, deps)),
 			),
 		),
 	);
-};
-
-type ConsumerState = {
-	headBefore: Map<string, string>;
-	stepSpans: Map<string, Span>;
-};
 
 function handleEvent(
 	event: WorkflowEvent,
 	deps: EventConsumerDeps,
-	state: ConsumerState,
 ): Effect.Effect<void> {
 	switch (event._tag) {
 		case "BranchAssistantMessage":
@@ -72,15 +52,17 @@ function handleEvent(
 		case "StepToolFailure":
 			return Effect.void;
 		case "StepStarted":
-			return Effect.sync(() => onStepStarted(event, deps, state));
+			return Effect.sync(() => onStepStarted(event, deps));
 		case "StepAssistantMessage":
-			return onStepAssistantMessage(event, deps);
+			return Effect.sync(() =>
+				emitTranscript(event.message, deps, event.stepName),
+			);
 		case "StepResult":
 			return onStepResult(event, deps);
 		case "StepCompleted":
-			return onStepCompleted(event, deps, state);
+			return onStepCompleted(event, deps);
 		case "StepFailed":
-			return onStepFailed(event, deps, state);
+			return onStepFailed(event, deps);
 		default: {
 			const _exhaustive: never = event;
 			void _exhaustive;
@@ -92,7 +74,6 @@ function handleEvent(
 function onStepStarted(
 	event: Extract<WorkflowEvent, { _tag: "StepStarted" }>,
 	deps: EventConsumerDeps,
-	state: ConsumerState,
 ): void {
 	deps.runRepo.startStep(deps.runId, event.index, {
 		startedAt: new Date().toISOString(),
@@ -102,25 +83,6 @@ function onStepStarted(
 		stepName: event.name,
 		data: { name: event.name, index: event.index, total: event.total },
 	});
-	const step = deps.steps[event.index - 1];
-	if (step?.measure_diff) {
-		const head = gitRevParseSafe(deps.cwd);
-		if (head != null) state.headBefore.set(event.name, head);
-	}
-	const span = tracer.startSpan(`step:${event.name}`, {
-		attributes: {
-			"workflow.step": event.name,
-			"langfuse.observation.metadata.step_name": event.name,
-		},
-	});
-	state.stepSpans.set(event.name, span);
-}
-
-function onStepAssistantMessage(
-	event: Extract<WorkflowEvent, { _tag: "StepAssistantMessage" }>,
-	deps: EventConsumerDeps,
-): Effect.Effect<void> {
-	return Effect.sync(() => emitTranscript(event.message, deps, event.stepName));
 }
 
 function onStepResult(
@@ -157,7 +119,6 @@ function onStepResult(
 function onStepCompleted(
 	event: Extract<WorkflowEvent, { _tag: "StepCompleted" }>,
 	deps: EventConsumerDeps,
-	state: ConsumerState,
 ): Effect.Effect<void> {
 	deps.runRepo.completeStep(deps.runId, event.index, {
 		completedAt: new Date().toISOString(),
@@ -172,12 +133,6 @@ function onStepCompleted(
 			durationMs: event.durationMs,
 		},
 	});
-	const headBefore = state.headBefore.get(event.stepName);
-	const span = state.stepSpans.get(event.stepName);
-	if (headBefore != null && span) {
-		recordStepDiff(span, deps.cwd, headBefore);
-	}
-	endStepSpan(state, event.stepName);
 	return Effect.all([
 		Metric.update(
 			stepCompletedTotal.pipe(Metric.tagged("step", event.stepName)),
@@ -193,7 +148,6 @@ function onStepCompleted(
 function onStepFailed(
 	event: Extract<WorkflowEvent, { _tag: "StepFailed" }>,
 	deps: EventConsumerDeps,
-	state: ConsumerState,
 ): Effect.Effect<void> {
 	const error = event.error.message;
 	deps.runRepo.failStep(deps.runId, event.index, {
@@ -211,17 +165,7 @@ function onStepFailed(
 			durationMs: event.durationMs,
 		},
 	});
-	const span = state.stepSpans.get(event.stepName);
-	if (span) {
-		span.setStatus({ code: SpanStatusCode.ERROR, message: error });
-	}
-	endStepSpan(state, event.stepName);
 	return Effect.all([
-		Effect.annotateCurrentSpan({
-			"failed_step.name": event.stepName,
-			"failed_step.index": event.index,
-			"failed_step.error": error,
-		}),
 		Metric.update(
 			stepFailedTotal.pipe(Metric.tagged("step", event.stepName)),
 			1,
@@ -231,18 +175,6 @@ function onStepFailed(
 			event.durationMs,
 		),
 	]).pipe(Effect.asVoid);
-}
-
-function endStepSpan(state: ConsumerState, stepName: string): void {
-	const span = state.stepSpans.get(stepName);
-	if (!span) return;
-	span.end();
-	state.stepSpans.delete(stepName);
-}
-
-function closeOpenSpans(state: ConsumerState): void {
-	for (const span of state.stepSpans.values()) span.end();
-	state.stepSpans.clear();
 }
 
 function emitTranscript(
@@ -394,41 +326,4 @@ function shortenCommand(command: string, workDir: string): string {
 		.join("")
 		.split(`${workDir}/`)
 		.join("");
-}
-
-function gitRevParseSafe(cwd: string): string | null {
-	try {
-		return execFileSync("git", ["rev-parse", "HEAD"], { cwd })
-			.toString()
-			.trim();
-	} catch (err) {
-		console.warn(
-			`event_consumer.step_diff.head_before_failed cwd=${cwd}: ${formatErr(err)}`,
-		);
-		return null;
-	}
-}
-
-function recordStepDiff(span: Span, cwd: string, headBefore: string): void {
-	try {
-		const stdout = execFileSync(
-			"git",
-			["diff", "--shortstat", `${headBefore}..HEAD`],
-			{ cwd },
-		).toString();
-		const { filesChanged, linesAdded, linesRemoved } = parseShortstat(stdout);
-		span.setAttributes({
-			"step.diff.files_changed": filesChanged,
-			"step.diff.lines_added": linesAdded,
-			"step.diff.lines_removed": linesRemoved,
-		});
-	} catch (err) {
-		console.warn(
-			`event_consumer.step_diff.diff_failed cwd=${cwd}: ${formatErr(err)}`,
-		);
-	}
-}
-
-function formatErr(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
 }

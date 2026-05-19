@@ -1,5 +1,6 @@
-import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { FileSystem } from "@effect/platform";
+import { Effect, Runtime } from "effect";
 import type { RunId } from "../types/brands.ts";
 
 export type ToolBlock = {
@@ -16,20 +17,44 @@ export type RunLogWriter = {
 	append(block: ToolBlock): Promise<void>;
 };
 
-export function createRunLogWriter(logDir: string, id: RunId): RunLogWriter {
-	const filePath = join(logDir, `${id}.log`);
-	const ready = mkdir(logDir, { recursive: true }).then(() => {});
-	let chain: Promise<void> = ready;
-	return {
-		append(block) {
-			const next = chain.then(() =>
-				appendFile(filePath, formatBlock(block), "utf8"),
+export const makeRunLogWriter = (
+	logDir: string,
+	id: RunId,
+): Effect.Effect<RunLogWriter, never, FileSystem.FileSystem> =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const filePath = join(logDir, `${id}.log`);
+
+		yield* fs
+			.makeDirectory(logDir, { recursive: true })
+			.pipe(
+				Effect.catchAll((err) =>
+					Effect.logWarning(`run-log mkdir failed: ${err.message}`),
+				),
 			);
-			chain = next.catch(() => {});
-			return next;
-		},
-	};
-}
+
+		// Serialise writes so concurrent hook callbacks land in the file in the
+		// order they were submitted, mirroring the original chained-promise
+		// behaviour without exposing the chain.
+		const lock = yield* Effect.makeSemaphore(1);
+		const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
+		const runPromise = Runtime.runPromise(runtime);
+
+		return {
+			append: (block) =>
+				runPromise(
+					lock.withPermits(1)(
+						fs
+							.writeFileString(filePath, formatBlock(block), { flag: "a" })
+							.pipe(
+								Effect.catchAll((err) =>
+									Effect.logWarning(`run-log write failed: ${err.message}`),
+								),
+							),
+					),
+				),
+		};
+	});
 
 function formatBlock(block: ToolBlock): string {
 	const meta = [

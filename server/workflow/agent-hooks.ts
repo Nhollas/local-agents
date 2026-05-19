@@ -5,9 +5,11 @@ import type {
 	HookInput,
 	SyncHookJSONOutput,
 } from "@anthropic-ai/claude-agent-sdk";
-import { Effect, Metric } from "effect";
+import { Metric, Runtime } from "effect";
 import { toolDurationMs, toolFailureTotal } from "./metrics.ts";
 import type { RunLogWriter } from "./run-log-file.ts";
+
+type HookRuntime = Runtime.Runtime<never>;
 
 export const BASH_TIMEOUT_CAP_MS = 180_000;
 
@@ -49,9 +51,11 @@ const CONVENTIONAL_COMMIT_PATTERN = new RegExp(
 );
 
 export function buildAgentHooks(
+	runtime: HookRuntime,
 	runLogWriter?: RunLogWriter,
 	onToolFailure?: (toolName: string) => void,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+	const record = makeRecord(runtime);
 	const postToolUse: HookCallback[] = [safe(record)];
 	const postToolUseFailure: HookCallback[] = [safe(record)];
 	if (onToolFailure) {
@@ -238,23 +242,35 @@ function extractCommitFirstLine(command: string): string | null {
 	return null;
 }
 
-function record(input: HookInput): void {
-	if (input.hook_event_name === "PostToolUse") {
-		addToolDuration(input.tool_name, input.duration_ms);
-		return;
-	}
-	if (input.hook_event_name === "PostToolUseFailure") {
-		Effect.runSync(
+function makeRecord(runtime: HookRuntime): (input: HookInput) => void {
+	const runSync = Runtime.runSync(runtime);
+	const addToolDuration = (toolName: string, durationMs: unknown): void => {
+		if (typeof durationMs !== "number" || durationMs <= 0) return;
+		runSync(
 			Metric.update(
-				toolFailureTotal.pipe(Metric.tagged("tool", input.tool_name)),
-				1,
+				toolDurationMs.pipe(Metric.tagged("tool", toolName)),
+				durationMs,
 			),
 		);
-		// Fold failure wall-time into the same histogram as successes so the
-		// per-tool total reflects all time spent in that tool, not just
-		// successful calls.
-		addToolDuration(input.tool_name, input.duration_ms);
-	}
+	};
+	return (input) => {
+		if (input.hook_event_name === "PostToolUse") {
+			addToolDuration(input.tool_name, input.duration_ms);
+			return;
+		}
+		if (input.hook_event_name === "PostToolUseFailure") {
+			runSync(
+				Metric.update(
+					toolFailureTotal.pipe(Metric.tagged("tool", input.tool_name)),
+					1,
+				),
+			);
+			// Fold failure wall-time into the same histogram as successes so the
+			// per-tool total reflects all time spent in that tool, not just
+			// successful calls.
+			addToolDuration(input.tool_name, input.duration_ms);
+		}
+	};
 }
 
 function writeRunLog(writer: RunLogWriter) {
@@ -286,16 +302,6 @@ function writeRunLog(writer: RunLogWriter) {
 			});
 		}
 	};
-}
-
-function addToolDuration(toolName: string, durationMs: unknown): void {
-	if (typeof durationMs !== "number" || durationMs <= 0) return;
-	Effect.runSync(
-		Metric.update(
-			toolDurationMs.pipe(Metric.tagged("tool", toolName)),
-			durationMs,
-		),
-	);
 }
 
 // Wrap a side-effecting hook so a thrown error never blocks the agent.

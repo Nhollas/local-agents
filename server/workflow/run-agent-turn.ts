@@ -1,5 +1,5 @@
 import type { CommandExecutor, FileSystem } from "@effect/platform";
-import { Effect, Stream } from "effect";
+import { Effect, Option, Stream } from "effect";
 import type { ModelId } from "../types/model-id.ts";
 import { AgentInvoker, type AgentMessage } from "./agent-invoker.ts";
 import { AgentTurnError, type WorkflowExecutionError } from "./errors.ts";
@@ -66,13 +66,10 @@ export const runAgentTurn = (
 				}),
 		);
 
-		const outcome = yield* Stream.runFoldEffect(
-			messages,
-			initialState,
-			(state, message) => {
-				if (message.type === "assistant") {
-					return events
-						.emit(
+		const resultOption = yield* messages.pipe(
+			Stream.tap((message) =>
+				message.type === "assistant"
+					? events.emit(
 							input.emitAs.kind === "branch"
 								? { _tag: "BranchAssistantMessage", message }
 								: {
@@ -81,53 +78,41 @@ export const runAgentTurn = (
 										message,
 									},
 						)
-						.pipe(Effect.as({ ...state, sessionId: message.session_id }));
-				}
-				if (message.type === "result") {
-					const usage = mergeUsage(state.usage, message);
-					return Effect.succeed(
-						message.subtype === "success"
-							? {
-									...state,
-									usage,
-									sessionId: message.session_id,
-									structuredOutput: message.structured_output,
-									resultArrived: true,
-								}
-							: {
-									...state,
-									usage,
-									sessionId: message.session_id,
-									failureSubtype: message.subtype,
-								},
-					);
-				}
-				return Effect.succeed(state);
-			},
+					: Effect.void,
+			),
+			Stream.filter(
+				(message): message is ResultMessage => message.type === "result",
+			),
+			Stream.runHead,
 		);
 
-		if (outcome.failureSubtype !== undefined) {
-			return yield* Effect.fail(
-				new AgentTurnError({
-					message: outcome.failureSubtype,
-					subtype: outcome.failureSubtype,
-					usage: outcome.usage,
-					sessionId: outcome.sessionId,
-				}),
-			);
-		}
-		if (!outcome.resultArrived || outcome.sessionId === undefined) {
+		if (Option.isNone(resultOption)) {
 			return yield* Effect.fail(
 				new AgentTurnError({
 					message: "agent stream ended without a result message",
-					usage: outcome.usage,
+					usage: emptyStepUsage(),
 				}),
 			);
 		}
+
+		const result = resultOption.value;
+		const usage = mergeUsage(emptyStepUsage(), result);
+
+		if (result.subtype !== "success") {
+			return yield* Effect.fail(
+				new AgentTurnError({
+					message: result.subtype,
+					subtype: result.subtype,
+					usage,
+					sessionId: result.session_id,
+				}),
+			);
+		}
+
 		return {
-			structuredOutput: outcome.structuredOutput,
-			sessionId: outcome.sessionId,
-			usage: outcome.usage,
+			structuredOutput: result.structured_output,
+			sessionId: result.session_id,
+			usage,
 		} satisfies AgentTurnOutcome;
 	}).pipe(
 		Effect.withSpan("workflow.agent_turn", {
@@ -152,22 +137,6 @@ export const runAgentTurn = (
 			}),
 		}),
 	);
-
-type TurnState = {
-	usage: StepUsage;
-	sessionId: string | undefined;
-	structuredOutput: unknown;
-	resultArrived: boolean;
-	failureSubtype: string | undefined;
-};
-
-const initialState: TurnState = {
-	usage: emptyStepUsage(),
-	sessionId: undefined,
-	structuredOutput: undefined,
-	resultArrived: false,
-	failureSubtype: undefined,
-};
 
 type ResultMessage = Extract<AgentMessage, { type: "result" }>;
 

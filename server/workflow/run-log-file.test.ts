@@ -1,11 +1,20 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
+import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runId } from "../types/brands.ts";
-import { createRunLogWriter } from "./run-log-file.ts";
+import { makeRunLogWriter, type RunLogWriter } from "./run-log-file.ts";
 
-describe("createRunLogWriter", () => {
+const makeWriter = (logDir: string, id: string): Promise<RunLogWriter> =>
+	Effect.runPromise(
+		makeRunLogWriter(logDir, runId(id)).pipe(
+			Effect.provide(NodeFileSystem.layer),
+		),
+	);
+
+describe("makeRunLogWriter", () => {
 	let logDir: string;
 
 	beforeEach(() => {
@@ -17,7 +26,7 @@ describe("createRunLogWriter", () => {
 	});
 
 	it("appends a formatted block for a successful tool call", async () => {
-		const writer = createRunLogWriter(logDir, runId("run-abc"));
+		const writer = await makeWriter(logDir, "run-abc");
 
 		await writer.append({
 			timestamp: "2026-05-12T10:00:00.000Z",
@@ -37,7 +46,7 @@ describe("createRunLogWriter", () => {
 	});
 
 	it("renders a failed block with an error section", async () => {
-		const writer = createRunLogWriter(logDir, runId("run-fail"));
+		const writer = await makeWriter(logDir, "run-fail");
 
 		await writer.append({
 			timestamp: "2026-05-12T10:00:01.000Z",
@@ -55,7 +64,7 @@ describe("createRunLogWriter", () => {
 	});
 
 	it("appends multiple blocks in order across concurrent calls", async () => {
-		const writer = createRunLogWriter(logDir, runId("run-order"));
+		const writer = await makeWriter(logDir, "run-order");
 
 		const a = writer.append({
 			timestamp: "2026-05-12T10:00:00.000Z",

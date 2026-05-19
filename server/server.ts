@@ -16,8 +16,7 @@ import { readLast24hStats } from "./db/stats-query.ts";
 import { createOrchestrator } from "./orchestrator/orchestrator.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createRunner, type Runner } from "./runner/runner.ts";
-import { makeAppRuntime } from "./runtime.ts";
-import { initOtel, shutdownOtel } from "./telemetry/otel.ts";
+import { makeServerRuntime } from "./runtime.ts";
 import { createTracker } from "./trackers/create-tracker.ts";
 import { loadWorkflow } from "./workflow/loader.ts";
 
@@ -25,11 +24,6 @@ const DRAIN_TIMEOUT_MS = 30_000;
 
 const program = Effect.gen(function* () {
 	const env = yield* processEnv;
-
-	yield* Effect.acquireRelease(
-		Effect.sync(() => initOtel(env.langfuse)),
-		() => Effect.promise(() => shutdownOtel()),
-	);
 
 	const config = yield* AppConfig.pipe(
 		Effect.provide(AppConfigLive),
@@ -47,7 +41,7 @@ const program = Effect.gen(function* () {
 	);
 
 	const runtime = yield* Effect.acquireRelease(
-		Effect.sync(() => makeAppRuntime()),
+		Effect.sync(() => makeServerRuntime()),
 		(rt) => Effect.promise(() => rt.dispose()),
 	);
 

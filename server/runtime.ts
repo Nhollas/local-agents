@@ -8,6 +8,7 @@ import {
 	LogLevel,
 	ManagedRuntime,
 } from "effect";
+import { TelemetryLive } from "./telemetry.ts";
 
 const MinimumLogLevelLive = Layer.unwrapEffect(
 	Config.logLevel("LOG_LEVEL").pipe(
@@ -30,6 +31,12 @@ export type AppRuntime = ManagedRuntime.ManagedRuntime<
 	never
 >;
 
-export function makeAppRuntime(): AppRuntime {
-	return ManagedRuntime.make(AppLayer);
+export function makeAppRuntime(
+	extra: Layer.Layer<never> = Layer.empty,
+): AppRuntime {
+	return ManagedRuntime.make(Layer.mergeAll(AppLayer, extra));
+}
+
+export function makeServerRuntime(): AppRuntime {
+	return makeAppRuntime(TelemetryLive);
 }
