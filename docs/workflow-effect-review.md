@@ -2,29 +2,32 @@
 
 A walk through the workflow module to flag where Effect idioms are paying off, where the seams with Promise-land cost composition, and where small refactors would buy real safety. Each item: the smell, the concrete cost, the change, and a docs reference.
 
-## TL;DR
+## Status
 
-The module is in good shape. Tagged errors, `Context.Tag` services, `Stream.fromAsyncIterable`, `Schema.decodeUnknown` are all used the way the Effect docs prescribe. The friction is concentrated in four places:
+| § | Item | Status |
+|---|------|--------|
+| §1 | `agent-hooks.ts` — capture runtime instead of fresh `Effect.runSync` per tick | **Done** — `agent-hooks.ts` now takes a `Runtime` argument and uses `Runtime.runSync(runtime)`. |
+| §2 | `run-log-file.ts` — Effect resource using `FileSystem` + `Scope` | **Done** — replaced with `makeRunLogWriter` returning an Effect; lifetime tied to the surrounding scope, writes serialised via `Effect.makeSemaphore`. |
+| §3 | `agent-invoker.ts` — OTel + `AbortSignal` bridges | **Done** — `invoke` returns an `Effect` whose Scope owns the `AbortController`, propagation is read from `Tracer.currentOtelSpan`, and the layer-time `signal` param is gone. Cancellation now flows entirely through Effect interruption. |
+| §4 | `run-agent-turn.ts` — fold-with-flags → `Stream.runHead` | **Done** — collapsed to `Stream.tap` + `Stream.filter` + `Stream.runHead`. |
+| §5 | `run-steps.ts` — narrowing by `_tag` → `Effect.catchTag` | **Done** — three `Effect.catchTag` handlers, exhaustive. |
 
-1. `agent-hooks.ts` calls `Effect.runSync(Metric.update(...))` inside SDK callbacks — an ephemeral runtime per metric tick.
-2. `run-log-file.ts` is pure Promise + a manually chained `Promise<void>` to serialise writes — no `Scope`, no `FileSystem`, no cancellation hook.
-3. `agent-invoker-live.ts` injects OTel context by hand and converts `AbortSignal` to `AbortController` by hand — both are things Effect's tracer + interruption can provide if the bridge is built once.
-4. `run-steps.ts`/`run-agent-turn.ts` use ad-hoc state flags (`error._tag === "AgentTurnError"`, `resultArrived: false`) where `Effect.catchTag` and earlier `Effect.fail` would be exhaustive.
+§6 (selective Effect use) and §7 (smaller observations) remain accurate; see them for the rationale on what's still left in plain TypeScript on purpose.
 
-Nothing here is wrong enough to block work. They're the four refactors most likely to keep paying back.
+The historical write-ups for §1–§5 are kept below for context — they explain why each change was made, not what to do next.
 
 ---
 
 ## 1. `agent-hooks.ts` — ephemeral runtimes inside SDK callbacks
 
 ```ts
-// agent-hooks.ts:248
+// agent-hooks.ts (before)
 Effect.runSync(
   Metric.update(toolFailureTotal.pipe(Metric.tagged("tool", input.tool_name)), 1),
 );
 ```
 
-### Why it's a smell
+### Why it was a smell
 
 `Effect.runSync` constructs a fresh `Runtime` every call. That runtime has no `Context`, no tags from the surrounding fiber, no shared tracer. The metric is recorded, but:
 
@@ -32,51 +35,9 @@ Effect.runSync(
 - If you later add a `MetricRegistry` to your live layer, this code keeps writing to the default registry and silently diverges.
 - The tracer span in flight (the SDK is invoked inside `instrumentedQuery` which `Effect.withSpan`s) is not on the new runtime's fiber, so any future "record-on-current-span" logic would miss it.
 
-### Better
+### Better (now landed)
 
-Build a `Runtime` once per workflow run (you already build one in `runtime.ts`) and capture it in the closure that the SDK calls back into:
-
-```ts
-// agent-invoker-live.ts
-import { Runtime } from "effect";
-
-export const claudeSdkAgentInvoker = (params: AgentInvokerLiveParams) =>
-  Effect.gen(function* () {
-    const runtime = yield* Effect.runtime<never>(); // captures current Context
-    return {
-      invoke(opts) {
-        return instrumentedQuery({
-          // ...
-          hooks: buildAgentHooks(runLogWriter, opts.onToolFailure, runtime),
-        });
-      },
-    };
-  });
-
-// agent-hooks.ts
-import { Runtime } from "effect";
-
-export function buildAgentHooks(
-  runLogWriter: RunLogWriter | undefined,
-  onToolFailure: ((tool: string) => void) | undefined,
-  runtime: Runtime.Runtime<never>,
-) {
-  const runSync = Runtime.runSync(runtime);
-  // ...
-  function record(input: HookInput) {
-    if (input.hook_event_name === "PostToolUseFailure") {
-      runSync(
-        Metric.update(
-          toolFailureTotal.pipe(Metric.tagged("tool", input.tool_name)),
-          1,
-        ),
-      );
-    }
-  }
-}
-```
-
-The hook is still synchronous from the SDK's perspective; the difference is that metric updates now run on **your** runtime, with **your** tags and tracer attached.
+The workflow run captures the live `Runtime` once in `agent-invoker.ts` and threads it into `buildAgentHooks`, which calls `Runtime.runSync(runtime)`. Metric updates now run on the layer's runtime, with the layer's tags and tracer attached.
 
 ### Docs
 
@@ -88,7 +49,7 @@ The hook is still synchronous from the SDK's perspective; the difference is that
 ## 2. `run-log-file.ts` — Promise file IO with no Scope
 
 ```ts
-// run-log-file.ts:19
+// run-log-file.ts (before)
 export function createRunLogWriter(logDir: string, id: RunId): RunLogWriter {
   const filePath = join(logDir, `${id}.log`);
   const ready = mkdir(logDir, { recursive: true }).then(() => {});
@@ -103,53 +64,15 @@ export function createRunLogWriter(logDir: string, id: RunId): RunLogWriter {
 }
 ```
 
-### Why it's a smell
+### Why it was a smell
 
-- `chain.catch(() => {})` swallows every write failure silently — no log line, no metric.
-- If the workflow is interrupted (`Fiber.interrupt`), the dangling `appendFile` keeps the FD open until the OS reaps it. No `Scope` finalizer flushes or closes.
-- The writer is a Promise factory used inside Effect code. Each call into it crosses the boundary back to Promise-land — interruption stops propagating *into* the file write.
+- `chain.catch(() => {})` swallowed every write failure silently.
+- Interruption (`Fiber.interrupt`) left dangling `appendFile` work open until the OS reaped the FD; no `Scope` finalizer flushed or closed.
+- Each call from Effect into the writer crossed into Promise-land — interruption stopped propagating *into* the file write.
 
-### Better
+### Better (now landed)
 
-`@effect/platform` already provides `FileSystem.FileSystem`. Build the writer as `Effect.acquireRelease` so it participates in `Scope`:
-
-```ts
-import { FileSystem } from "@effect/platform";
-import { Effect, Queue } from "effect";
-
-export const makeRunLogWriter = (logDir: string, id: RunId) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const filePath = join(logDir, `${id}.log`);
-    yield* fs.makeDirectory(logDir, { recursive: true });
-
-    const queue = yield* Queue.unbounded<ToolBlock>();
-
-    // Drain in a background fiber, interruptible with the parent scope.
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Queue.take(queue).pipe(
-          Effect.flatMap((block) =>
-            fs.writeFileString(filePath, formatBlock(block), { flag: "a" }),
-          ),
-          Effect.catchAll((err) =>
-            Effect.logWarning(`run-log write failed: ${err}`),
-          ),
-        ),
-      ),
-    );
-
-    return {
-      append: (block: ToolBlock) => Queue.offer(queue, block),
-    };
-  });
-```
-
-Concrete payoff:
-
-- `Effect.forkScoped` ties the drain fiber to the surrounding `Scope` — when the workflow is cancelled, the drain is interrupted, the queue is shut down, no orphan FDs.
-- Errors land in `Effect.logWarning`, which honours your logger layer (so they show up in OTel logs, not just stderr).
-- The hook layer still wants a synchronous `append`, so keep a thin Promise façade if needed — but the lifetime now lives in Effect.
+`makeRunLogWriter` is now an Effect using `FileSystem.FileSystem` and `Effect.makeSemaphore(1)` for write serialisation. Lifetime is tied to the surrounding `Scope` (via the workflow run's runtime); `mkdir` failures land in `Effect.logWarning` rather than being swallowed.
 
 ### Docs
 
@@ -159,71 +82,45 @@ Concrete payoff:
 
 ---
 
-## 3. `agent-invoker-live.ts` — manual OTel propagation, manual AbortSignal bridge
+## 3. `agent-invoker.ts` — OTel propagation and AbortSignal bridges
 
 ```ts
-// agent-invoker-live.ts:38
+// agent-invoker.ts (before)
 const propagationCarrier: Record<string, string> = {};
 propagation.inject(otelContext.active(), propagationCarrier);
-const resolvedEnv = {
-  ...baseEnv,
-  ...(propagationCarrier["traceparent"] && { TRACEPARENT: propagationCarrier["traceparent"] }),
-  ...(propagationCarrier["tracestate"] && { TRACESTATE: propagationCarrier["tracestate"] }),
-};
+// ...
+abortController: abortControllerFromSignal(signal),
 ```
 
-```ts
-// agent-invoker-live.ts:77
-function abortControllerFromSignal(signal: AbortSignal): AbortController {
-  const controller = new AbortController();
-  if (signal.aborted) controller.abort(signal.reason);
-  else signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
-  return controller;
-}
-```
+Where `signal: AbortSignal` was a layer-time constructor param plumbed in from the runner via `Effect.tryPromise`.
 
-### Why it's a smell
+### Why it was a smell
 
-Both pieces are bridging Effect → SDK by hand. Effect has primitives for both, and the hand-rolled versions skip Effect's tracing and interruption.
+Both pieces bridged Effect → SDK by hand. Effect has primitives for both, and the hand-rolled versions skipped Effect's tracing and interruption story:
 
-1. **OTel context.** You're reading from `@opentelemetry/api`'s active context. But Effect has its own tracer (`Effect.withSpan`, see `run-agent-turn.ts:133`). The two are not the same. If a future span is set via `Effect.withSpan` but no OTel exporter is wired into Effect's tracer, `propagation.inject` will pull a stale or empty context. The fix is to read the *Effect* span and pass `traceparent` from there — or unify them with `@effect/opentelemetry`'s `OtelTracerLive`.
+1. **OTel context.** Reading from `@opentelemetry/api`'s active context happens to work *because* `@effect/opentelemetry/Tracer` activates the OTel context for the duration of an Effect span — but that's an implicit coupling. If `invoke` ever moved out of the synchronous slice of the Effect (e.g. behind a `Promise.then`), `otelContext.active()` would silently return an empty context.
+2. **AbortSignal.** Cancellation flowed via a signal captured at layer-construction time. It worked because `Effect.tryPromise` provides an interruption-linked signal, but it was load-bearing on the runner's exact wiring — pulling the abort straight from Effect's scope is more obviously correct.
 
-2. **AbortSignal.** You're rebuilding cancellation semantics outside the Effect runtime. If `runAgentTurn` is interrupted via `Fiber.interrupt`, the `signal` here is whichever one the caller passed in, not Effect's interruption. You're not guaranteed to see the abort.
+### Better (now landed)
 
-### Better
+`invoke` returns `Effect.Effect<AsyncIterable<AgentMessage>, never, Scope.Scope>`:
 
-If `agent-invoker-live.ts` returns an `Effect` rather than a raw service, you can pull the abort signal from the running fiber:
-
-```ts
-export const claudeSdkAgentInvoker = (params: Omit<AgentInvokerLiveParams, "signal">) =>
-  Effect.gen(function* () {
-    const runtime = yield* Effect.runtime<never>();
-    return {
-      invoke(opts) {
-        return Effect.runtime<never>().pipe(
-          Effect.flatMap(() =>
-            // wrap the AsyncIterable so it interrupts when the fiber does
-            Effect.asyncEffect<AgentMessage, AgentTurnError, never>(...),
-          ),
-        );
-      },
-    };
-  });
-```
-
-Simpler interim move: wire `@effect/opentelemetry` (`NodeSdk.layer({ ... })`) so `Effect.withSpan` and the OTel SDK share the same context. Then `propagation.inject(otelContext.active(), ...)` reads what `Effect.withSpan` wrote, and the manual carrier construction becomes correct-by-construction.
+- The current Effect-managed OTel span is read via `Tracer.currentOtelSpan` and used to seed the W3C propagation carrier, so the traceparent we forward to the SDK subprocess is unambiguously the one Effect is tracking.
+- An `AbortController` is created per invocation, and `Effect.addFinalizer` aborts it when the scope closes (normal completion, failure, or interruption). The layer-time `signal` parameter is gone.
+- `run-agent-turn.ts` consumes the iterable via `Stream.unwrapScoped` so the scope is owned by the stream and closes when the stream finalises.
 
 ### Docs
 
 - Effect + OpenTelemetry integration: <https://effect.website/docs/observability/telemetry/opentelemetry/>
-- `Effect.async` and interruption: <https://effect.website/docs/getting-started/creating-effects/#async>
+- `Stream.unwrapScoped`: <https://effect.website/docs/stream/creating/#unwrapscoped>
+- `Effect.addFinalizer`: <https://effect.website/docs/resource-management/scope/#adding-finalizers-to-a-scope>
 
 ---
 
 ## 4. `run-agent-turn.ts` — fold-with-flags vs early `Effect.fail`
 
 ```ts
-// run-agent-turn.ts:69-118
+// run-agent-turn.ts (before)
 const outcome = yield* Stream.runFoldEffect(messages, initialState, (state, message) => {
   // ...accumulates state with flags `resultArrived`, `failureSubtype`...
 });
@@ -232,33 +129,23 @@ if (outcome.failureSubtype !== undefined) return yield* Effect.fail(new AgentTur
 if (!outcome.resultArrived || outcome.sessionId === undefined) return yield* Effect.fail(...);
 ```
 
-### Why it's a smell
+### Why it was a smell
 
-You're inside a stream, and you already know on `message.type === "result"` whether it's success or failure. But you keep folding to the end, then re-check flags. That's the imperative shape ("set flag, branch later") wearing an Effect costume.
+The stream already knew on `message.type === "result"` whether the turn was a success or a failure, but the fold walked to the end and then re-checked flags. That's the imperative shape ("set flag, branch later") wearing an Effect costume, and it made the state machine read as if multiple `result` messages were tolerated.
 
-Concrete cost: the loop reads as if multiple `result` messages are tolerated (they're not — see `runFoldEffect` walking on after the result arrives). A future reader will assume the protocol allows that.
-
-### Better
-
-`Stream.runFoldEffect` lets you `Effect.fail` mid-fold, which terminates the stream. Or use `Stream.takeUntil` to short-circuit on result, then fold:
+### Better (now landed)
 
 ```ts
-const resultMessage = yield* Stream.runHead(
-  messages.pipe(
-    Stream.tap((m) =>
-      m.type === "assistant" ? events.emit(...) : Effect.void,
-    ),
-    Stream.filter((m): m is ResultMessage => m.type === "result"),
+const resultOption = yield* messages.pipe(
+  Stream.tap((message) =>
+    message.type === "assistant" ? events.emit(...) : Effect.void,
   ),
+  Stream.filter((message): message is ResultMessage => message.type === "result"),
+  Stream.runHead,
 );
-
-if (Option.isNone(resultMessage)) return yield* Effect.fail(...);
-const result = resultMessage.value;
-if (result.subtype !== "success") return yield* Effect.fail(new AgentTurnError({ ... }));
-return { ... };
 ```
 
-This collapses the state machine to: "tap assistant messages, take the first result, fail if missing or non-success." Same behaviour, half the state, no possible "what if `resultArrived === true && failureSubtype !== undefined`" combinations.
+Tap assistant messages, take the first result, fail if missing or non-success. Same behaviour, half the state, no impossible flag combinations.
 
 ### Docs
 
@@ -270,7 +157,7 @@ This collapses the state machine to: "tap assistant messages, take the first res
 ## 5. `run-steps.ts` — `error._tag === "AgentTurnError"` vs `Effect.catchTag`
 
 ```ts
-// run-steps.ts:42
+// run-steps.ts (before)
 if (error instanceof AgentTurnError && error.usage && error.sessionId) {
   yield* events.emit({ _tag: "StepResult", ... });
 }
@@ -280,37 +167,13 @@ const stepError =
     : error;
 ```
 
-### Why it's a smell
+### Why it was a smell
 
-`error._tag === "..."` and `error instanceof AgentTurnError` are doing what `Effect.catchTag` was built for. The hand-written narrowing works but isn't exhaustive — if a sixth `WorkflowExecutionError` is added tomorrow, this block doesn't tell you.
+`error._tag === "..."` and `error instanceof AgentTurnError` were doing what `Effect.catchTag` was built for. The hand-written narrowing worked but wasn't exhaustive — adding a sixth `WorkflowExecutionError` wouldn't have failed the type checker here.
 
-### Better
+### Better (now landed)
 
-```ts
-runAgentTurn(...).pipe(
-  Effect.catchTag("AgentTurnError", (error) =>
-    Effect.gen(function* () {
-      if (error.usage && error.sessionId) {
-        yield* events.emit({ _tag: "StepResult", stepName, sessionId: error.sessionId, usage: error.usage });
-      }
-      const mapped =
-        error.subtype === "error_max_structured_output_retries"
-          ? new StructuredOutputDecodeError({ message: error.message, context: "step" })
-          : error;
-      yield* events.emit({ _tag: "StepFailed", stepName, index, error: mapped, durationMs: ... });
-      return yield* Effect.fail(mapped);
-    }),
-  ),
-  Effect.catchTag("ShellExpansionError", (error) =>
-    /* emit StepFailed and fail */
-  ),
-  Effect.catchTag("StructuredOutputDecodeError", (error) =>
-    /* emit StepFailed and fail */
-  ),
-);
-```
-
-Now adding a new error tag is a compile error until you handle it. The runtime cost is identical; the maintenance cost is lower.
+Three `Effect.catchTag` handlers on `runAgentTurn(...)` — one per concrete error in `WorkflowExecutionError`. Adding a new tag is a compile error until it's handled.
 
 ### Docs
 
@@ -327,10 +190,10 @@ What's right:
 - `parse.ts`, `render-prompt.ts`, `shell-expansion.ts` (the regex/marker parts), `render-change-request.ts` are mostly pure or tightly scoped. Wrapping them in `Effect.sync` would buy nothing.
 - The IO modules (`loader.ts`, `resolve-branch.ts`, `run-steps.ts`, `run-agent-turn.ts`) are `Effect.Effect<…, error, requirements>` and compose. Good.
 
-What's costing you:
-- **`run-log-file.ts`** — see §2. This IO module skips Effect, so its lifetime is unmanaged and it can't share the `Logger` or `FileSystem`.
-- **`agent-hooks.ts`** — see §1. Sits in Promise-land but reaches into Effect for `Metric.update`, which means each reach pays the cost of building a runtime.
-- **`agent-invoker-live.ts`** — see §3. Bridges Promise (SDK) to Effect (the rest of workflow), but does it manually for both directions (env injection, abort signal).
+With §1–§3 landed, what previously cost you is now closed:
+- `run-log-file.ts` participates in Scope and the logger layer.
+- `agent-hooks.ts` reaches into Effect through the captured runtime.
+- `agent-invoker.ts` no longer bridges OTel or AbortSignal by hand.
 
 The pattern that pays: when a module does IO, fails, or composes other Effects, return an `Effect`. When it's a string-in-string-out function, leave it plain. Don't write thin `Effect.sync(() => render(...))` wrappers — they hide the function's purity.
 
@@ -340,23 +203,11 @@ The pattern that pays: when a module does IO, fails, or composes other Effects, 
 
 - **`Schema.decodeUnknown` with `onExcessProperty: "error"`** (parse.ts) — good. Strict by default catches workflow typos at load time. Keep it.
 - **`Data.TaggedError`** (errors.ts) — correct usage. `_tag` is the discriminator; `Effect.catchTag` uses it.
-- **`Effect.annotateLogs`** in `run-steps.ts:128` and `resolve-branch.ts:83` — good. These show up on every log line scoped to that effect.
-- **`Effect.withSpan` in `run-agent-turn.ts:133`** — good. Pairs with the OTel work from §3; once the tracer layer is unified, span attributes will propagate to the SDK.
-- **`Effect.all(..., { concurrency: "unbounded" })`** in `shell-expansion.ts:53` — fine for now (workflow authors control prompts), but consider `concurrency: 4` if a prompt with many `!\`...\`` blocks becomes plausible.
+- **`Effect.annotateLogs`** in `run-steps.ts` and `resolve-branch.ts` — good. These show up on every log line scoped to that effect.
+- **`Effect.withSpan` in `run-agent-turn.ts`** — good. Now that the OTel bridge is unified (§3), span attributes propagate to the SDK subprocess via the W3C carrier.
+- **`Effect.all(..., { concurrency: "unbounded" })`** in `shell-expansion.ts` — fine for now (workflow authors control prompts), but consider `concurrency: 4` if a prompt with many `!\`...\`` blocks becomes plausible.
 - **`emptyStepUsage()`** factory returning a fresh object each call — fine. If you want compile-time immutability, `Schema.Class` would give you that and free decoders, but the current shape is honest and cheap.
-- **`Layer.succeed(WorkflowEventEmitter, { emit })`** in `event-emitter-live.ts` — exactly the shape the Effect docs show. The orchestrator calling this with its own `Queue` is the right composition.
-
----
-
-## Recommended order
-
-If you want to attack this incrementally:
-
-1. **§4 (run-agent-turn fold)** — purely local, no API change, immediate readability win.
-2. **§5 (run-steps catchTag)** — local refactor, gives you exhaustiveness checking.
-3. **§1 (agent-hooks runtime capture)** — small API change to `buildAgentHooks` and `claudeSdkAgentInvoker`. Pays back the moment you add tagged metrics.
-4. **§2 (run-log-file as Effect resource)** — bigger refactor, but unlocks cancellation propagation through the full workflow.
-5. **§3 (OTel + AbortSignal bridge)** — wait until you wire `@effect/opentelemetry`; doing this without that integration is half a fix.
+- **`Layer.succeed(WorkflowEventEmitter, { emit })`** in `event-emitter.ts` — exactly the shape the Effect docs show. The orchestrator calling this with its own `Queue` is the right composition.
 
 ---
 

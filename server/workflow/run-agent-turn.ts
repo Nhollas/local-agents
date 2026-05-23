@@ -47,23 +47,33 @@ export const runAgentTurn = (
 				})
 			: input.prompt;
 
-		const messages = Stream.fromAsyncIterable(
-			invoker.invoke({
-				prompt,
-				model: input.model,
-				outputFormat: input.outputSchema && {
-					type: "json_schema",
-					schema: input.outputSchema,
-				},
-				allowedTools: input.allowedTools,
-				resumeSessionId: input.resumeSessionId,
-				env: input.shellExpansion?.env,
-				stepName: input.emitAs.kind === "step" ? input.emitAs.name : undefined,
-			}),
-			(cause) =>
-				new AgentTurnError({
-					message: cause instanceof Error ? cause.message : String(cause),
-				}),
+		const messages = Stream.unwrapScoped(
+			invoker
+				.invoke({
+					prompt,
+					model: input.model,
+					outputFormat: input.outputSchema && {
+						type: "json_schema",
+						schema: input.outputSchema,
+					},
+					allowedTools: input.allowedTools,
+					resumeSessionId: input.resumeSessionId,
+					env: input.shellExpansion?.env,
+					stepName:
+						input.emitAs.kind === "step" ? input.emitAs.name : undefined,
+				})
+				.pipe(
+					Effect.map((iterable) =>
+						Stream.fromAsyncIterable(
+							iterable,
+							(cause) =>
+								new AgentTurnError({
+									message:
+										cause instanceof Error ? cause.message : String(cause),
+								}),
+						),
+					),
+				),
 		);
 
 		const resultOption = yield* messages.pipe(

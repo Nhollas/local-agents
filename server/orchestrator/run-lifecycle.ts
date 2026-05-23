@@ -105,6 +105,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 							},
 						}),
 					),
+					{ signal: ctx.signal },
 				),
 		});
 	}
@@ -164,7 +165,6 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 					agentFactory({
 						cwd: wsPath,
 						runId: ctx.runId,
-						signal: ctx.signal,
 					}),
 					WorkflowEventEmitter.Default(eventQueue),
 					PhaseInputs.Default({

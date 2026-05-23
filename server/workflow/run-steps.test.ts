@@ -65,9 +65,11 @@ function stubInvoker(
 			};
 			recording.calls.push(call);
 			const messages = respond(call);
-			return (async function* () {
-				for (const msg of messages) yield msg;
-			})();
+			return Effect.succeed(
+				(async function* () {
+					for (const msg of messages) yield msg;
+				})(),
+			);
 		},
 	};
 }
