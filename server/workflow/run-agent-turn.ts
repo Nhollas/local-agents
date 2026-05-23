@@ -1,9 +1,9 @@
 import type { CommandExecutor, FileSystem } from "@effect/platform";
 import { Effect, Option, Stream } from "effect";
-import type { ModelId } from "../types/model-id.ts";
 import { AgentInvoker, type AgentMessage } from "./agent-invoker.ts";
 import { AgentTurnError, type WorkflowExecutionError } from "./errors.ts";
 import { WorkflowEventEmitter } from "./event-emitter.ts";
+import type { ModelId } from "./model-id.ts";
 import { expandMarkedShellBlocks } from "./shell-expansion.ts";
 import { emptyStepUsage, type StepUsage } from "./types.ts";
 

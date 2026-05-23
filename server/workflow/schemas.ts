@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ModelIdSchema } from "../types/model-id.ts";
+import { ModelIdSchema } from "./model-id.ts";
 
 const JsonSchemaDocument = Schema.Record({
 	key: Schema.String,
