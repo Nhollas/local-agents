@@ -1,6 +1,6 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect, Metric } from "effect";
-import type { CodeHostError } from "./errors.ts";
+import type { HttpClientError } from "../http/errors.ts";
 import { githubClient } from "./github-client.ts";
 import { changeRequests } from "./metrics.ts";
 import type { CodeHostAdapter } from "./types.ts";
@@ -38,7 +38,7 @@ export const createGitHubAdapter = (
 				base,
 				title,
 				body,
-			): Effect.Effect<{ number: number; url: string }, CodeHostError> =>
+			): Effect.Effect<{ number: number; url: string }, HttpClientError> =>
 				Effect.gen(function* () {
 					const owner = repo.split("/")[0];
 					const existing = yield* client.listPullRequests(repo, {

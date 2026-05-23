@@ -1,6 +1,6 @@
 import type { Effect } from "effect";
+import type { HttpClientError } from "../http/errors.ts";
 import type { RepoSlug } from "../types/brands.ts";
-import type { CodeHostError } from "./errors.ts";
 
 export type ChangeRequest = {
 	number: number;
@@ -10,12 +10,12 @@ export type ChangeRequest = {
 export type CodeHostAdapter = {
 	cloneUrl(repo: RepoSlug): string;
 	repoUrl(repo: RepoSlug): string;
-	defaultBranch(repo: RepoSlug): Effect.Effect<string, CodeHostError>;
+	defaultBranch(repo: RepoSlug): Effect.Effect<string, HttpClientError>;
 	createChangeRequest(
 		repo: RepoSlug,
 		head: string,
 		base: string,
 		title: string,
 		body: string,
-	): Effect.Effect<ChangeRequest, CodeHostError>;
+	): Effect.Effect<ChangeRequest, HttpClientError>;
 };

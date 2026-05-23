@@ -1,6 +1,6 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect, Metric } from "effect";
-import type { CodeHostError } from "./errors.ts";
+import type { HttpClientError } from "../http/errors.ts";
 import { gitlabClient } from "./gitlab-client.ts";
 import { changeRequests } from "./metrics.ts";
 import type { CodeHostAdapter } from "./types.ts";
@@ -48,7 +48,7 @@ export const createGitLabAdapter = (
 				base,
 				title,
 				body,
-			): Effect.Effect<{ number: number; url: string }, CodeHostError> =>
+			): Effect.Effect<{ number: number; url: string }, HttpClientError> =>
 				Effect.gen(function* () {
 					const existing = yield* client.listMergeRequests(repo, {
 						source_branch: head,
