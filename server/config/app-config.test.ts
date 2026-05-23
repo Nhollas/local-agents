@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { ConfigProvider, Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { AppConfig, AppConfigLive } from "./app-config.ts";
+import { AppConfig } from "./app-config.ts";
 
 type TestConfigFile = {
 	path: string;
@@ -26,7 +26,7 @@ function writeConfig(contents: string): TestConfigFile {
 function load(path: string) {
 	return Effect.runPromise(
 		AppConfig.pipe(
-			Effect.provide(AppConfigLive),
+			Effect.provide(AppConfig.Default),
 			Effect.provide(NodeFileSystem.layer),
 			Effect.withConfigProvider(
 				ConfigProvider.fromMap(new Map([["CONFIG_PATH", path]])),

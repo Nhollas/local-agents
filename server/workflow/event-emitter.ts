@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import { Effect, type Queue } from "effect";
 import type { AgentMessage } from "./agent-invoker.ts";
 import type { WorkflowExecutionError } from "./errors.ts";
 import type { StepUsage } from "./types.ts";
@@ -45,7 +45,12 @@ interface WorkflowEventEmitterService {
 	readonly emit: (event: WorkflowEvent) => Effect.Effect<void>;
 }
 
-export class WorkflowEventEmitter extends Context.Tag("WorkflowEventEmitter")<
-	WorkflowEventEmitter,
-	WorkflowEventEmitterService
->() {}
+export class WorkflowEventEmitter extends Effect.Service<WorkflowEventEmitter>()(
+	"WorkflowEventEmitter",
+	{
+		effect: (queue: Queue.Enqueue<WorkflowEvent>) =>
+			Effect.succeed<WorkflowEventEmitterService>({
+				emit: (event) => Effect.asVoid(queue.offer(event)),
+			}),
+	},
+) {}

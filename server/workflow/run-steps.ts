@@ -164,7 +164,7 @@ const runOneStep = ({
 	});
 
 const failAgentTurn = (
-	events: WorkflowEventEmitter["Type"],
+	events: WorkflowEventEmitter,
 	stepName: string,
 	index: number,
 	startedAt: number,
@@ -190,7 +190,7 @@ const failAgentTurn = (
 	});
 
 const failStep = (
-	events: WorkflowEventEmitter["Type"],
+	events: WorkflowEventEmitter,
 	stepName: string,
 	index: number,
 	startedAt: number,

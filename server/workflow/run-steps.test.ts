@@ -8,10 +8,7 @@ import {
 	type AgentInvokerService,
 	type AgentMessage,
 } from "./agent-invoker.ts";
-import {
-	type WorkflowEvent,
-	WorkflowEventEmitterLive,
-} from "./event-emitter-live.ts";
+import { type WorkflowEvent, WorkflowEventEmitter } from "./event-emitter.ts";
 import { runSteps } from "./run-steps.ts";
 import type { PromptScope, WorkflowStep } from "./types.ts";
 
@@ -142,8 +139,8 @@ function runRunSteps(
 	return Effect.gen(function* () {
 		const queue = yield* Queue.unbounded<WorkflowEvent>();
 		const layers = Layer.mergeAll(
-			Layer.succeed(AgentInvoker, invoker),
-			WorkflowEventEmitterLive(queue),
+			Layer.succeed(AgentInvoker, AgentInvoker.make(invoker)),
+			WorkflowEventEmitter.Default(queue),
 		);
 		const result = yield* Effect.either(
 			runSteps(steps, scope, branch, cwd, env).pipe(Effect.provide(layers)),

@@ -16,11 +16,10 @@ import type {
 import type { AppRuntime } from "../runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
 import type { RepoSlug } from "../types/brands.ts";
-import { AgentInvoker } from "../workflow/agent-invoker.ts";
 import {
 	type WorkflowEvent,
-	WorkflowEventEmitterLive,
-} from "../workflow/event-emitter-live.ts";
+	WorkflowEventEmitter,
+} from "../workflow/event-emitter.ts";
 import type { PromptScope, RepoWorkflow } from "../workflow/types.ts";
 import { consumeWorkflowEvents } from "./event-consumer.ts";
 import type { AgentFactory } from "./orchestrator.ts";
@@ -161,15 +160,14 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 						steps: workflow.steps,
 					}),
 				);
-				const agent = yield* agentFactory({
-					cwd: wsPath,
-					runId: ctx.runId,
-					signal: ctx.signal,
-				});
 				const perRunLayers = Layer.mergeAll(
-					Layer.succeed(AgentInvoker, agent),
-					WorkflowEventEmitterLive(eventQueue),
-					Layer.succeed(PhaseInputs, {
+					agentFactory({
+						cwd: wsPath,
+						runId: ctx.runId,
+						signal: ctx.signal,
+					}),
+					WorkflowEventEmitter.Default(eventQueue),
+					PhaseInputs.Default({
 						issue,
 						repo,
 						cloneUrl: urls.cloneUrl,

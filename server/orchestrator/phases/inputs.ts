@@ -1,4 +1,4 @@
-import { Context } from "effect";
+import { Effect } from "effect";
 import type { CodeHostAdapter } from "../../code-hosts/types.ts";
 import type { RunRepository } from "../../run-repository.ts";
 import type { RunContext } from "../../runner/runner.ts";
@@ -25,7 +25,6 @@ type PhaseInputsShape = {
 	readonly tracker: TrackerAdapter;
 };
 
-export class PhaseInputs extends Context.Tag("PhaseInputs")<
-	PhaseInputs,
-	PhaseInputsShape
->() {}
+export class PhaseInputs extends Effect.Service<PhaseInputs>()("PhaseInputs", {
+	effect: (shape: PhaseInputsShape) => Effect.succeed(shape),
+}) {}

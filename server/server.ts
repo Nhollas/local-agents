@@ -8,7 +8,7 @@ import {
 import { Effect, Fiber, Layer } from "effect";
 import { createApi, type HealthCheck } from "./api/api.ts";
 import { createCodeHost } from "./code-hosts/create-code-host.ts";
-import { AppConfig, AppConfigLive } from "./config/app-config.ts";
+import { AppConfig } from "./config/app-config.ts";
 import { processEnv } from "./config/env.ts";
 import { closeDb, getDb } from "./db/db.ts";
 import { migrate } from "./db/migrate.ts";
@@ -26,7 +26,7 @@ const program = Effect.gen(function* () {
 	const env = yield* processEnv;
 
 	const config = yield* AppConfig.pipe(
-		Effect.provide(AppConfigLive),
+		Effect.provide(AppConfig.Default),
 		Effect.provide(NodeFileSystem.layer),
 	);
 	const AppConfigStatic = Layer.succeed(AppConfig, config);
