@@ -21,6 +21,7 @@ import { createTracker } from "./trackers/create-tracker.ts";
 import { loadWorkflow } from "./workflow/loader.ts";
 
 const DRAIN_TIMEOUT_MS = 30_000;
+const PORT = 3000;
 
 const program = Effect.gen(function* () {
 	const env = yield* processEnv;
@@ -115,7 +116,7 @@ const program = Effect.gen(function* () {
 
 	yield* Effect.logInfo("orchestrator.started").pipe(
 		Effect.annotateLogs({
-			port: env.port,
+			port: PORT,
 			codeHost: config.code_host.kind,
 			scopes: config.code_host.scopes,
 			interval: config.defaults.polling_interval_ms,
@@ -126,9 +127,7 @@ const program = Effect.gen(function* () {
 		HttpServer.serve(
 			HttpApp.fromWebHandler(async (req) => app.fetch(req)),
 		).pipe(
-			Layer.provide(
-				NodeHttpServer.layer(() => createServer(), { port: env.port }),
-			),
+			Layer.provide(NodeHttpServer.layer(() => createServer(), { port: PORT })),
 		),
 	);
 });
