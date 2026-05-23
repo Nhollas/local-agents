@@ -1,7 +1,6 @@
 import { NodeCommandExecutor, NodeFileSystem } from "@effect/platform-node";
 import { Effect, Layer, Queue } from "effect";
 import { describe, expect, it } from "vitest";
-import { issueKey, issueNumber } from "../types/brands.ts";
 import {
 	AgentInvoker,
 	type AgentInvokerService,
@@ -18,8 +17,8 @@ const PlatformLayer = Layer.merge(
 
 const scope: PromptScope = {
 	issue: {
-		key: issueKey("TEST-42"),
-		number: issueNumber(42),
+		key: "TEST-42",
+		number: 42,
 		title: "Add widget",
 		description: "Add widgets to the dashboard.",
 		labels: [],

@@ -7,7 +7,6 @@ import {
 } from "@opentelemetry/api";
 import { Effect, Option, type Scope } from "effect";
 import { instrumentedQuery } from "../telemetry.ts";
-import type { RunId } from "../types/brands.ts";
 import { buildAgentHooks } from "./agent-hooks.ts";
 import { makeRunLogWriter } from "./run-log-file.ts";
 
@@ -40,7 +39,7 @@ export type AgentInvokerLiveParams = {
 	env: Record<string, string>;
 	logDir: string;
 	cwd: string;
-	runId: RunId;
+	runId: string;
 };
 
 export class AgentInvoker extends Effect.Service<AgentInvoker>()(

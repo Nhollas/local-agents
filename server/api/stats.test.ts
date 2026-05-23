@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../test-support/test-api.ts";
 import { seedRun } from "../test-support/test-db.ts";
-import { issueKey, repoSlug } from "../types/brands.ts";
 
 const NOW_ISO = "2026-05-09T14:32:08.000Z";
 const NOW = new Date(NOW_ISO);
@@ -166,15 +165,15 @@ describe("GET /stats", () => {
 			concurrencyMax: 5,
 			queued: [
 				{
-					issueKey: issueKey("ACME-1"),
+					issueKey: "ACME-1",
 					issueTitle: "queued",
-					repo: repoSlug("acme/api"),
+					repo: "acme/api",
 					pendingSince: isoOffset(0.1),
 				},
 				{
-					issueKey: issueKey("ACME-2"),
+					issueKey: "ACME-2",
 					issueTitle: "queued",
-					repo: repoSlug("acme/api"),
+					repo: "acme/api",
 					pendingSince: isoOffset(0.05),
 				},
 			],

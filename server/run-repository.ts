@@ -20,8 +20,6 @@ import {
 	type ToolBashData,
 	toolBashDataSchema,
 } from "./event-schema.ts";
-import type { IssueKey, RepoSlug, RunId } from "./types/brands.ts";
-
 export type RunPr = {
 	repo: string;
 	number: number;
@@ -30,12 +28,12 @@ export type RunPr = {
 };
 
 type RunBase = {
-	id: RunId;
-	repo: RepoSlug;
+	id: string;
+	repo: string;
 	repoUrl: string | null;
 	branch: string | null;
 	workspaceDir: string | null;
-	issueKey: IssueKey | null;
+	issueKey: string | null;
 	issueTitle: string | null;
 	issueUrl: string | null;
 	startedAt: string;
@@ -79,7 +77,7 @@ export type StepUsage = {
 };
 
 export type InsertEventInput = {
-	runId: RunId;
+	runId: string;
 	kind: RunEventKind;
 	stepName: string | null;
 	data: RunEventData;
@@ -88,20 +86,20 @@ export type InsertEventInput = {
 
 export type RunRepository = {
 	insertRun(run: {
-		id: RunId;
-		repo: RepoSlug;
+		id: string;
+		repo: string;
 		repoUrl: string;
-		issueKey: IssueKey;
+		issueKey: string;
 		issueTitle: string;
 		issueUrl: string | null;
 		startedAt: string;
 	}): void;
 	completeRun(
-		runId: RunId,
+		runId: string,
 		params: { completedAt: string; durationMs: number },
 	): void;
 	failRun(
-		runId: RunId,
+		runId: string,
 		params: {
 			error: string;
 			completedAt: string;
@@ -109,50 +107,50 @@ export type RunRepository = {
 			finalizeFailure?: RunFinalizeFailure;
 		},
 	): void;
-	setRunBranch(runId: RunId, branch: string): void;
-	setRunWorkspaceDir(runId: RunId, workspaceDir: string): void;
-	setRunPr(runId: RunId, pr: RunPr): void;
-	setRunLangfuseTraceUrl(runId: RunId, url: string): void;
-	addRunUsage(runId: RunId, usage: StepUsage): void;
+	setRunBranch(runId: string, branch: string): void;
+	setRunWorkspaceDir(runId: string, workspaceDir: string): void;
+	setRunPr(runId: string, pr: RunPr): void;
+	setRunLangfuseTraceUrl(runId: string, url: string): void;
+	addRunUsage(runId: string, usage: StepUsage): void;
 	insertEvent(event: InsertEventInput): RunEvent;
 	updateToolBashState(
 		eventId: string,
 		patch: Partial<Pick<ToolBashData, "state" | "exitCode">>,
 	): RunEvent | undefined;
-	getRunningSnapshot(): { id: RunId; issueKey: IssueKey; repo: RepoSlug }[];
+	getRunningSnapshot(): { id: string; issueKey: string; repo: string }[];
 	countRunning(): number;
-	getRunById(id: RunId): Run | undefined;
+	getRunById(id: string): Run | undefined;
 	getRuns(filters: {
 		status?: RunStatus | undefined;
-		repo?: RepoSlug | undefined;
+		repo?: string | undefined;
 		limit: number;
 	}): Run[];
-	getRunEvents(runId: RunId): RunEvent[];
-	getRunEventsAfterSeq(runId: RunId, sinceSeq: number): RunEvent[];
+	getRunEvents(runId: string): RunEvent[];
+	getRunEventsAfterSeq(runId: string, sinceSeq: number): RunEvent[];
 	getAllEventsAfterSeq(sinceSeq: number): RunEvent[];
 	getEventSeqById(id: string): number | undefined;
-	getInflightToolBash(runId: RunId): RunEvent[];
+	getInflightToolBash(runId: string): RunEvent[];
 	insertSteps(
-		runId: RunId,
+		runId: string,
 		steps: ReadonlyArray<{ index: number; name: string }>,
 	): void;
 	startStep(
-		runId: RunId,
+		runId: string,
 		stepIndex: number,
 		params: { startedAt: string },
 	): void;
 	completeStep(
-		runId: RunId,
+		runId: string,
 		stepIndex: number,
 		params: { completedAt: string; durationMs: number },
 	): void;
 	failStep(
-		runId: RunId,
+		runId: string,
 		stepIndex: number,
 		params: { completedAt: string; durationMs: number; error: string },
 	): void;
-	getRunSteps(runId: RunId): RunStep[];
-	writeStepOutput(runId: RunId, stepName: string, value: unknown): void;
+	getRunSteps(runId: string): RunStep[];
+	writeStepOutput(runId: string, stepName: string, value: unknown): void;
 };
 
 export function createRunRepository(db: Db): RunRepository {
@@ -259,7 +257,7 @@ export function createRunRepository(db: Db): RunRepository {
 				.where(and(eq(runs.status, "running"), isNotNull(runs.issueKey)))
 				.all()
 				.filter(
-					(row): row is { id: RunId; issueKey: IssueKey; repo: RepoSlug } =>
+					(row): row is { id: string; issueKey: string; repo: string } =>
 						row.issueKey != null,
 				);
 		},
@@ -433,7 +431,7 @@ export function createRunRepository(db: Db): RunRepository {
 type RunRow = typeof runs.$inferSelect;
 type RunEventRow = typeof runEvents.$inferSelect;
 
-function findFailedSteps(db: Db, ids: RunId[]): Map<RunId, RunFailedStep> {
+function findFailedSteps(db: Db, ids: string[]): Map<string, RunFailedStep> {
 	const rows = db
 		.select({
 			runId: runSteps.runId,

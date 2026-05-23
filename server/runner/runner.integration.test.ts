@@ -3,11 +3,6 @@ import type { Db } from "../db/db.ts";
 import { createRunRepository, type RunRepository } from "../run-repository.ts";
 import { createTestDb, getEvents, getRun } from "../test-support/test-db.ts";
 import {
-	issueKey as ik,
-	runId as rid,
-	repoSlug as rs,
-} from "../types/brands.ts";
-import {
 	ABORT_ERROR,
 	createRunner,
 	type Runner,
@@ -71,8 +66,8 @@ describe("Runner integration", () => {
 		});
 
 		const { runId } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#1"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#1",
 			issueTitle: "Test issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -86,7 +81,7 @@ describe("Runner integration", () => {
 			status: "running",
 			error: null,
 			repo: "acme/widgets",
-			issueKey: ik("acme/widgets#1"),
+			issueKey: "acme/widgets#1",
 			issueTitle: "Test issue",
 			startedAt: expect.any(String),
 			completedAt: null,
@@ -107,8 +102,8 @@ describe("Runner integration", () => {
 
 		// Fill the single slot with a blocking job
 		runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#1"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#1",
 			issueTitle: "Blocker",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -117,8 +112,8 @@ describe("Runner integration", () => {
 
 		// Second job sits in the pending queue — not yet executing
 		const { runId } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#2"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#2",
 			issueTitle: "Queued issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -132,7 +127,7 @@ describe("Runner integration", () => {
 			status: "running",
 			error: null,
 			repo: "acme/widgets",
-			issueKey: ik("acme/widgets#2"),
+			issueKey: "acme/widgets#2",
 			issueTitle: "Queued issue",
 			startedAt: expect.any(String),
 			completedAt: null,
@@ -148,8 +143,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId, result: done } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#2"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#2",
 			issueTitle: "Fast issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -168,7 +163,7 @@ describe("Runner integration", () => {
 			status: "completed",
 			error: null,
 			repo: "acme/widgets",
-			issueKey: ik("acme/widgets#2"),
+			issueKey: "acme/widgets#2",
 			issueTitle: "Fast issue",
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
@@ -181,8 +176,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { result: done } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#99"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#99",
 			issueTitle: "Crash issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -202,8 +197,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#4"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#4",
 			issueTitle: "Lifecycle issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -220,7 +215,7 @@ describe("Runner integration", () => {
 				runId,
 				kind: "run:started",
 				stepName: null,
-				data: { issueKey: ik("acme/widgets#4"), issueTitle: "Lifecycle issue" },
+				data: { issueKey: "acme/widgets#4", issueTitle: "Lifecycle issue" },
 				createdAt: expect.any(String),
 			},
 			{
@@ -243,8 +238,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#5"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#5",
 			issueTitle: "Fail event issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -262,7 +257,7 @@ describe("Runner integration", () => {
 				kind: "run:started",
 				stepName: null,
 				data: {
-					issueKey: ik("acme/widgets#5"),
+					issueKey: "acme/widgets#5",
 					issueTitle: "Fail event issue",
 				},
 				createdAt: expect.any(String),
@@ -283,8 +278,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#6"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#6",
 			issueTitle: "Tool issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -318,7 +313,7 @@ describe("Runner integration", () => {
 				runId,
 				kind: "run:started",
 				stepName: null,
-				data: { issueKey: ik("acme/widgets#6"), issueTitle: "Tool issue" },
+				data: { issueKey: "acme/widgets#6", issueTitle: "Tool issue" },
 				createdAt: expect.any(String),
 			},
 			{
@@ -359,8 +354,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId, result: done } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#8"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#8",
 			issueTitle: "Killed mid-bash",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -399,8 +394,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId, result: done } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#9"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#9",
 			issueTitle: "Bash exits normally",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -430,8 +425,8 @@ describe("Runner integration", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
 		const { runId, result: done } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#7"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#7",
 			issueTitle: "Killable issue",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",
@@ -454,7 +449,7 @@ describe("Runner integration", () => {
 			status: "failed",
 			error: ABORT_ERROR,
 			repo: "acme/widgets",
-			issueKey: ik("acme/widgets#7"),
+			issueKey: "acme/widgets#7",
 			issueTitle: "Killable issue",
 			startedAt: expect.any(String),
 			completedAt: expect.any(String),
@@ -466,15 +461,15 @@ describe("Runner integration", () => {
 	it("kill returns false for unknown runId", () => {
 		const runner = makeRunner({ maxConcurrency: 1 });
 
-		expect(runner.kill(rid("nonexistent-id"))).toBe(false);
+		expect(runner.kill("nonexistent-id")).toBe(false);
 	});
 
 	it("uses default maxConcurrency when not specified", async () => {
 		const runner = makeRunner();
 
 		const { runId, result: done } = runner.enqueue({
-			repo: rs("acme/widgets"),
-			issueKey: ik("acme/widgets#10"),
+			repo: "acme/widgets",
+			issueKey: "acme/widgets#10",
 			issueTitle: "Default concurrency",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/acme/widgets",

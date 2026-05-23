@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { sanitizeKey } from "../orchestrator/workspace.ts";
-import type { RepoSlug } from "../types/brands.ts";
 
 const exec = promisify(execFile);
 
@@ -26,8 +25,8 @@ export async function seedBareRepoMain(barePath: string): Promise<void> {
 type TestWorkspace = {
 	root: string;
 	/** Seed a bare remote for `repo` and return its on-disk path (the clone URL). */
-	setupRepoRemote(repo: RepoSlug): Promise<string>;
-	bareRemotePath(repo: RepoSlug): string;
+	setupRepoRemote(repo: string): Promise<string>;
+	bareRemotePath(repo: string): string;
 	[Symbol.asyncDispose](): Promise<void>;
 };
 
@@ -39,16 +38,16 @@ export async function createTestWorkspaceRoot(): Promise<TestWorkspace> {
 	const remotesRoot = join(root, "__remotes__");
 	await mkdir(remotesRoot, { recursive: true });
 
-	function bareRemotePath(repo: RepoSlug): string {
+	function bareRemotePath(repo: string): string {
 		return join(remotesRoot, `${sanitizeKey(repo)}.git`);
 	}
 
-	const seeded = new Set<RepoSlug>();
+	const seeded = new Set<string>();
 
 	return {
 		root,
 		bareRemotePath,
-		async setupRepoRemote(repo: RepoSlug): Promise<string> {
+		async setupRepoRemote(repo: string): Promise<string> {
 			const bare = bareRemotePath(repo);
 			if (!seeded.has(repo)) {
 				await seedBareRepoMain(bare);

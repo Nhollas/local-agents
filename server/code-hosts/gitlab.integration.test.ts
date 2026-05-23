@@ -3,11 +3,10 @@ import { afterAll, describe, expect, it } from "vitest";
 import { makeAppRuntime } from "../runtime.ts";
 import { GITLAB_API, GITLAB_BASE_URL } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
-import { repoSlug } from "../types/brands.ts";
 import { createGitLabAdapter, type GitLabAdapterOptions } from "./gitlab.ts";
 import type { CodeHostAdapter } from "./types.ts";
 
-const REPO = repoSlug("group/subgroup/project");
+const REPO = "group/subgroup/project";
 const runtime = makeAppRuntime();
 afterAll(() => runtime.dispose());
 

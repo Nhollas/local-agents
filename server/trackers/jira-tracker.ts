@@ -1,6 +1,5 @@
 import type { HttpClient } from "@effect/platform";
 import { Effect, Metric } from "effect";
-import { issueKey, issueNumber, type RepoSlug } from "../types/brands.ts";
 import { JiraTransitionNotFoundError } from "./errors.ts";
 import { jiraClient } from "./jira-client.ts";
 import { issuesDropped, issuesFetched } from "./metrics.ts";
@@ -12,7 +11,7 @@ type JiraStatuses = Record<TrackerState, string>;
 
 export type JiraTrackerOptions = {
 	readonly project: string;
-	readonly scopes: readonly RepoSlug[];
+	readonly scopes: readonly string[];
 	readonly baseUrl: string;
 	readonly statuses: JiraStatuses;
 	readonly triggerLabel: string;
@@ -44,10 +43,10 @@ export const createJiraTracker = (
 				);
 			});
 
-		function buildIssue(issue: JiraIssue, repo: RepoSlug): Issue {
+		function buildIssue(issue: JiraIssue, repo: string): Issue {
 			return {
-				key: issueKey(issue.key.raw),
-				number: issueNumber(issue.key.number),
+				key: issue.key.raw,
+				number: issue.key.number,
 				repo,
 				title: issue.fields.summary,
 				description: issue.fields.description ?? "",

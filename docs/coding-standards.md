@@ -43,7 +43,6 @@ Goal: make invalid states unrepresentable; let the compiler verify assumptions.
 ### At boundaries (network, input, env, DB)
 
 - **Parse, don't validate.** Untrusted input goes through a schema parser that returns the refined type. No `as User` on raw JSON.
-- **Brand meaningful primitives.** `UserId`, `Email`, `Meters` — distinct from `string`/`number`. Construction goes through the parser.
 
 ### Domain modeling
 

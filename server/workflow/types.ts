@@ -1,4 +1,3 @@
-import type { IssueKey, IssueNumber } from "../types/brands.ts";
 import type {
 	BranchSchema,
 	ChangeRequestSchema,
@@ -12,8 +11,8 @@ export type WorkflowBranch = typeof BranchSchema.Type;
 export type ChangeRequestTemplate = typeof ChangeRequestSchema.Type;
 
 export type PromptIssue = {
-	key: IssueKey;
-	number: IssueNumber;
+	key: string;
+	number: number;
 	title: string;
 	description: string;
 	labels: readonly string[];

@@ -1,8 +1,6 @@
 import { join } from "node:path";
 import { FileSystem } from "@effect/platform";
 import { Effect, Runtime } from "effect";
-import type { RunId } from "../types/brands.ts";
-
 export type ToolBlock = {
 	timestamp: string;
 	toolName: string;
@@ -19,7 +17,7 @@ export type RunLogWriter = {
 
 export const makeRunLogWriter = (
 	logDir: string,
-	id: RunId,
+	id: string,
 ): Effect.Effect<RunLogWriter, never, FileSystem.FileSystem> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;

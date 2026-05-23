@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { issueKey, issueNumber } from "../types/brands.ts";
 import { renderChangeRequest } from "./render-change-request.ts";
 import type { ChangeRequestTemplate, PromptScope } from "./types.ts";
 
 const scope: PromptScope = {
 	issue: {
-		key: issueKey("TEST-9"),
-		number: issueNumber(9),
+		key: "TEST-9",
+		number: 9,
 		title: "Add widget",
 		description: "desc",
 		labels: [],

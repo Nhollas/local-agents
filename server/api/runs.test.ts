@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../test-support/test-api.ts";
 import { seedRun, seedStep } from "../test-support/test-db.ts";
-import { issueKey, repoSlug } from "../types/brands.ts";
 
 const baseRunWire = {
 	branch: null,
@@ -365,8 +364,8 @@ describe("POST /runs/:id/kill", () => {
 	it("kills a running job and returns success", async () => {
 		const { app, runner } = createTestApi();
 		const { runId } = runner.enqueue({
-			repo: repoSlug("test/repo"),
-			issueKey: issueKey("test/repo#1"),
+			repo: "test/repo",
+			issueKey: "test/repo#1",
 			issueTitle: "Long running job",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/test/repo",
@@ -430,8 +429,8 @@ describe("GET /runs/:id/events", () => {
 	it("returns events ordered oldest → newest with monotonic seq", async () => {
 		const { app, runner } = createTestApi();
 		const { runId, result: done } = runner.enqueue({
-			repo: repoSlug("test/repo"),
-			issueKey: issueKey("test/repo#1"),
+			repo: "test/repo",
+			issueKey: "test/repo#1",
 			issueTitle: "Event ordering",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/test/repo",
@@ -472,8 +471,8 @@ describe("GET /runs/:id/events", () => {
 	it("filters events by since cursor (strictly greater seq)", async () => {
 		const { app, runner } = createTestApi();
 		const { runId, result: done } = runner.enqueue({
-			repo: repoSlug("test/repo"),
-			issueKey: issueKey("test/repo#2"),
+			repo: "test/repo",
+			issueKey: "test/repo#2",
 			issueTitle: "Since cursor",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/test/repo",

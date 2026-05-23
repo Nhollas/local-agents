@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { runIdSchema } from "./types/brands.ts";
-
 export const toolBashDataSchema = z.object({
 	command: z.string(),
 	cwd: z.string().nullable(),
@@ -12,7 +10,7 @@ export type ToolBashData = z.infer<typeof toolBashDataSchema>;
 const eventBaseSchema = z.object({
 	id: z.string(),
 	seq: z.number(),
-	runId: runIdSchema,
+	runId: z.string().min(1),
 	stepName: z.string().nullable(),
 	createdAt: z.string(),
 });

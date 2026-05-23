@@ -8,7 +8,6 @@ import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner } from "../runner/runner.ts";
 import type { AppRuntime } from "../runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import type { IssueKey, RepoSlug } from "../types/brands.ts";
 import {
 	AgentInvoker,
 	type AgentInvokerLiveParams,
@@ -50,12 +49,12 @@ export type AgentFactory = (
 
 export type DispatchRequest = {
 	issue: Issue;
-	repo: RepoSlug;
+	repo: string;
 	workflow: RepoWorkflow;
 };
 
 export type QueuedItem = {
-	issueKey: IssueKey;
+	issueKey: string;
 	issueTitle: string;
 	repo: Issue["repo"];
 	pendingSince: string;
@@ -80,7 +79,7 @@ type QueueEntry = {
 };
 
 type TickState = {
-	runningIssueKeys: Set<IssueKey>;
+	runningIssueKeys: Set<string>;
 	pending: Issue[];
 };
 
@@ -90,7 +89,7 @@ type DispatchTally = {
 };
 
 function buildOrchestrator(opts: OrchestratorConfig): Orchestrator {
-	const holdingQueue = new Map<IssueKey, QueueEntry>();
+	const holdingQueue = new Map<string, QueueEntry>();
 
 	const {
 		runRepo,

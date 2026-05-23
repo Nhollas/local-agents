@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput } from "../runner/runner.ts";
 import { makeAppRuntime } from "../runtime.ts";
-import { runId } from "../types/brands.ts";
 import type { AgentMessage } from "../workflow/agent-invoker.ts";
 import type { WorkflowEvent } from "../workflow/event-emitter.ts";
 import type { StepUsage, WorkflowStep } from "../workflow/types.ts";
@@ -103,7 +102,7 @@ function assistant(blocks: Array<Record<string, unknown>>): AssistantMessage {
 	} as unknown as AssistantMessage;
 }
 
-const TEST_RUN_ID = runId("01J0000000000000000000RID0");
+const TEST_RUN_ID = "01J0000000000000000000RID0";
 
 const emptyUsage = (): StepUsage => ({
 	costUsd: 0,

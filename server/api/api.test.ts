@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../test-support/test-api.ts";
-import { issueKey, repoSlug } from "../types/brands.ts";
 import type { HealthCheck } from "./api.ts";
 
 describe("GET /health", () => {
@@ -60,8 +59,8 @@ describe("GET /events", () => {
 			await readWithTimeout();
 
 			runner.enqueue({
-				repo: repoSlug("test/repo"),
-				issueKey: issueKey("test/repo#42"),
+				repo: "test/repo",
+				issueKey: "test/repo#42",
 				issueTitle: "SSE test issue",
 				issueUrl: null,
 				repoUrl: "https://code-host.example.test/test/repo",
@@ -95,8 +94,8 @@ describe("GET /events", () => {
 		const { app, runner } = createTestApi();
 
 		const { runId, result: done } = runner.enqueue({
-			repo: repoSlug("test/repo"),
-			issueKey: issueKey("test/repo#100"),
+			repo: "test/repo",
+			issueKey: "test/repo#100",
 			issueTitle: "Replay test",
 			issueUrl: null,
 			repoUrl: "https://code-host.example.test/test/repo",

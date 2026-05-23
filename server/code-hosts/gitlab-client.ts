@@ -5,7 +5,6 @@ import {
 	parseResponseBody,
 	platformHttpClient,
 } from "../http/platform-client.ts";
-import type { RepoSlug } from "../types/brands.ts";
 import {
 	GitLabMergeRequestSchema,
 	GitLabMergeRequestsSchema,
@@ -29,7 +28,7 @@ export const gitlabClient = (options: GitLabClientOptions) =>
 		});
 
 		const getProject = (
-			repo: RepoSlug,
+			repo: string,
 		): Effect.Effect<{ default_branch: string }, HttpClientError> =>
 			http
 				.execute(HttpClientRequest.get(`/projects/${encodeProjectPath(repo)}`))
@@ -39,7 +38,7 @@ export const gitlabClient = (options: GitLabClientOptions) =>
 				);
 
 		const listMergeRequests = (
-			repo: RepoSlug,
+			repo: string,
 			params: {
 				readonly source_branch: string;
 				readonly target_branch: string;
@@ -66,7 +65,7 @@ export const gitlabClient = (options: GitLabClientOptions) =>
 		};
 
 		const createMergeRequest = (
-			repo: RepoSlug,
+			repo: string,
 			params: {
 				readonly source_branch: string;
 				readonly target_branch: string;
@@ -93,5 +92,5 @@ export const gitlabClient = (options: GitLabClientOptions) =>
 		};
 	});
 
-const encodeProjectPath = (projectPath: RepoSlug): string =>
+const encodeProjectPath = (projectPath: string): string =>
 	encodeURIComponent(projectPath);

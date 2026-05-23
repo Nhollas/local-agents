@@ -15,7 +15,6 @@ import type {
 } from "../runner/runner.ts";
 import type { AppRuntime } from "../runtime.ts";
 import type { Issue, TrackerAdapter } from "../trackers/types.ts";
-import type { RepoSlug } from "../types/brands.ts";
 import {
 	type WorkflowEvent,
 	WorkflowEventEmitter,
@@ -34,7 +33,7 @@ import { removeWorkspace, sanitizeKey } from "./workspace.ts";
 
 type RunRequest = {
 	issue: Issue;
-	repo: RepoSlug;
+	repo: string;
 	workflow: RepoWorkflow;
 };
 
@@ -113,7 +112,7 @@ export function createRunLifecycle(deps: RunLifecycleDeps): RunLifecycle {
 	function runOne(
 		ctx: RunContext,
 		issue: Issue,
-		repo: RepoSlug,
+		repo: string,
 		workflow: RepoWorkflow,
 		urls: { cloneUrl: string; baseBranch: string },
 	): Effect.Effect<

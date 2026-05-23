@@ -8,17 +8,15 @@ import {
 	text,
 } from "drizzle-orm/sqlite-core";
 import type { RunEventData, RunEventKind } from "../event-schema.ts";
-import type { IssueKey, RepoSlug, RunId } from "../types/brands.ts";
-
 export const runs = sqliteTable("runs", {
-	id: text("id").primaryKey().$type<RunId>(),
+	id: text("id").primaryKey().$type<string>(),
 	status: text("status").notNull().$type<RunStatus>(),
 	error: text("error"),
-	repo: text("repo").notNull().$type<RepoSlug>(),
+	repo: text("repo").notNull().$type<string>(),
 	repoUrl: text("repo_url"),
 	branch: text("branch"),
 	workspaceDir: text("workspace_dir"),
-	issueKey: text("issue_key").$type<IssueKey>(),
+	issueKey: text("issue_key").$type<string>(),
 	issueTitle: text("issue_title"),
 	issueUrl: text("issue_url"),
 	startedAt: text("started_at").notNull(),
@@ -41,7 +39,7 @@ export const runs = sqliteTable("runs", {
 export const runSteps = sqliteTable(
 	"run_steps",
 	{
-		runId: text("run_id").notNull().$type<RunId>(),
+		runId: text("run_id").notNull().$type<string>(),
 		index: integer("index").notNull(),
 		name: text("name").notNull(),
 		state: text("state").notNull().$type<RunStepState>(),
@@ -58,7 +56,7 @@ export const runEvents = sqliteTable(
 	{
 		seq: integer("seq").primaryKey({ autoIncrement: true }),
 		id: text("id").notNull().unique(),
-		runId: text("run_id").notNull().$type<RunId>(),
+		runId: text("run_id").notNull().$type<string>(),
 		kind: text("kind").notNull().$type<RunEventKind>(),
 		stepName: text("step_name"),
 		data: text("data", { mode: "json" }).notNull().$type<RunEventData>(),
@@ -73,7 +71,7 @@ export const runEvents = sqliteTable(
 export const runStepOutputs = sqliteTable(
 	"run_step_outputs",
 	{
-		runId: text("run_id").notNull().$type<RunId>(),
+		runId: text("run_id").notNull().$type<string>(),
 		stepName: text("step_name").notNull(),
 		outputJson: text("output_json", { mode: "json" })
 			.notNull()

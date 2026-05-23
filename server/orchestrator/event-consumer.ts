@@ -1,7 +1,6 @@
 import { Effect, Metric, type Queue, Stream } from "effect";
 import type { RunRepository } from "../run-repository.ts";
 import type { EmitInput } from "../runner/runner.ts";
-import type { RunId } from "../types/brands.ts";
 import type { AgentMessage } from "../workflow/agent-invoker.ts";
 import type { WorkflowEvent } from "../workflow/event-emitter.ts";
 import {
@@ -18,7 +17,7 @@ import type { WorkflowStep } from "../workflow/types.ts";
 type EventConsumerDeps = {
 	runRepo: ConsumerRepo;
 	ctx: { emit: (input: EmitInput) => unknown };
-	runId: RunId;
+	runId: string;
 	cwd: string;
 	steps: ReadonlyArray<WorkflowStep>;
 };

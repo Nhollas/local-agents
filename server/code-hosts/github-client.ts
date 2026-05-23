@@ -5,7 +5,6 @@ import {
 	parseResponseBody,
 	platformHttpClient,
 } from "../http/platform-client.ts";
-import type { RepoSlug } from "../types/brands.ts";
 import {
 	GitHubPullRequestSchema,
 	GitHubPullRequestsSchema,
@@ -32,7 +31,7 @@ export const githubClient = (options: GitHubClientOptions) =>
 		});
 
 		const getRepo = (
-			repo: RepoSlug,
+			repo: string,
 		): Effect.Effect<{ default_branch: string }, HttpClientError> =>
 			http
 				.execute(HttpClientRequest.get(`/repos/${repo}`))
@@ -42,7 +41,7 @@ export const githubClient = (options: GitHubClientOptions) =>
 				);
 
 		const listPullRequests = (
-			repo: RepoSlug,
+			repo: string,
 			params: { readonly head: string; readonly base: string },
 		): Effect.Effect<
 			ReadonlyArray<{ number: number; html_url: string }>,
@@ -62,7 +61,7 @@ export const githubClient = (options: GitHubClientOptions) =>
 		};
 
 		const createPullRequest = (
-			repo: RepoSlug,
+			repo: string,
 			params: {
 				readonly title: string;
 				readonly body: string;

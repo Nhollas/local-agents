@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTestApi } from "../test-support/test-api.ts";
 import { seedRun, seedStep } from "../test-support/test-db.ts";
-import { issueKey, repoSlug } from "../types/brands.ts";
 
 describe("GET /queue", () => {
 	it("returns empty active and queued lists when nothing is running or queued", async () => {
@@ -121,15 +120,15 @@ describe("GET /queue", () => {
 		const { app } = createTestApi({
 			queued: [
 				{
-					issueKey: issueKey("ACME-1285"),
+					issueKey: "ACME-1285",
 					issueTitle: "500 on /api/runs?limit=0",
-					repo: repoSlug("acme/api"),
+					repo: "acme/api",
 					pendingSince: "2026-05-09T14:31:42Z",
 				},
 				{
-					issueKey: issueKey("WIDGETS-911"),
+					issueKey: "WIDGETS-911",
 					issueTitle: "cover branch-resolver edges",
-					repo: repoSlug("widgets/dashboard"),
+					repo: "widgets/dashboard",
 					pendingSince: "2026-05-09T14:31:55Z",
 				},
 			],

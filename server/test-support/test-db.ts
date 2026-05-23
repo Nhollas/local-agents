@@ -4,8 +4,6 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { Db } from "../db/db.ts";
 import { migrate } from "../db/migrate.ts";
 import { runEvents, runSteps, runs } from "../db/schema.ts";
-import { issueKey, repoSlug, runId } from "../types/brands.ts";
-
 export function createTestDb(): Db {
 	const sqlite = new Database(":memory:");
 	sqlite.pragma("journal_mode = WAL");
@@ -42,9 +40,9 @@ export function seedRun(db: Db, overrides: LooseRunInsert) {
 			...variantDefaultsByStatus[status],
 			...rest,
 			status,
-			id: runId(id),
-			repo: repoSlug(repo ?? "test-owner/test-repo"),
-			...(keyStr != null && { issueKey: issueKey(keyStr) }),
+			id: id,
+			repo: repo ?? "test-owner/test-repo",
+			...(keyStr != null && { issueKey: keyStr }),
 		})
 		.run();
 }
@@ -61,7 +59,7 @@ export function seedStep(db: Db, overrides: LooseStepInsert) {
 		.values({
 			state: "pending",
 			...rest,
-			runId: runId(runIdStr),
+			runId: runIdStr,
 		})
 		.run();
 }
@@ -70,20 +68,12 @@ export function getRun(
 	db: Db,
 	id: string,
 ): typeof runs.$inferSelect | undefined {
-	return db
-		.select()
-		.from(runs)
-		.where(eq(runs.id, runId(id)))
-		.get();
+	return db.select().from(runs).where(eq(runs.id, id)).get();
 }
 
 export function getEvents(
 	db: Db,
 	id: string,
 ): (typeof runEvents.$inferSelect)[] {
-	return db
-		.select()
-		.from(runEvents)
-		.where(eq(runEvents.runId, runId(id)))
-		.all();
+	return db.select().from(runEvents).where(eq(runEvents.runId, id)).all();
 }

@@ -3,12 +3,6 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { eventBus } from "../event-bus.ts";
 import type { RunEvent, RunEventKind, ToolBashData } from "../event-schema.ts";
 import type { RunFinalizeFailure, RunRepository } from "../run-repository.ts";
-import {
-	type IssueKey,
-	type RepoSlug,
-	type RunId,
-	runId,
-} from "../types/brands.ts";
 import { makeRunnerRuntime, type RunnerRuntime } from "./runtime.ts";
 
 export const ABORT_ERROR = "Run killed by user";
@@ -22,7 +16,7 @@ export type EmitInput = {
 }[RunEventKind];
 
 export type RunContext = {
-	runId: RunId;
+	runId: string;
 	emit(input: EmitInput, createdAt?: string): RunEvent;
 	updateToolBashState(
 		eventId: string,
@@ -32,9 +26,9 @@ export type RunContext = {
 };
 
 export type AgentJob = {
-	repo: RepoSlug;
+	repo: string;
 	repoUrl: string;
-	issueKey: IssueKey;
+	issueKey: string;
 	issueTitle: string;
 	issueUrl: string | null;
 	handler: (ctx: RunContext) => Promise<RunResult>;
@@ -50,14 +44,14 @@ export type RunResult =
 	  };
 
 export type RunHandle = {
-	runId: RunId;
+	runId: string;
 	/** Resolves with the final outcome. Never rejects — failures are in the result. */
 	result: Promise<RunResult>;
 };
 
 export type Runner = {
 	enqueue(job: AgentJob): RunHandle;
-	kill(runId: RunId): boolean;
+	kill(runId: string): boolean;
 	waitForIdle(): Promise<void>;
 	readonly maxConcurrency: number;
 	dispose(): Promise<void>;
@@ -80,7 +74,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	const maxConcurrency = config.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
 	const runtime: RunnerRuntime = makeRunnerRuntime();
 	const semaphore = Effect.unsafeMakeSemaphore(maxConcurrency);
-	const inflightRuns = new Map<RunId, Fiber.RuntimeFiber<RunResult, never>>();
+	const inflightRuns = new Map<string, Fiber.RuntimeFiber<RunResult, never>>();
 	const idleWaiters: Array<() => void> = [];
 
 	function enqueue(job: AgentJob): RunHandle {
@@ -103,7 +97,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		return { runId: id, result };
 	}
 
-	function kill(id: RunId): boolean {
+	function kill(id: string): boolean {
 		const inflight = inflightRuns.get(id);
 		if (!inflight) return false;
 		runtime.runFork(Fiber.interrupt(inflight));
@@ -126,7 +120,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	// Finalize runs uninterruptibly so DB writes and run:completed/failed always
 	// land, even when the fiber is killed mid-run.
 	function executeJob(
-		id: RunId,
+		id: string,
 		job: AgentJob,
 	): Effect.Effect<RunResult, never> {
 		return Effect.uninterruptibleMask((restore) =>
@@ -142,7 +136,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		restore: <A, E, R>(
 			effect: Effect.Effect<A, E, R>,
 		) => Effect.Effect<A, E, R>,
-		id: RunId,
+		id: string,
 		job: AgentJob,
 	): Effect.Effect<HandlerOutcome, never> {
 		return Effect.gen(function* () {
@@ -159,7 +153,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	}
 
 	function callHandler(
-		id: RunId,
+		id: string,
 		job: AgentJob,
 		start: number,
 	): Effect.Effect<RunResult, RunResult> {
@@ -184,7 +178,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	}
 
 	function persistOutcome(
-		id: RunId,
+		id: string,
 		{ result, interrupted }: HandlerOutcome,
 	): Effect.Effect<void> {
 		return Effect.sync(() => {
@@ -199,7 +193,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	}
 
 	function persistSuccess(
-		id: RunId,
+		id: string,
 		result: Extract<RunResult, { status: "completed" }>,
 		completedAt: string,
 	): void {
@@ -221,7 +215,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	}
 
 	function persistFailure(
-		id: RunId,
+		id: string,
 		result: Extract<RunResult, { status: "failed" }>,
 		completedAt: string,
 	): void {
@@ -244,7 +238,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		);
 	}
 
-	function recordRunStarted(id: RunId, job: AgentJob): void {
+	function recordRunStarted(id: string, job: AgentJob): void {
 		// Done synchronously before forking so reconciliation sees the run
 		// even when every semaphore permit is taken.
 		const startedAt = new Date().toISOString();
@@ -269,7 +263,7 @@ export function createRunner(config: RunnerConfig): Runner {
 	}
 
 	function emit(
-		id: RunId,
+		id: string,
 		input: EmitInput,
 		createdAt = new Date().toISOString(),
 	): RunEvent {
@@ -284,7 +278,7 @@ export function createRunner(config: RunnerConfig): Runner {
 		return event;
 	}
 
-	function flushInflightBash(id: RunId, finalState: "exited" | "aborted") {
+	function flushInflightBash(id: string, finalState: "exited" | "aborted") {
 		for (const event of repo.getInflightToolBash(id)) {
 			const updated = repo.updateToolBashState(event.id, { state: finalState });
 			if (updated) eventBus.emit(updated);
@@ -294,8 +288,8 @@ export function createRunner(config: RunnerConfig): Runner {
 	return { enqueue, kill, waitForIdle, maxConcurrency, dispose };
 }
 
-function newRunId(): RunId {
-	return runId(randomUUID().slice(0, 8));
+function newRunId(): string {
+	return randomUUID().slice(0, 8);
 }
 
 function exitToRunResult(

@@ -16,7 +16,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeAppRuntime } from "../runtime.ts";
 import { seedBareRepoMain } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
-import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import {
 	createWorkspace,
 	installSkills,
@@ -47,9 +46,9 @@ const run = <A, E>(
 
 function createIssue(num: number): Issue {
 	return {
-		key: issueKey(`test-owner/test-repo#${num}`),
-		number: issueNumber(num),
-		repo: repoSlug("test-owner/test-repo"),
+		key: `test-owner/test-repo#${num}`,
+		number: num,
+		repo: "test-owner/test-repo",
 		title: `Issue ${num}`,
 		description: "",
 		labels: [],

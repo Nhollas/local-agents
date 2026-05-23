@@ -3,15 +3,14 @@ import type { CodeHostAdapter } from "../../code-hosts/types.ts";
 import type { RunRepository } from "../../run-repository.ts";
 import type { RunContext } from "../../runner/runner.ts";
 import type { Issue, TrackerAdapter } from "../../trackers/types.ts";
-import type { RepoSlug, RunId } from "../../types/brands.ts";
 import type { PromptScope, RepoWorkflow } from "../../workflow/types.ts";
 
 type PhaseInputsShape = {
 	readonly issue: Issue;
-	readonly repo: RepoSlug;
+	readonly repo: string;
 	readonly cloneUrl: string;
 	readonly baseBranch: string;
-	readonly runId: RunId;
+	readonly runId: string;
 	readonly workspaceRoot: string;
 	readonly skillsSourceDir: string;
 	readonly agentEnv: Record<string, string>;

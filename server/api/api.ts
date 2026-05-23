@@ -14,10 +14,6 @@ import type {
 } from "../run-repository.ts";
 import type { Runner } from "../runner/runner.ts";
 import {
-	repoSlug as brandRepoSlug,
-	runId as brandRunId,
-} from "../types/brands.ts";
-import {
 	ProblemDetailsError,
 	problemDetailsHandler,
 	zodProblemHook,
@@ -197,16 +193,12 @@ export function createApi({
 
 const runsQuerySchema = z.object({
 	status: z.enum(["running", "completed", "failed"]).optional(),
-	repo: z
-		.string()
-		.min(1)
-		.optional()
-		.transform((v) => v && brandRepoSlug(v)),
+	repo: z.string().min(1).optional(),
 	limit: z.coerce.number().int().min(1).max(200).optional().default(50),
 });
 
 const runParamSchema = z.object({
-	id: z.string().min(1).transform(brandRunId),
+	id: z.string().min(1),
 });
 
 const runEventsQuerySchema = z.object({

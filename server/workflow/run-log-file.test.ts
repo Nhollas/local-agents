@@ -4,14 +4,11 @@ import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runId } from "../types/brands.ts";
 import { makeRunLogWriter, type RunLogWriter } from "./run-log-file.ts";
 
 const makeWriter = (logDir: string, id: string): Promise<RunLogWriter> =>
 	Effect.runPromise(
-		makeRunLogWriter(logDir, runId(id)).pipe(
-			Effect.provide(NodeFileSystem.layer),
-		),
+		makeRunLogWriter(logDir, id).pipe(Effect.provide(NodeFileSystem.layer)),
 	);
 
 describe("makeRunLogWriter", () => {

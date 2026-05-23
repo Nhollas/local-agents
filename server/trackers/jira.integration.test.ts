@@ -9,7 +9,6 @@ import {
 	REPO,
 } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
-import { issueNumber, type RepoSlug, repoSlug } from "../types/brands.ts";
 import { JiraTransitionNotFoundError } from "./errors.ts";
 import { createJiraTracker, type JiraTrackerOptions } from "./jira-tracker.ts";
 
@@ -35,7 +34,7 @@ async function makeTracker(options: JiraTrackerOptions) {
 	};
 }
 
-function createTracker(scopes: readonly RepoSlug[] = [REPO]) {
+function createTracker(scopes: readonly string[] = [REPO]) {
 	return makeTracker({
 		project: "PROJ",
 		scopes,
@@ -184,7 +183,7 @@ describe("createJiraTracker", () => {
 		});
 
 		it("drops issues with multiple repo: labels", async () => {
-			const REPO_B = repoSlug("test-owner/repo-b");
+			const REPO_B = "test-owner/repo-b";
 			server.use(
 				http.post(`${JIRA_API}/search/jql`, () =>
 					HttpResponse.json({
@@ -205,7 +204,7 @@ describe("createJiraTracker", () => {
 		});
 
 		it("resolves a repo: label that descends from a group-prefix scope to its full path", async () => {
-			const childRepo = repoSlug("test-owner/playground/child");
+			const childRepo = "test-owner/playground/child";
 			server.use(
 				http.post(`${JIRA_API}/search/jql`, () =>
 					HttpResponse.json({
@@ -218,7 +217,7 @@ describe("createJiraTracker", () => {
 				),
 			);
 
-			const tracker = await createTracker([repoSlug("test-owner")]);
+			const tracker = await createTracker(["test-owner"]);
 			const { issues } = await tracker.fetchActiveIssues("pending");
 
 			expect(issues.map((i) => i.repo)).toEqual([childRepo]);
@@ -285,12 +284,7 @@ describe("createJiraTracker", () => {
 			const tracker = await createTracker();
 
 			await expect(
-				tracker.transitionState(
-					REPO,
-					issueNumber(42),
-					"running",
-					"awaiting_review",
-				),
+				tracker.transitionState(REPO, 42, "running", "awaiting_review"),
 			).resolves.toBeUndefined();
 		});
 
@@ -335,7 +329,7 @@ describe("createJiraTracker", () => {
 			});
 
 			await expect(
-				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
+				tracker.transitionState(REPO, 42, "pending", "running"),
 			).resolves.toBeUndefined();
 		});
 
@@ -378,12 +372,7 @@ describe("createJiraTracker", () => {
 
 			const tracker = await createTracker();
 
-			await tracker.transitionState(
-				REPO,
-				issueNumber(42),
-				"pending",
-				"running",
-			);
+			await tracker.transitionState(REPO, 42, "pending", "running");
 
 			expect(calls).toEqual([
 				{
@@ -425,12 +414,7 @@ describe("createJiraTracker", () => {
 
 			const tracker = await createTracker();
 
-			await tracker.transitionState(
-				REPO,
-				issueNumber(42),
-				"running",
-				"awaiting_review",
-			);
+			await tracker.transitionState(REPO, 42, "running", "awaiting_review");
 
 			expect(myselfCalled).toBe(false);
 			expect(assignCalled).toBe(false);
@@ -462,7 +446,7 @@ describe("createJiraTracker", () => {
 			const tracker = await createTracker();
 
 			await expect(
-				tracker.transitionState(REPO, issueNumber(42), "pending", "running"),
+				tracker.transitionState(REPO, 42, "pending", "running"),
 			).rejects.toThrow();
 			expect(transitionPosts).toBe(0);
 		});
@@ -485,7 +469,7 @@ describe("createJiraTracker", () => {
 
 			const causeSymbol = Symbol.for("effect/Runtime/FiberFailure/Cause");
 			const error = (await tracker
-				.transitionState(REPO, issueNumber(42), "running", "awaiting_review")
+				.transitionState(REPO, 42, "running", "awaiting_review")
 				.then(
 					() => null,
 					(e: unknown) => e,
@@ -516,7 +500,7 @@ describe("createJiraTracker", () => {
 
 			const tracker = await createTracker();
 
-			await tracker.markFailed(REPO, issueNumber(42));
+			await tracker.markFailed(REPO, 42);
 
 			expect(captured).toEqual([
 				{

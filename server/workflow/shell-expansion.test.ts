@@ -4,7 +4,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import { makeAppRuntime } from "../runtime.ts";
 import { createTestWorkspaceRoot } from "../test-support/test-workspace.ts";
 import type { Issue } from "../trackers/types.ts";
-import { issueKey, issueNumber, repoSlug } from "../types/brands.ts";
 import { renderPrompt } from "./render-prompt.ts";
 import {
 	expandMarkedShellBlocks,
@@ -22,9 +21,9 @@ const expand = (
 ) => runtime.runPromise(expandMarkedShellBlocks(prompt, options));
 
 const baseIssue: Issue = {
-	key: issueKey("owner/repo#1"),
-	number: issueNumber(1),
-	repo: repoSlug("owner/repo"),
+	key: "owner/repo#1",
+	number: 1,
+	repo: "owner/repo",
 	title: "Fix the thing",
 	description: "Detailed description",
 	labels: ["bug", "urgent"],

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { runStepOutputs, runs } from "./db/schema.ts";
 import { createRunRepository } from "./run-repository.ts";
 import { createTestDb } from "./test-support/test-db.ts";
-import { issueKey, repoSlug, runId } from "./types/brands.ts";
 
 describe("run repository row projection", () => {
 	it("returns failed runs with error and completion fields preserved", () => {
@@ -10,10 +9,10 @@ describe("run repository row projection", () => {
 		const repo = createRunRepository(db);
 		db.insert(runs)
 			.values({
-				id: runId("failed-1"),
+				id: "failed-1",
 				status: "failed",
-				repo: repoSlug("acme/widgets"),
-				issueKey: issueKey("acme/widgets#1"),
+				repo: "acme/widgets",
+				issueKey: "acme/widgets#1",
 				issueTitle: "boom",
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: "2025-01-01T00:00:02Z",
@@ -22,7 +21,7 @@ describe("run repository row projection", () => {
 			})
 			.run();
 
-		const run = repo.getRunById(runId("failed-1"));
+		const run = repo.getRunById("failed-1");
 		expect(run).toEqual({
 			id: "failed-1",
 			status: "failed",
@@ -52,10 +51,10 @@ describe("run repository row projection", () => {
 		const repo = createRunRepository(db);
 		db.insert(runs)
 			.values({
-				id: runId("failed-2"),
+				id: "failed-2",
 				status: "failed",
-				repo: repoSlug("acme/widgets"),
-				issueKey: issueKey("acme/widgets#2"),
+				repo: "acme/widgets",
+				issueKey: "acme/widgets#2",
 				issueTitle: "boom",
 				startedAt: "2025-01-01T00:00:00Z",
 				completedAt: "2025-01-01T00:00:02Z",
@@ -63,17 +62,17 @@ describe("run repository row projection", () => {
 				error: "no commits made",
 			})
 			.run();
-		repo.insertSteps(runId("failed-2"), [
+		repo.insertSteps("failed-2", [
 			{ index: 1, name: "implement" },
 			{ index: 2, name: "review" },
 		]);
-		repo.failStep(runId("failed-2"), 1, {
+		repo.failStep("failed-2", 1, {
 			completedAt: "2025-01-01T00:00:02Z",
 			durationMs: 2000,
 			error: "no commits made",
 		});
 
-		const run = repo.getRunById(runId("failed-2"));
+		const run = repo.getRunById("failed-2");
 		expect(run?.status).toBe("failed");
 		if (run?.status !== "failed") throw new Error("expected failed run");
 		expect(run.failedStep).toEqual({ index: 1, name: "implement" });
@@ -90,7 +89,7 @@ describe("step outputs", () => {
 	it("writeStepOutput persists a row keyed by (runId, stepName)", () => {
 		const db = createTestDb();
 		const repo = createRunRepository(db);
-		repo.writeStepOutput(runId("r1"), "summarise", {
+		repo.writeStepOutput("r1", "summarise", {
 			title: "Hello",
 			tags: ["a", "b"],
 		});
@@ -109,8 +108,8 @@ describe("step outputs", () => {
 	it("writeStepOutput overwrites an existing row for the same (runId, stepName)", () => {
 		const db = createTestDb();
 		const repo = createRunRepository(db);
-		repo.writeStepOutput(runId("r1"), "summarise", { v: 1 });
-		repo.writeStepOutput(runId("r1"), "summarise", { v: 2 });
+		repo.writeStepOutput("r1", "summarise", { v: 1 });
+		repo.writeStepOutput("r1", "summarise", { v: 2 });
 
 		const rows = db.select().from(runStepOutputs).all();
 		expect(rows).toHaveLength(1);
