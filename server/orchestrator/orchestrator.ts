@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { FileSystem } from "@effect/platform";
 import { Cause, Effect, type Fiber, type Layer, Schedule } from "effect";
 import type { CodeHostAdapter } from "../code-hosts/types.ts";
-import type { AppConfigShape } from "../config/app-config.ts";
+import type { ConfigFile } from "../config/schema.ts";
 import type { RunRepository } from "../run-repository.ts";
 import type { RunHandle, Runner } from "../runner/runner.ts";
 import type { AppRuntime } from "../runtime.ts";
@@ -36,7 +36,7 @@ type OrchestratorConfig = {
 	tracker: TrackerAdapter;
 	runtime: AppRuntime;
 	codeHost: CodeHostAdapter;
-	config: AppConfigShape;
+	config: ConfigFile;
 	workflow: RepoWorkflow;
 	runner: Runner;
 	langfuse: LangfuseConfig;
