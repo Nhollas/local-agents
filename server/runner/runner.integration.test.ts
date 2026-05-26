@@ -2,12 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../db/db.ts";
 import { createRunRepository, type RunRepository } from "../run-repository.ts";
 import { createTestDb, getEvents, getRun } from "../test-support/test-db.ts";
-import {
-	ABORT_ERROR,
-	createRunner,
-	type Runner,
-	type RunResult,
-} from "./runner.ts";
+import { createRunner, type Runner, type RunResult } from "./runner.ts";
 
 /** Helper: a handler that completes immediately. */
 const completedHandler = async (): Promise<RunResult> => ({
@@ -439,7 +434,7 @@ describe("Runner integration", () => {
 		const result = await done;
 		expect(result).toEqual({
 			status: "failed",
-			error: ABORT_ERROR,
+			error: "Run killed by user",
 			durationMs: expect.any(Number),
 		});
 
@@ -447,7 +442,7 @@ describe("Runner integration", () => {
 		expect(run).toEqual({
 			id: runId,
 			status: "failed",
-			error: ABORT_ERROR,
+			error: "Run killed by user",
 			repo: "acme/widgets",
 			issueKey: "acme/widgets#7",
 			issueTitle: "Killable issue",

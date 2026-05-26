@@ -5,7 +5,7 @@ import type { RunEvent, RunEventKind, ToolBashData } from "../event-schema.ts";
 import type { RunFinalizeFailure, RunRepository } from "../run-repository.ts";
 import { makeRunnerRuntime, type RunnerRuntime } from "./runtime.ts";
 
-export const ABORT_ERROR = "Run killed by user";
+// --- public types ---
 
 export type EmitInput = {
 	[K in RunEventKind]: {
@@ -57,14 +57,11 @@ export type Runner = {
 	dispose(): Promise<void>;
 };
 
+// --- main implementation ---
+
 type RunnerConfig = {
 	repo: RunRepository;
 	maxConcurrency?: number;
-};
-
-type HandlerOutcome = {
-	result: RunResult;
-	interrupted: boolean;
 };
 
 const DEFAULT_MAX_CONCURRENCY = 5;
@@ -287,6 +284,15 @@ export function createRunner(config: RunnerConfig): Runner {
 
 	return { enqueue, kill, waitForIdle, maxConcurrency, dispose };
 }
+
+// --- private helpers ---
+
+type HandlerOutcome = {
+	result: RunResult;
+	interrupted: boolean;
+};
+
+const ABORT_ERROR = "Run killed by user";
 
 function newRunId(): string {
 	return randomUUID().slice(0, 8);
