@@ -90,6 +90,9 @@ importers:
       '@effect/tsgo':
         specifier: 0.7.2
         version: 0.7.2
+      '@effect/vitest':
+        specifier: ^0.29.0
+        version: 0.29.0(effect@3.21.2)(vitest@4.1.3)
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -493,6 +496,12 @@ packages:
   '@effect/tsgo@0.7.2':
     resolution: {integrity: sha512-ZTpfpJvn4IPykmCDsPQiZ4RvhCagQfuYL4zlIk77gSf5AyxmUYjrtDshHB2RK9fnEI8qyQ9abWVmVRkVwnjHyw==}
     hasBin: true
+
+  '@effect/vitest@0.29.0':
+    resolution: {integrity: sha512-DvWr1aeEcaZ8mtu8hNVb4e3rEYvGEwQSr7wsNrW53t6nKYjkmjRICcvVEsXUhjoCblRHSxRsRV0TOt0+UmcvaQ==}
+    peerDependencies:
+      effect: ^3.21.0
+      vitest: ^3.2.0
 
   '@effect/workflow@0.18.1':
     resolution: {integrity: sha512-FxsUxkyvd7CyN7tw4bQgmAJv8tf8hUwy72bwGYzKGpeuiEObiUKgO1pg8xM49gB6EtwOdVRJhytwcFc8eM/6ow==}
@@ -3711,6 +3720,11 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.7.2
       '@effect/tsgo-win32-arm64': 0.7.2
       '@effect/tsgo-win32-x64': 0.7.2
+
+  '@effect/vitest@0.29.0(effect@3.21.2)(vitest@4.1.3)':
+    dependencies:
+      effect: 3.21.2
+      vitest: 4.1.3(@opentelemetry/api@1.9.1)(@types/node@25.5.2)(@vitest/browser-playwright@4.1.3)(@vitest/coverage-v8@4.1.3)(msw@2.13.1(@types/node@25.5.2)(typescript@6.0.2))(vite@8.0.7(@types/node@25.5.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.9.0))
 
   '@effect/workflow@0.18.1(@effect/experimental@0.60.0(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(@effect/platform@0.96.1(effect@3.21.2))(@effect/rpc@0.75.1(@effect/platform@0.96.1(effect@3.21.2))(effect@3.21.2))(effect@3.21.2)':
     dependencies:
