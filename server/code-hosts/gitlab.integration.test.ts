@@ -7,13 +7,6 @@ import { GITLAB_API, GITLAB_BASE_URL } from "../test-support/fixtures.ts";
 import { server } from "../test-support/msw.ts";
 import { createGitLabAdapter, type GitLabAdapterOptions } from "./gitlab.ts";
 
-const REPO = "group/subgroup/project";
-
-const defaultOptions: GitLabAdapterOptions = {
-	token: "test-token",
-	baseUrl: GITLAB_BASE_URL,
-};
-
 layer(FetchHttpClient.layer)("GitLab adapter", (it) => {
 	describe("cloneUrl", () => {
 		it.effect("without a clone token, produces a plain HTTPS URL", () =>
@@ -182,3 +175,10 @@ layer(FetchHttpClient.layer)("GitLab adapter", (it) => {
 		);
 	});
 });
+
+const REPO = "group/subgroup/project";
+
+const defaultOptions: GitLabAdapterOptions = {
+	token: "test-token",
+	baseUrl: GITLAB_BASE_URL,
+};

@@ -43,44 +43,17 @@ export const createJiraTracker = (
 				);
 			});
 
-		function buildIssue(issue: JiraIssue, repo: string): Issue {
-			return {
-				key: issue.key.raw,
-				number: issue.key.number,
-				repo,
-				title: issue.fields.summary,
-				description: issue.fields.description ?? "",
-				labels: [...issue.fields.labels],
-				url: `${options.baseUrl}/browse/${issue.key.raw}`,
-				createdAt: issue.fields.created,
-			};
-		}
-
-		const REPO_LABEL_PREFIX = "repo:";
 		const resolveScopedIssue = (
 			issue: JiraIssue,
-		): Effect.Effect<Issue | null> =>
-			Effect.gen(function* () {
-				const repoLabels = issue.fields.labels.filter((l) =>
-					l.startsWith(REPO_LABEL_PREFIX),
+		): Effect.Effect<Issue | null> => {
+			const result = resolveJiraIssue(issue, options.scopes, options.baseUrl);
+			if (result._tag === "dropped") {
+				return recordDroppedIssue(issue.key.raw, result.reason).pipe(
+					Effect.as(null),
 				);
-				const [first, second] = repoLabels;
-				if (!first) {
-					yield* recordDroppedIssue(issue.key.raw, "no_repo_label");
-					return null;
-				}
-				if (second) {
-					yield* recordDroppedIssue(issue.key.raw, "multiple_repo_labels");
-					return null;
-				}
-				const path = first.slice(REPO_LABEL_PREFIX.length);
-				const resolved = resolveRepo(path, options.scopes);
-				if (!resolved) {
-					yield* recordDroppedIssue(issue.key.raw, "unresolved_repo_label");
-					return null;
-				}
-				return buildIssue(issue, resolved);
-			});
+			}
+			return Effect.succeed(result.issue);
+		};
 
 		return {
 			fetchActiveIssues: (state) =>
@@ -155,7 +128,44 @@ type DropReason =
 	| "multiple_repo_labels"
 	| "unresolved_repo_label";
 
-function buildJql(options: JiraTrackerOptions, state: TrackerState): string {
+type ResolvedJiraIssue =
+	| { readonly _tag: "resolved"; readonly issue: Issue }
+	| { readonly _tag: "dropped"; readonly reason: DropReason };
+
+export function resolveJiraIssue(
+	issue: JiraIssue,
+	scopes: readonly string[],
+	baseUrl: string,
+): ResolvedJiraIssue {
+	const REPO_LABEL_PREFIX = "repo:";
+	const repoLabels = issue.fields.labels.filter((l) =>
+		l.startsWith(REPO_LABEL_PREFIX),
+	);
+	const [first, second] = repoLabels;
+	if (!first) return { _tag: "dropped", reason: "no_repo_label" };
+	if (second) return { _tag: "dropped", reason: "multiple_repo_labels" };
+	const path = first.slice(REPO_LABEL_PREFIX.length);
+	const resolved = resolveRepo(path, scopes);
+	if (!resolved) return { _tag: "dropped", reason: "unresolved_repo_label" };
+	return {
+		_tag: "resolved",
+		issue: {
+			key: issue.key.raw,
+			number: issue.key.number,
+			repo: resolved,
+			title: issue.fields.summary,
+			description: issue.fields.description ?? "",
+			labels: [...issue.fields.labels],
+			url: `${baseUrl}/browse/${issue.key.raw}`,
+			createdAt: issue.fields.created,
+		},
+	};
+}
+
+export function buildJql(
+	options: Pick<JiraTrackerOptions, "project" | "statuses" | "triggerLabel">,
+	state: TrackerState,
+): string {
 	const clauses = [
 		`project = ${quoteJqlString(options.project)}`,
 		`status = ${quoteJqlString(options.statuses[state])}`,
