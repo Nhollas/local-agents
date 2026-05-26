@@ -1,6 +1,6 @@
 import { Layer, Logger, ManagedRuntime } from "effect";
 
-export const RunnerLayer = Layer.mergeAll(Logger.pretty);
+const RunnerLayer = Layer.mergeAll(Logger.pretty);
 
 export type RunnerRuntime = ManagedRuntime.ManagedRuntime<
 	Layer.Layer.Success<typeof RunnerLayer>,

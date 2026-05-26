@@ -18,7 +18,7 @@ const MinimumLogLevelLive = Layer.unwrapEffect(
 	),
 );
 
-export const AppLayer = Layer.mergeAll(
+const AppLayer = Layer.mergeAll(
 	FetchHttpClient.layer,
 	NodeFileSystem.layer,
 	NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
