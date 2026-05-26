@@ -1,6 +1,7 @@
 import { NodeCommandExecutor, NodeFileSystem } from "@effect/platform-node";
+import { layer } from "@effect/vitest";
 import { Effect, Layer, Queue } from "effect";
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 import {
 	type AgentInvokeOptions,
 	AgentInvoker,
@@ -15,6 +16,298 @@ const PlatformLayer = Layer.merge(
 	NodeFileSystem.layer,
 	NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
+
+layer(PlatformLayer)("runSteps", (it) => {
+	it.effect(
+		"action step does not pass outputSchema and ignores structured_output on the result",
+		() =>
+			Effect.gen(function* () {
+				const recording = { calls: [] as RecordedCall[] };
+				const invoker = stubInvoker(
+					() => [
+						resultMessage({
+							subtype: "success",
+							structured_output: { ignored: "yes" },
+						}),
+					],
+					recording,
+				);
+				const { result, events } = yield* runRunSteps([actionStep()], invoker);
+				if (result._tag !== "Right") throw new Error("expected success");
+				expect(result.right).toEqual({});
+				expect(recording.calls[0]?.hasSchema).toBe(false);
+				const stepResult = events.find((e) => e._tag === "StepResult");
+				expect(stepResult).toEqual({
+					_tag: "StepResult",
+					stepName: "act",
+					sessionId: "session-default",
+					usage: {
+						costUsd: 0,
+						tokensInput: 0,
+						tokensOutput: 0,
+						modelUsage: {},
+					},
+				});
+			}),
+	);
+
+	it.effect(
+		"output step passes the schema, returns the decoded output, and includes it on StepResult",
+		() =>
+			Effect.gen(function* () {
+				const recording = { calls: [] as RecordedCall[] };
+				const invoker = stubInvoker(
+					() => [
+						resultMessage({
+							subtype: "success",
+							structured_output: { value: "decoded" },
+						}),
+					],
+					recording,
+				);
+				const { result, events } = yield* runRunSteps([outputStep()], invoker);
+				if (result._tag !== "Right") throw new Error("expected success");
+				expect(result.right).toEqual({ decide: { value: "decoded" } });
+				expect(recording.calls[0]?.hasSchema).toBe(true);
+				const stepResult = events.find((e) => e._tag === "StepResult");
+				if (stepResult?._tag !== "StepResult") throw new Error("no StepResult");
+				expect(stepResult.structuredOutput).toEqual({ value: "decoded" });
+			}),
+	);
+
+	it.effect(
+		"error_max_structured_output_retries aborts the loop with StructuredOutputDecodeError context: step and skips subsequent steps",
+		() =>
+			Effect.gen(function* () {
+				const recording = { calls: [] as RecordedCall[] };
+				const invoker = stubInvoker(
+					() => [
+						resultMessage({
+							subtype: "error_max_structured_output_retries",
+							modelUsage: {
+								"claude-sonnet-4-6": {
+									inputTokens: 11,
+									outputTokens: 22,
+									costUSD: 0.05,
+								},
+							},
+							total_cost_usd: 0.05,
+						}),
+					],
+					recording,
+				);
+				const { result, events } = yield* runRunSteps(
+					[outputStep({ name: "first" }), outputStep({ name: "second" })],
+					invoker,
+				);
+				expect(recording.calls.length).toBe(1);
+				if (result._tag !== "Left") throw new Error("expected failure");
+				expect(result.left._tag).toBe("StructuredOutputDecodeError");
+				if (result.left._tag !== "StructuredOutputDecodeError") return;
+				expect(result.left.context).toBe("step");
+
+				const stepResult = events.find((e) => e._tag === "StepResult");
+				if (stepResult?._tag !== "StepResult") throw new Error("no StepResult");
+				expect(stepResult.usage.costUsd).toBe(0.05);
+
+				const failed = events.find((e) => e._tag === "StepFailed");
+				if (failed?._tag !== "StepFailed") throw new Error("no StepFailed");
+				expect(failed.stepName).toBe("first");
+				expect(failed.error._tag).toBe("StructuredOutputDecodeError");
+				expect(events.some((e) => e._tag === "StepCompleted")).toBe(false);
+			}),
+	);
+
+	it.effect("{{ branch }} substitutes into the step prompt", () =>
+		Effect.gen(function* () {
+			const recording = { calls: [] as RecordedCall[] };
+			const invoker = stubInvoker(
+				() => [resultMessage({ subtype: "success" })],
+				recording,
+			);
+			yield* runRunSteps(
+				[actionStep({ prompt: "branch is {{ branch }}" })],
+				invoker,
+				"agent/feature",
+			);
+			expect(recording.calls[0]?.prompt).toBe("branch is agent/feature");
+		}),
+	);
+
+	it.effect(
+		"{{ steps.<name>.output.<field> }} resolves against an earlier step's structured output",
+		() =>
+			Effect.gen(function* () {
+				const recording = { calls: [] as RecordedCall[] };
+				const invoker = stubInvoker((call) => {
+					if (call.prompt.includes("first")) {
+						return [
+							resultMessage({
+								subtype: "success",
+								structured_output: { value: "from-first" },
+							}),
+						];
+					}
+					return [resultMessage({ subtype: "success" })];
+				}, recording);
+				yield* runRunSteps(
+					[
+						outputStep({ name: "first", prompt: "first" }),
+						actionStep({
+							name: "second",
+							prompt: "second sees {{ steps.first.output.value }}",
+						}),
+					],
+					invoker,
+				);
+				expect(recording.calls[1]?.prompt).toBe("second sees from-first");
+			}),
+	);
+
+	it.effect("env propagates into each invoker call", () =>
+		Effect.gen(function* () {
+			const recording = { calls: [] as RecordedCall[] };
+			const invoker = stubInvoker(
+				() => [resultMessage({ subtype: "success" })],
+				recording,
+			);
+			yield* runRunSteps([actionStep()], invoker, "agent/widget", {
+				FOO: "bar",
+			});
+			expect(recording.calls[0]?.env).toEqual({ FOO: "bar" });
+		}),
+	);
+
+	it.effect(
+		"allowed_tools is forwarded when present and absent otherwise",
+		() =>
+			Effect.gen(function* () {
+				const recording = { calls: [] as RecordedCall[] };
+				const invoker = stubInvoker(
+					() => [resultMessage({ subtype: "success" })],
+					recording,
+				);
+				yield* runRunSteps(
+					[
+						actionStep({
+							name: "with_tools",
+							allowed_tools: ["Read", "Write"],
+						}),
+						actionStep({ name: "without" }),
+					],
+					invoker,
+				);
+				expect(recording.calls[0]?.allowedTools).toEqual(["Read", "Write"]);
+				expect(recording.calls[1]?.allowedTools).toBeUndefined();
+			}),
+	);
+
+	it.effect("per-step model is passed through unchanged", () =>
+		Effect.gen(function* () {
+			const recording = { calls: [] as RecordedCall[] };
+			const invoker = stubInvoker(
+				() => [resultMessage({ subtype: "success" })],
+				recording,
+			);
+			yield* runRunSteps(
+				[
+					actionStep({ name: "sonnet", model: "claude-sonnet-4-6" }),
+					actionStep({ name: "haiku", model: "claude-haiku-4-5" }),
+				],
+				invoker,
+			);
+			expect(recording.calls.map((c) => c.model)).toEqual([
+				"claude-sonnet-4-6",
+				"claude-haiku-4-5",
+			]);
+		}),
+	);
+
+	it.effect(
+		"aggregates per-model usage from a multi-model result onto StepResult",
+		() =>
+			Effect.gen(function* () {
+				const invoker = stubInvoker(() => [
+					resultMessage({
+						subtype: "success",
+						modelUsage: {
+							"claude-sonnet-4-6": {
+								inputTokens: 100,
+								outputTokens: 40,
+								costUSD: 0.02,
+							},
+							"claude-haiku-4-5": {
+								inputTokens: 300,
+								outputTokens: 10,
+								costUSD: 0.005,
+							},
+						},
+						total_cost_usd: 0.025,
+					}),
+				]);
+				const { events } = yield* runRunSteps([actionStep()], invoker);
+				const stepResult = events.find((e) => e._tag === "StepResult");
+				if (stepResult?._tag !== "StepResult") throw new Error("no StepResult");
+				expect(stepResult.usage).toEqual({
+					costUsd: 0.025,
+					tokensInput: 400,
+					tokensOutput: 50,
+					modelUsage: {
+						"claude-sonnet-4-6": {
+							inputTokens: 100,
+							outputTokens: 40,
+							costUSD: 0.02,
+						},
+						"claude-haiku-4-5": {
+							inputTokens: 300,
+							outputTokens: 10,
+							costUSD: 0.005,
+						},
+					},
+				});
+			}),
+	);
+
+	it.effect(
+		"event sequence for a successful step is StepStarted -> StepResult -> StepCompleted",
+		() =>
+			Effect.gen(function* () {
+				const invoker = stubInvoker(() => [
+					resultMessage({ subtype: "success" }),
+				]);
+				const { events } = yield* runRunSteps([actionStep()], invoker);
+				expect(events.map((e) => e._tag)).toEqual([
+					"StepStarted",
+					"StepResult",
+					"StepCompleted",
+				]);
+			}),
+	);
+
+	it.effect(
+		"resume_previous threads the prior step's sessionId into the next invoker call",
+		() =>
+			Effect.gen(function* () {
+				const recording = { calls: [] as RecordedCall[] };
+				const invoker = stubInvoker((call) => {
+					const id = recording.calls.length === 1 ? "session-1" : "session-2";
+					void call;
+					return [resultMessage({ subtype: "success", sessionId: id })];
+				}, recording);
+				yield* runRunSteps(
+					[
+						actionStep({ name: "first" }),
+						actionStep({ name: "second", resume_previous: true }),
+						actionStep({ name: "third" }),
+					],
+					invoker,
+				);
+				expect(recording.calls[0]?.resumeSessionId).toBeUndefined();
+				expect(recording.calls[1]?.resumeSessionId).toBe("session-1");
+				expect(recording.calls[2]?.resumeSessionId).toBeUndefined();
+			}),
+	);
+});
 
 const scope: PromptScope = {
 	issue: {
@@ -148,7 +441,7 @@ function runRunSteps(
 		);
 		const events = yield* Queue.takeAll(queue);
 		return { result, events: [...events] };
-	}).pipe(Effect.provide(PlatformLayer));
+	});
 }
 
 const actionStep = (overrides: Partial<WorkflowStep> = {}): WorkflowStep => ({
@@ -168,268 +461,4 @@ const outputStep = (overrides: Partial<WorkflowStep> = {}): WorkflowStep => ({
 	measure_diff: false,
 	output_schema: outputSchema,
 	...overrides,
-});
-
-describe("runSteps", () => {
-	it("action step does not pass outputSchema and ignores structured_output on the result", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [
-				resultMessage({
-					subtype: "success",
-					structured_output: { ignored: "yes" },
-				}),
-			],
-			recording,
-		);
-		const { result, events } = await Effect.runPromise(
-			runRunSteps([actionStep()], invoker),
-		);
-		if (result._tag !== "Right") throw new Error("expected success");
-		expect(result.right).toEqual({});
-		expect(recording.calls[0]?.hasSchema).toBe(false);
-		const stepResult = events.find((e) => e._tag === "StepResult");
-		expect(stepResult).toEqual({
-			_tag: "StepResult",
-			stepName: "act",
-			sessionId: "session-default",
-			usage: { costUsd: 0, tokensInput: 0, tokensOutput: 0, modelUsage: {} },
-		});
-	});
-
-	it("output step passes the schema, returns the decoded output, and includes it on StepResult", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [
-				resultMessage({
-					subtype: "success",
-					structured_output: { value: "decoded" },
-				}),
-			],
-			recording,
-		);
-		const { result, events } = await Effect.runPromise(
-			runRunSteps([outputStep()], invoker),
-		);
-		if (result._tag !== "Right") throw new Error("expected success");
-		expect(result.right).toEqual({ decide: { value: "decoded" } });
-		expect(recording.calls[0]?.hasSchema).toBe(true);
-		const stepResult = events.find((e) => e._tag === "StepResult");
-		if (stepResult?._tag !== "StepResult") throw new Error("no StepResult");
-		expect(stepResult.structuredOutput).toEqual({ value: "decoded" });
-	});
-
-	it("error_max_structured_output_retries aborts the loop with StructuredOutputDecodeError context: step and skips subsequent steps", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [
-				resultMessage({
-					subtype: "error_max_structured_output_retries",
-					modelUsage: {
-						"claude-sonnet-4-6": {
-							inputTokens: 11,
-							outputTokens: 22,
-							costUSD: 0.05,
-						},
-					},
-					total_cost_usd: 0.05,
-				}),
-			],
-			recording,
-		);
-		const { result, events } = await Effect.runPromise(
-			runRunSteps(
-				[outputStep({ name: "first" }), outputStep({ name: "second" })],
-				invoker,
-			),
-		);
-		expect(recording.calls.length).toBe(1);
-		if (result._tag !== "Left") throw new Error("expected failure");
-		expect(result.left._tag).toBe("StructuredOutputDecodeError");
-		if (result.left._tag !== "StructuredOutputDecodeError") return;
-		expect(result.left.context).toBe("step");
-
-		const stepResult = events.find((e) => e._tag === "StepResult");
-		if (stepResult?._tag !== "StepResult") throw new Error("no StepResult");
-		expect(stepResult.usage.costUsd).toBe(0.05);
-
-		const failed = events.find((e) => e._tag === "StepFailed");
-		if (failed?._tag !== "StepFailed") throw new Error("no StepFailed");
-		expect(failed.stepName).toBe("first");
-		expect(failed.error._tag).toBe("StructuredOutputDecodeError");
-		expect(events.some((e) => e._tag === "StepCompleted")).toBe(false);
-	});
-
-	it("{{ branch }} substitutes into the step prompt", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [resultMessage({ subtype: "success" })],
-			recording,
-		);
-		await Effect.runPromise(
-			runRunSteps(
-				[actionStep({ prompt: "branch is {{ branch }}" })],
-				invoker,
-				"agent/feature",
-			),
-		);
-		expect(recording.calls[0]?.prompt).toBe("branch is agent/feature");
-	});
-
-	it("{{ steps.<name>.output.<field> }} resolves against an earlier step's structured output", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker((call) => {
-			if (call.prompt.includes("first")) {
-				return [
-					resultMessage({
-						subtype: "success",
-						structured_output: { value: "from-first" },
-					}),
-				];
-			}
-			return [resultMessage({ subtype: "success" })];
-		}, recording);
-		await Effect.runPromise(
-			runRunSteps(
-				[
-					outputStep({ name: "first", prompt: "first" }),
-					actionStep({
-						name: "second",
-						prompt: "second sees {{ steps.first.output.value }}",
-					}),
-				],
-				invoker,
-			),
-		);
-		expect(recording.calls[1]?.prompt).toBe("second sees from-first");
-	});
-
-	it("env propagates into each invoker call", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [resultMessage({ subtype: "success" })],
-			recording,
-		);
-		await Effect.runPromise(
-			runRunSteps([actionStep()], invoker, "agent/widget", { FOO: "bar" }),
-		);
-		expect(recording.calls[0]?.env).toEqual({ FOO: "bar" });
-	});
-
-	it("allowed_tools is forwarded when present and absent otherwise", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [resultMessage({ subtype: "success" })],
-			recording,
-		);
-		await Effect.runPromise(
-			runRunSteps(
-				[
-					actionStep({ name: "with_tools", allowed_tools: ["Read", "Write"] }),
-					actionStep({ name: "without" }),
-				],
-				invoker,
-			),
-		);
-		expect(recording.calls[0]?.allowedTools).toEqual(["Read", "Write"]);
-		expect(recording.calls[1]?.allowedTools).toBeUndefined();
-	});
-
-	it("per-step model is passed through unchanged", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker(
-			() => [resultMessage({ subtype: "success" })],
-			recording,
-		);
-		await Effect.runPromise(
-			runRunSteps(
-				[
-					actionStep({ name: "sonnet", model: "claude-sonnet-4-6" }),
-					actionStep({ name: "haiku", model: "claude-haiku-4-5" }),
-				],
-				invoker,
-			),
-		);
-		expect(recording.calls.map((c) => c.model)).toEqual([
-			"claude-sonnet-4-6",
-			"claude-haiku-4-5",
-		]);
-	});
-
-	it("aggregates per-model usage from a multi-model result onto StepResult", async () => {
-		const invoker = stubInvoker(() => [
-			resultMessage({
-				subtype: "success",
-				modelUsage: {
-					"claude-sonnet-4-6": {
-						inputTokens: 100,
-						outputTokens: 40,
-						costUSD: 0.02,
-					},
-					"claude-haiku-4-5": {
-						inputTokens: 300,
-						outputTokens: 10,
-						costUSD: 0.005,
-					},
-				},
-				total_cost_usd: 0.025,
-			}),
-		]);
-		const { events } = await Effect.runPromise(
-			runRunSteps([actionStep()], invoker),
-		);
-		const stepResult = events.find((e) => e._tag === "StepResult");
-		if (stepResult?._tag !== "StepResult") throw new Error("no StepResult");
-		expect(stepResult.usage).toEqual({
-			costUsd: 0.025,
-			tokensInput: 400,
-			tokensOutput: 50,
-			modelUsage: {
-				"claude-sonnet-4-6": {
-					inputTokens: 100,
-					outputTokens: 40,
-					costUSD: 0.02,
-				},
-				"claude-haiku-4-5": {
-					inputTokens: 300,
-					outputTokens: 10,
-					costUSD: 0.005,
-				},
-			},
-		});
-	});
-
-	it("event sequence for a successful step is StepStarted -> StepResult -> StepCompleted", async () => {
-		const invoker = stubInvoker(() => [resultMessage({ subtype: "success" })]);
-		const { events } = await Effect.runPromise(
-			runRunSteps([actionStep()], invoker),
-		);
-		expect(events.map((e) => e._tag)).toEqual([
-			"StepStarted",
-			"StepResult",
-			"StepCompleted",
-		]);
-	});
-
-	it("resume_previous threads the prior step's sessionId into the next invoker call", async () => {
-		const recording = { calls: [] as RecordedCall[] };
-		const invoker = stubInvoker((call) => {
-			const id = recording.calls.length === 1 ? "session-1" : "session-2";
-			void call;
-			return [resultMessage({ subtype: "success", sessionId: id })];
-		}, recording);
-		await Effect.runPromise(
-			runRunSteps(
-				[
-					actionStep({ name: "first" }),
-					actionStep({ name: "second", resume_previous: true }),
-					actionStep({ name: "third" }),
-				],
-				invoker,
-			),
-		);
-		expect(recording.calls[0]?.resumeSessionId).toBeUndefined();
-		expect(recording.calls[1]?.resumeSessionId).toBe("session-1");
-		expect(recording.calls[2]?.resumeSessionId).toBeUndefined();
-	});
 });

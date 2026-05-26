@@ -1,6 +1,7 @@
 import { NodeCommandExecutor, NodeFileSystem } from "@effect/platform-node";
+import { layer } from "@effect/vitest";
 import { Effect, Layer, Queue } from "effect";
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 import {
 	AgentInvoker,
 	type AgentInvokerService,
@@ -14,6 +15,277 @@ const PlatformLayer = Layer.merge(
 	NodeFileSystem.layer,
 	NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
+
+layer(PlatformLayer)("resolveBranch", (it) => {
+	it.effect(
+		"literal branch template skips the agent and emits BranchResolved with zero usage",
+		() =>
+			Effect.gen(function* () {
+				const recording: Recording = { calls: [] };
+				const invoker = stubInvoker([], recording);
+				const { result, events } = yield* runResolve(
+					"agent/issue-{{ issue.number }}",
+					invoker,
+				);
+
+				expect(recording.calls).toEqual([]);
+				expect(result).toMatchObject({
+					_tag: "Right",
+					right: "agent/issue-42",
+				});
+				expect(events).toEqual([
+					{
+						_tag: "BranchResolved",
+						name: "agent/issue-42",
+						usage: {
+							costUsd: 0,
+							tokensInput: 0,
+							tokensOutput: 0,
+							modelUsage: {},
+						},
+					},
+				]);
+			}),
+	);
+
+	it.effect(
+		"dynamic branch form invokes the agent with the schema and a rendered prompt",
+		() =>
+			Effect.gen(function* () {
+				const recording: Recording = { calls: [] };
+				const invoker = stubInvoker(
+					[
+						resultMessage({
+							subtype: "success",
+							structured_output: { name: "agent/decided-branch" },
+							modelUsage: {
+								"claude-sonnet-4-6": {
+									inputTokens: 100,
+									outputTokens: 50,
+									costUSD: 0.02,
+								},
+							},
+							total_cost_usd: 0.02,
+						}),
+					],
+					recording,
+				);
+				const { result, events } = yield* runResolve(
+					{
+						prompt: "Pick a branch for {{ issue.key }}",
+						schema: branchSchema,
+						model: "claude-sonnet-4-6",
+					},
+					invoker,
+				);
+
+				expect(recording.calls).toEqual([
+					{
+						prompt: "Pick a branch for TEST-42",
+						model: "claude-sonnet-4-6",
+						hasSchema: true,
+					},
+				]);
+				expect(result).toMatchObject({
+					_tag: "Right",
+					right: "agent/decided-branch",
+				});
+				expect(events).toEqual([
+					{
+						_tag: "BranchResolved",
+						name: "agent/decided-branch",
+						usage: {
+							costUsd: 0.02,
+							tokensInput: 100,
+							tokensOutput: 50,
+							modelUsage: {
+								"claude-sonnet-4-6": {
+									inputTokens: 100,
+									outputTokens: 50,
+									costUSD: 0.02,
+								},
+							},
+						},
+					},
+				]);
+			}),
+	);
+
+	it.effect(
+		"missing `name` in structured output fails with StructuredOutputDecodeError { context: 'branch' }",
+		() =>
+			Effect.gen(function* () {
+				const invoker = stubInvoker([
+					resultMessage({
+						subtype: "success",
+						structured_output: { wrong_key: "x" },
+						modelUsage: {
+							"claude-sonnet-4-6": {
+								inputTokens: 10,
+								outputTokens: 5,
+								costUSD: 0.001,
+							},
+						},
+						total_cost_usd: 0.001,
+					}),
+				]);
+				const { result, events } = yield* runResolve(
+					{
+						prompt: "x",
+						schema: branchSchema,
+						model: "claude-sonnet-4-6",
+					},
+					invoker,
+				);
+
+				if (result._tag !== "Left") throw new Error("expected failure");
+				if (result.left._tag !== "StructuredOutputDecodeError") {
+					throw new Error(
+						`expected StructuredOutputDecodeError, got ${result.left._tag}`,
+					);
+				}
+				expect(result.left.context).toBe("branch");
+				expect(events.length).toBe(1);
+				const failed = events[0];
+				if (failed?._tag !== "BranchFailed")
+					throw new Error("expected BranchFailed");
+				expect(failed.error._tag).toBe("StructuredOutputDecodeError");
+				expect(failed.usage.costUsd).toBe(0.001);
+				expect(failed.usage.modelUsage["claude-sonnet-4-6"]).toEqual({
+					inputTokens: 10,
+					outputTokens: 5,
+					costUSD: 0.001,
+				});
+			}),
+	);
+
+	it.effect(
+		"agent stream ends without a result message — fails with AgentTurnError",
+		() =>
+			Effect.gen(function* () {
+				const invoker = stubInvoker([]);
+				const { result, events } = yield* runResolve(
+					{
+						prompt: "x",
+						schema: branchSchema,
+						model: "claude-sonnet-4-6",
+					},
+					invoker,
+				);
+
+				if (result._tag !== "Left") throw new Error("expected failure");
+				if (result.left._tag !== "AgentTurnError") {
+					throw new Error(`expected AgentTurnError, got ${result.left._tag}`);
+				}
+				const failed = events[0];
+				if (failed?._tag !== "BranchFailed")
+					throw new Error("expected BranchFailed");
+				expect(failed.error._tag).toBe("AgentTurnError");
+				expect(failed.usage).toEqual({
+					costUsd: 0,
+					tokensInput: 0,
+					tokensOutput: 0,
+					modelUsage: {},
+				});
+			}),
+	);
+
+	it.effect(
+		"result subtype error_max_structured_output_retries fails with AgentTurnError carrying that subtype, usage from the result message preserved",
+		() =>
+			Effect.gen(function* () {
+				const invoker = stubInvoker([
+					resultMessage({
+						subtype: "error_max_structured_output_retries",
+						modelUsage: {
+							"claude-sonnet-4-6": {
+								inputTokens: 200,
+								outputTokens: 80,
+								costUSD: 0.04,
+							},
+						},
+						total_cost_usd: 0.04,
+					}),
+				]);
+				const { result, events } = yield* runResolve(
+					{
+						prompt: "x",
+						schema: branchSchema,
+						model: "claude-sonnet-4-6",
+					},
+					invoker,
+				);
+
+				if (result._tag !== "Left") throw new Error("expected failure");
+				if (result.left._tag !== "AgentTurnError") {
+					throw new Error(`expected AgentTurnError, got ${result.left._tag}`);
+				}
+				expect(result.left.subtype).toBe("error_max_structured_output_retries");
+				const failed = events[0];
+				if (failed?._tag !== "BranchFailed")
+					throw new Error("expected BranchFailed");
+				expect(failed.usage.costUsd).toBe(0.04);
+				expect(failed.usage.modelUsage["claude-sonnet-4-6"]).toEqual({
+					inputTokens: 200,
+					outputTokens: 80,
+					costUSD: 0.04,
+				});
+			}),
+	);
+
+	it.effect("multi-model usage is aggregated per model on BranchResolved", () =>
+		Effect.gen(function* () {
+			const invoker = stubInvoker([
+				resultMessage({
+					subtype: "success",
+					structured_output: { name: "feature/multi" },
+					modelUsage: {
+						"claude-sonnet-4-6": {
+							inputTokens: 100,
+							outputTokens: 40,
+							costUSD: 0.02,
+						},
+						"claude-haiku-4-5": {
+							inputTokens: 300,
+							outputTokens: 10,
+							costUSD: 0.005,
+						},
+					},
+					total_cost_usd: 0.025,
+				}),
+			]);
+			const { events } = yield* runResolve(
+				{
+					prompt: "x",
+					schema: branchSchema,
+					model: "claude-sonnet-4-6",
+				},
+				invoker,
+			);
+			const resolved = events[0];
+			if (resolved?._tag !== "BranchResolved") {
+				throw new Error("expected BranchResolved");
+			}
+			expect(resolved.usage).toEqual({
+				costUsd: 0.025,
+				tokensInput: 400,
+				tokensOutput: 50,
+				modelUsage: {
+					"claude-sonnet-4-6": {
+						inputTokens: 100,
+						outputTokens: 40,
+						costUSD: 0.02,
+					},
+					"claude-haiku-4-5": {
+						inputTokens: 300,
+						outputTokens: 10,
+						costUSD: 0.005,
+					},
+				},
+			});
+		}),
+	);
+});
 
 const scope: PromptScope = {
 	issue: {
@@ -75,7 +347,7 @@ function runResolve(
 		);
 		const events = yield* Queue.takeAll(queue);
 		return { result, events: [...events] };
-	}).pipe(Effect.provide(PlatformLayer));
+	});
 }
 
 function resultMessage(overrides: {
@@ -134,258 +406,3 @@ function resultMessage(overrides: {
 		errors: [],
 	} as unknown as AgentMessage;
 }
-
-describe("resolveBranch", () => {
-	it("literal branch template skips the agent and emits BranchResolved with zero usage", async () => {
-		const recording: Recording = { calls: [] };
-		const invoker = stubInvoker([], recording);
-		const { result, events } = await Effect.runPromise(
-			runResolve("agent/issue-{{ issue.number }}", invoker),
-		);
-
-		expect(recording.calls).toEqual([]);
-		expect(result).toMatchObject({ _tag: "Right", right: "agent/issue-42" });
-		expect(events).toEqual([
-			{
-				_tag: "BranchResolved",
-				name: "agent/issue-42",
-				usage: {
-					costUsd: 0,
-					tokensInput: 0,
-					tokensOutput: 0,
-					modelUsage: {},
-				},
-			},
-		]);
-	});
-
-	it("dynamic branch form invokes the agent with the schema and a rendered prompt", async () => {
-		const recording: Recording = { calls: [] };
-		const invoker = stubInvoker(
-			[
-				resultMessage({
-					subtype: "success",
-					structured_output: { name: "agent/decided-branch" },
-					modelUsage: {
-						"claude-sonnet-4-6": {
-							inputTokens: 100,
-							outputTokens: 50,
-							costUSD: 0.02,
-						},
-					},
-					total_cost_usd: 0.02,
-				}),
-			],
-			recording,
-		);
-		const { result, events } = await Effect.runPromise(
-			runResolve(
-				{
-					prompt: "Pick a branch for {{ issue.key }}",
-					schema: branchSchema,
-					model: "claude-sonnet-4-6",
-				},
-				invoker,
-			),
-		);
-
-		expect(recording.calls).toEqual([
-			{
-				prompt: "Pick a branch for TEST-42",
-				model: "claude-sonnet-4-6",
-				hasSchema: true,
-			},
-		]);
-		expect(result).toMatchObject({
-			_tag: "Right",
-			right: "agent/decided-branch",
-		});
-		expect(events).toEqual([
-			{
-				_tag: "BranchResolved",
-				name: "agent/decided-branch",
-				usage: {
-					costUsd: 0.02,
-					tokensInput: 100,
-					tokensOutput: 50,
-					modelUsage: {
-						"claude-sonnet-4-6": {
-							inputTokens: 100,
-							outputTokens: 50,
-							costUSD: 0.02,
-						},
-					},
-				},
-			},
-		]);
-	});
-
-	it("missing `name` in structured output fails with StructuredOutputDecodeError { context: 'branch' }", async () => {
-		const invoker = stubInvoker([
-			resultMessage({
-				subtype: "success",
-				structured_output: { wrong_key: "x" },
-				modelUsage: {
-					"claude-sonnet-4-6": {
-						inputTokens: 10,
-						outputTokens: 5,
-						costUSD: 0.001,
-					},
-				},
-				total_cost_usd: 0.001,
-			}),
-		]);
-		const { result, events } = await Effect.runPromise(
-			runResolve(
-				{
-					prompt: "x",
-					schema: branchSchema,
-					model: "claude-sonnet-4-6",
-				},
-				invoker,
-			),
-		);
-
-		if (result._tag !== "Left") throw new Error("expected failure");
-		if (result.left._tag !== "StructuredOutputDecodeError") {
-			throw new Error(
-				`expected StructuredOutputDecodeError, got ${result.left._tag}`,
-			);
-		}
-		expect(result.left.context).toBe("branch");
-		expect(events.length).toBe(1);
-		const failed = events[0];
-		if (failed?._tag !== "BranchFailed")
-			throw new Error("expected BranchFailed");
-		expect(failed.error._tag).toBe("StructuredOutputDecodeError");
-		expect(failed.usage.costUsd).toBe(0.001);
-		expect(failed.usage.modelUsage["claude-sonnet-4-6"]).toEqual({
-			inputTokens: 10,
-			outputTokens: 5,
-			costUSD: 0.001,
-		});
-	});
-
-	it("agent stream ends without a result message — fails with AgentTurnError", async () => {
-		const invoker = stubInvoker([]);
-		const { result, events } = await Effect.runPromise(
-			runResolve(
-				{
-					prompt: "x",
-					schema: branchSchema,
-					model: "claude-sonnet-4-6",
-				},
-				invoker,
-			),
-		);
-
-		if (result._tag !== "Left") throw new Error("expected failure");
-		if (result.left._tag !== "AgentTurnError") {
-			throw new Error(`expected AgentTurnError, got ${result.left._tag}`);
-		}
-		const failed = events[0];
-		if (failed?._tag !== "BranchFailed")
-			throw new Error("expected BranchFailed");
-		expect(failed.error._tag).toBe("AgentTurnError");
-		expect(failed.usage).toEqual({
-			costUsd: 0,
-			tokensInput: 0,
-			tokensOutput: 0,
-			modelUsage: {},
-		});
-	});
-
-	it("result subtype error_max_structured_output_retries fails with AgentTurnError carrying that subtype, usage from the result message preserved", async () => {
-		const invoker = stubInvoker([
-			resultMessage({
-				subtype: "error_max_structured_output_retries",
-				modelUsage: {
-					"claude-sonnet-4-6": {
-						inputTokens: 200,
-						outputTokens: 80,
-						costUSD: 0.04,
-					},
-				},
-				total_cost_usd: 0.04,
-			}),
-		]);
-		const { result, events } = await Effect.runPromise(
-			runResolve(
-				{
-					prompt: "x",
-					schema: branchSchema,
-					model: "claude-sonnet-4-6",
-				},
-				invoker,
-			),
-		);
-
-		if (result._tag !== "Left") throw new Error("expected failure");
-		if (result.left._tag !== "AgentTurnError") {
-			throw new Error(`expected AgentTurnError, got ${result.left._tag}`);
-		}
-		expect(result.left.subtype).toBe("error_max_structured_output_retries");
-		const failed = events[0];
-		if (failed?._tag !== "BranchFailed")
-			throw new Error("expected BranchFailed");
-		expect(failed.usage.costUsd).toBe(0.04);
-		expect(failed.usage.modelUsage["claude-sonnet-4-6"]).toEqual({
-			inputTokens: 200,
-			outputTokens: 80,
-			costUSD: 0.04,
-		});
-	});
-
-	it("multi-model usage is aggregated per model on BranchResolved", async () => {
-		const invoker = stubInvoker([
-			resultMessage({
-				subtype: "success",
-				structured_output: { name: "feature/multi" },
-				modelUsage: {
-					"claude-sonnet-4-6": {
-						inputTokens: 100,
-						outputTokens: 40,
-						costUSD: 0.02,
-					},
-					"claude-haiku-4-5": {
-						inputTokens: 300,
-						outputTokens: 10,
-						costUSD: 0.005,
-					},
-				},
-				total_cost_usd: 0.025,
-			}),
-		]);
-		const { events } = await Effect.runPromise(
-			runResolve(
-				{
-					prompt: "x",
-					schema: branchSchema,
-					model: "claude-sonnet-4-6",
-				},
-				invoker,
-			),
-		);
-		const resolved = events[0];
-		if (resolved?._tag !== "BranchResolved") {
-			throw new Error("expected BranchResolved");
-		}
-		expect(resolved.usage).toEqual({
-			costUsd: 0.025,
-			tokensInput: 400,
-			tokensOutput: 50,
-			modelUsage: {
-				"claude-sonnet-4-6": {
-					inputTokens: 100,
-					outputTokens: 40,
-					costUSD: 0.02,
-				},
-				"claude-haiku-4-5": {
-					inputTokens: 300,
-					outputTokens: 10,
-					costUSD: 0.005,
-				},
-			},
-		});
-	});
-});
