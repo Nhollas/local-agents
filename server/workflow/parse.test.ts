@@ -2,14 +2,6 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { parseRepoWorkflow } from "./parse.ts";
 
-const parse = (yaml: string) => Effect.runSync(parseRepoWorkflow(yaml));
-
-const validChangeRequest = `
-change_request:
-  title: "PR for {{ issue.key }}"
-  body: "Closes {{ issue.key }}"
-`;
-
 describe("parseRepoWorkflow", () => {
 	it("accepts a single-step workflow", () => {
 		const yaml = `
@@ -312,3 +304,11 @@ ${validChangeRequest}`;
 		expect(() => parse(yaml)).toThrow();
 	});
 });
+
+const parse = (yaml: string) => Effect.runSync(parseRepoWorkflow(yaml));
+
+const validChangeRequest = `
+change_request:
+  title: "PR for {{ issue.key }}"
+  body: "Closes {{ issue.key }}"
+`;

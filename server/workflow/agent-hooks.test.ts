@@ -11,39 +11,6 @@ import {
 	validateCommitMessage,
 } from "./agent-hooks.ts";
 
-function hookInput(
-	command: string,
-	{ toolName = "Bash", timeout }: { toolName?: string; timeout?: number } = {},
-): PreToolUseHookInput {
-	return {
-		hook_event_name: "PreToolUse",
-		session_id: "test-session",
-		transcript_path: "/tmp/transcript",
-		cwd: "/tmp/ws",
-		tool_use_id: "tool-1",
-		tool_name: toolName,
-		tool_input: timeout === undefined ? { command } : { command, timeout },
-	};
-}
-
-function updatedInput(result: SyncHookJSONOutput): {
-	command: string;
-	timeout: number;
-} {
-	const out: PreToolUseHookSpecificOutput | undefined =
-		result.hookSpecificOutput?.hookEventName === "PreToolUse"
-			? result.hookSpecificOutput
-			: undefined;
-	const ui = out?.updatedInput;
-	if (!ui) throw new Error("expected hookSpecificOutput.updatedInput");
-	const command = ui["command"];
-	const timeout = ui["timeout"];
-	if (typeof command !== "string" || typeof timeout !== "number") {
-		throw new Error(`unexpected updatedInput shape: ${JSON.stringify(ui)}`);
-	}
-	return { command, timeout };
-}
-
 describe("blockDangerousGit", () => {
 	it("denies any command containing `git push`", () => {
 		expect(blockDangerousGit(hookInput("git push origin main"))).toEqual({
@@ -229,3 +196,36 @@ describe("capBashTimeout", () => {
 		).toEqual({});
 	});
 });
+
+function hookInput(
+	command: string,
+	{ toolName = "Bash", timeout }: { toolName?: string; timeout?: number } = {},
+): PreToolUseHookInput {
+	return {
+		hook_event_name: "PreToolUse",
+		session_id: "test-session",
+		transcript_path: "/tmp/transcript",
+		cwd: "/tmp/ws",
+		tool_use_id: "tool-1",
+		tool_name: toolName,
+		tool_input: timeout === undefined ? { command } : { command, timeout },
+	};
+}
+
+function updatedInput(result: SyncHookJSONOutput): {
+	command: string;
+	timeout: number;
+} {
+	const out: PreToolUseHookSpecificOutput | undefined =
+		result.hookSpecificOutput?.hookEventName === "PreToolUse"
+			? result.hookSpecificOutput
+			: undefined;
+	const ui = out?.updatedInput;
+	if (!ui) throw new Error("expected hookSpecificOutput.updatedInput");
+	const command = ui["command"];
+	const timeout = ui["timeout"];
+	if (typeof command !== "string" || typeof timeout !== "number") {
+		throw new Error(`unexpected updatedInput shape: ${JSON.stringify(ui)}`);
+	}
+	return { command, timeout };
+}

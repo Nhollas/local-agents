@@ -3,29 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { RepoWorkflow } from "./types.ts";
 import { validateOutputReferences } from "./validator.ts";
 
-const validate = (workflow: RepoWorkflow, sourcePath?: string) =>
-	Effect.runSync(validateOutputReferences(workflow, sourcePath));
-
-function workflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
-	return {
-		branch: "agent/issue-{{ issue.number }}",
-		steps: [
-			{
-				name: "implement",
-				prompt: "Fix the issue",
-				resume_previous: false,
-				measure_diff: false,
-				model: "claude-sonnet-4-6",
-			},
-		],
-		change_request: {
-			title: "PR for {{ issue.key }}",
-			body: "Closes {{ issue.key }}",
-		},
-		...overrides,
-	};
-}
-
 describe("validateOutputReferences", () => {
 	it("accepts a workflow with no step output references", () => {
 		expect(() => validate(workflow())).not.toThrow();
@@ -427,3 +404,26 @@ describe("validateOutputReferences", () => {
 		);
 	});
 });
+
+const validate = (workflow: RepoWorkflow, sourcePath?: string) =>
+	Effect.runSync(validateOutputReferences(workflow, sourcePath));
+
+function workflow(overrides: Partial<RepoWorkflow> = {}): RepoWorkflow {
+	return {
+		branch: "agent/issue-{{ issue.number }}",
+		steps: [
+			{
+				name: "implement",
+				prompt: "Fix the issue",
+				resume_previous: false,
+				measure_diff: false,
+				model: "claude-sonnet-4-6",
+			},
+		],
+		change_request: {
+			title: "PR for {{ issue.key }}",
+			body: "Closes {{ issue.key }}",
+		},
+		...overrides,
+	};
+}

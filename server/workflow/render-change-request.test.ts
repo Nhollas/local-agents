@@ -2,27 +2,6 @@ import { describe, expect, it } from "vitest";
 import { renderChangeRequest } from "./render-change-request.ts";
 import type { ChangeRequestTemplate, PromptScope } from "./types.ts";
 
-const scope: PromptScope = {
-	issue: {
-		key: "TEST-9",
-		number: 9,
-		title: "Add widget",
-		description: "desc",
-		labels: [],
-		url: "https://tracker.example.test/TEST-9",
-		createdAt: "2026-01-01T00:00:00.000Z",
-	},
-	baseBranch: "main",
-};
-
-const template = (
-	overrides: Partial<ChangeRequestTemplate> = {},
-): ChangeRequestTemplate => ({
-	title: "default title",
-	body: "default body",
-	...overrides,
-});
-
 describe("renderChangeRequest", () => {
 	it("substitutes issue.* and branch into both title and body", () => {
 		const result = renderChangeRequest(
@@ -60,4 +39,25 @@ describe("renderChangeRequest", () => {
 			body: "Details: the details",
 		});
 	});
+});
+
+const scope: PromptScope = {
+	issue: {
+		key: "TEST-9",
+		number: 9,
+		title: "Add widget",
+		description: "desc",
+		labels: [],
+		url: "https://tracker.example.test/TEST-9",
+		createdAt: "2026-01-01T00:00:00.000Z",
+	},
+	baseBranch: "main",
+};
+
+const template = (
+	overrides: Partial<ChangeRequestTemplate> = {},
+): ChangeRequestTemplate => ({
+	title: "default title",
+	body: "default body",
+	...overrides,
 });

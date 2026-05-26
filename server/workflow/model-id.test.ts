@@ -2,8 +2,6 @@ import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { ModelIdSchema } from "./model-id.ts";
 
-const decode = Schema.decodeUnknownSync(ModelIdSchema);
-
 describe("ModelIdSchema", () => {
 	it.each([
 		"claude-opus-4-7",
@@ -24,3 +22,5 @@ describe("ModelIdSchema", () => {
 		expect(() => decode(id)).toThrow();
 	});
 });
+
+const decode = Schema.decodeUnknownSync(ModelIdSchema);
